@@ -1801,6 +1801,7 @@ internal sealed class CopilotService : Form
             "fo-engine-one-fuel" => "Engine one fuel flow",
             "fo-engine-one-stable" => "Engine one stabilized",
             "fo-cabin-call" => "Cabin crew, prepare for takeoff",
+            "fo-cabin-landing-call" => "Cabin crew, prepare for landing",
             "captain-takeoff" => "Thrust set",
             "fo-100-knots" => "One hundred knots",
             "fo-v1" => "V one",

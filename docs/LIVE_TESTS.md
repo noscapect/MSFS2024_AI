@@ -464,6 +464,8 @@ automatically performs the First Officer workload using gated aircraft state:
 
 - Flow 10 may be started during descent or after the aircraft is already below
   10,000 feet; a level segment below 10,000 feet no longer blocks entry.
+- On passing or starting below 10,000 feet, the First Officer calls
+  `Cabin crew, prepare for landing`.
 - Below 10,000 feet: seatbelts ON, landing lights ON, nose light TAXI.
 - At or below 5,000 feet AGL and 220 knots: flaps CONFIG 1.
 - At or below 2,000 feet AGL and 210 knots: gear DOWN, spoilers ARMED, flaps 2.

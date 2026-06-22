@@ -425,6 +425,11 @@ internal static class A320ProcedureLibrary
                     "Below 10,000 feet",
                     state => state.IndicatedAltitudeFeet <= 10000,
                     CrewRole.FirstOfficer),
+                Observe(
+                    "fo-cabin-landing-call",
+                    "Cabin crew, prepare for landing",
+                    _ => true,
+                    CrewRole.FirstOfficer),
                 Automatic(
                     "fo-seatbelts-on",
                     "Seatbelt signs ON",

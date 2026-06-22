@@ -2451,7 +2451,9 @@ internal sealed class CopilotService : Form
 
     private void SetSignSelector(SignSelector selector, int desiredPosition)
     {
-        if (!ValidateNativeInputAction(FormatSignSelectorName(selector)))
+        if (!ValidateNativeInputAction(
+                FormatSignSelectorName(selector),
+                requireStationary: false))
         {
             return;
         }

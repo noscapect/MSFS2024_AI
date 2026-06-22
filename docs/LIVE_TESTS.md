@@ -474,6 +474,10 @@ data. Touchdown, Spoilers, Reverse Green and Decel are monitored callouts with
 optional voice output. Destination QNH remains pilot-managed and unmonitored,
 consistent with the removal of automatic altimeter handling.
 
+Sign-selector validation permits operation in flight. The previous shared
+native-action guard incorrectly required the aircraft to be stationary on the
+ground, which blocked Flow 10 from selecting the seatbelt signs ON.
+
 The first live test established that selector values follow physical
 top-to-bottom order: nose T.O./TAXI/OFF = 0/1/2 and landing
 ON/OFF/RETRACT = 0/1/2. The original labels were reversed and are now

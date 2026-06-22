@@ -462,6 +462,8 @@ First Officer selection of autobrake LOW using native
 Flow 10 contains no app-confirmation steps. It monitors descent and
 automatically performs the First Officer workload using gated aircraft state:
 
+- Flow 10 may be started during descent or after the aircraft is already below
+  10,000 feet; a level segment below 10,000 feet no longer blocks entry.
 - Below 10,000 feet: seatbelts ON, landing lights ON, nose light TAXI.
 - At or below 5,000 feet AGL and 220 knots: flaps CONFIG 1.
 - At or below 2,000 feet AGL and 210 knots: gear DOWN, spoilers ARMED, flaps 2.

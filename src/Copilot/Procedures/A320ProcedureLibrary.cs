@@ -415,9 +415,10 @@ internal static class A320ProcedureLibrary
                     "autobrake low"),
                 Observe(
                     "captain-descent",
-                    "Descent established",
+                    "Descent established or below 10,000 feet",
                     state => !state.OnGround
-                             && state.VerticalSpeedFeetPerMinute < -300,
+                             && (state.VerticalSpeedFeetPerMinute < -300
+                                 || state.IndicatedAltitudeFeet <= 10000),
                     CrewRole.FirstOfficer),
                 Observe(
                     "below-ten-thousand",

@@ -478,6 +478,11 @@ Sign-selector validation permits operation in flight. The previous shared
 native-action guard incorrectly required the aircraft to be stationary on the
 ground, which blocked Flow 10 from selecting the seatbelt signs ON.
 
+Flow 7 flap cleanup no longer requires an arbitrary minimum of 180 knots.
+The flow already waits until the thrust-reduction point at 1,500 feet AGL, so
+the shared flap-clean action now only blocks airborne retraction below 400 feet
+AGL. This prevents normal takeoff cleanup from stalling at lower climb speeds.
+
 The first live test established that selector values follow physical
 top-to-bottom order: nose T.O./TAXI/OFF = 0/1/2 and landing
 ON/OFF/RETRACT = 0/1/2. The original labels were reversed and are now

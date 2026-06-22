@@ -3147,11 +3147,10 @@ internal sealed class CopilotService : Form
             return;
         }
         if (!_state.OnGround
-            && (_state.AltitudeAboveGroundFeet < 400
-                || _state.IndicatedAirspeedKnots < 180))
+            && _state.AltitudeAboveGroundFeet < 400)
         {
             AppendDashboardLog(
-                "Flaps retraction blocked: requires airborne, 400 feet AGL and 180 knots.");
+                "Flaps retraction blocked: requires at least 400 feet AGL.");
             FinishOneShot(3);
             return;
         }

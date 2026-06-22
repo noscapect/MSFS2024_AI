@@ -1,0 +1,24 @@
+# Local build output
+**/bin/
+**/obj/
+build-check/
+
+# Temporary development dependencies and scratch data
+.tmp/
+.tooling/
+.agents/
+
+# Generated simulator package intermediates
+wasm/_PackageInt/
+wasm/Packages/
+wasm/PackageSources/
+
+# Local diagnostics
+*.log
+*.err.log
+*.out.log
+
+# User-specific project state
+*.user
+*.suo
+.vs/

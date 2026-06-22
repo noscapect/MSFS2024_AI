@@ -1,5 +1,21 @@
 # Live test evidence
 
+## Current verification status — 2026-06-23
+
+User testing has verified the complete behavior of Flows 1 through 10,
+including automatic aircraft actions, independent readback, sequencing,
+lighting, landing configuration, and existing voice callouts.
+
+The only items still awaiting live verification are:
+
+- Flow 10 voice callout: `Cabin crew, prepare for landing`.
+- Complete Flow 11: After Landing & Taxi.
+- Complete Flow 12: Parking & Shutdown, including optional cold-and-dark
+  secure.
+
+Earlier failed tests remain documented below as development history. Where an
+older note conflicts with this summary, this current status is authoritative.
+
 ## 2026-06-21 - Transponder mode selector
 
 Behavior Viewer exposed explicit `AIRLINER_TCAS_MODE_State1`, `State2`, and
@@ -284,7 +300,7 @@ monitors `ATC CLEARED IFR` to recognize completed IFR clearance. The pilot
 confirms the pushback and engine-start clearance step after completing it
 through the MSFS ATC interface.
 
-## Flow 4 engine-start monitoring — pending live verification
+## Flow 4 engine-start monitoring — live verified
 
 Flow 4 keeps the engine mode selector and both engine masters as Captain
 actions. The first officer now monitors each start from official simulator
@@ -292,7 +308,10 @@ telemetry and advances through `Starter Valve Open`, `Fuel Flow`, and
 `Stabilized` callouts. Stabilized currently requires combustion, starter
 disengaged, corrected N1 at or above 15 percent, and positive fuel flow.
 
-## Flow 5 taxi monitoring
+Result: **Passed.** Engine-start monitoring and its spoken callouts were
+verified in the complete Flow 4 test.
+
+## Flow 5 taxi monitoring — live verified
 
 Taxi commencement is monitored by the first officer and never requires an app
 confirmation. The step completes when the aircraft is on the ground, the
@@ -302,7 +321,7 @@ Flow 5 now automatically performs the first-officer after-start actions before
 monitoring taxi: APU bleed OFF, APU master OFF, ground spoilers ARMED, takeoff
 flaps CONFIG 1, and autobrake MAX. Autobrake uses the native iniBuilds command
 and readback. Flaps use the aircraft's `HANDLING_Flaps_Inc` B-event with
-flap-handle-index readback. Flaps and autobrake await live verification.
+flap-handle-index readback.
 
 The first spoiler test failed because writing `INI_SPOILERS_ARMED` did not
 operate the lever. The generic `SPOILERS_ARM_SET` event also failed. Behavior
@@ -317,15 +336,18 @@ Viewer showed that one lever detent uses
 `16384 / FLAPS NUM HANDLE POSITIONS (>B:HANDLING_Flaps_Inc)`. Flow 5 now uses
 that exact aircraft path for CONFIG 1.
 
-## Flow 6 before takeoff
+Result: **Passed.** The complete Flow 5 sequence, including spoiler arming,
+flaps CONFIG 1, autobrake MAX, WXR/PWS position 1, and taxi monitoring, was
+verified.
+
+## Flow 6 before takeoff — live verified
 
 Flow 6 now automatically sets the already live-verified strobe selector to ON.
 TCAS TA/RA now uses the exact `AIRLINER_TCAS_STBY_TARA` B-event. The original
 `INI_TCAS_MODE` readback was disproven when it reported 2 while the cockpit
 selector visibly remained at STBY. Readback now uses the separate
-`INI_TCAS_MODE_PEDESTAL` variable; live verification is pending. Landing lights
-remain a first-officer action until their exact Behavior Viewer mapping is
-captured. Engine anti-ice remains an
+`INI_TCAS_MODE_PEDESTAL` variable. Landing-light and nose-light operation uses
+the exact aircraft B-events and native selector readback. Engine anti-ice remains an
 as-required first-officer decision because the operational condition depends
 on temperature and visible moisture. Captain runway-entry lights and briefing
 remain Captain tasks; cabin readiness remains an operational confirmation.
@@ -347,15 +369,20 @@ Live cockpit comparison then showed the native polarity is inverted:
 `INI_TCAS_ALT_STATE = 1` is OFF and `0` is ON. The normalized readback now
 uses that polarity.
 
-## Flow 7 takeoff and climb — pending live verification
+Result: **Passed.** The complete Flow 6 configuration was verified, including
+altitude reporting ON, TCAS TA/RA, strobes, nose T.O. light, landing lights,
+and the prepare-for-takeoff voice callout.
+
+## Flow 7 takeoff and climb — live verified
 
 Flow 7 contains no app-confirmation steps. It automatically monitors and
 reports Thrust Set, Takeoff Roll, 100 Knots, Rotate and Positive Climb. Rotate
-is detected from pitch/liftoff rather than a guessed MCDU speed. Landing gear
-is commanded UP after positive climb. Flaps are commanded one detent to CLEAN
-using `HANDLING_Flaps_Dec` after 400 feet AGL and 180 knots. AP1, thrust
-reduction altitude and transition altitude are monitored without requiring
-the Captain to interact with the app.
+uses the configured VR speed, while actual liftoff and Positive Climb remain
+dynamically detected before gear-up actions can begin. Landing gear is
+commanded UP after Positive Climb. After the thrust-reduction point at 1,500
+feet AGL, flaps are commanded CLEAN using `HANDLING_Flaps_Dec`. AP1 and climb
+milestones are monitored without requiring the Captain to interact with the
+app.
 
 The dashboard now has separate persisted preflight `V1` and `VR` speed fields
 because no verified MCDU takeoff-speed readback has been identified. Flow 7
@@ -383,12 +410,9 @@ the previous true value. Native spoiler state is now authoritative in both
 directions. That false failure had stopped Flow 7 before gear and flap actions;
 the preceding test log confirmed both those actions and verifications worked.
 
-Transition altitude is airport-dependent and the aircraft exposes no verified
-MCDU transition-altitude variable. The dashboard therefore has a persisted
-preflight `Transition altitude` field. Flow 7 waits for indicated altitude to
-cross that configured value, then pulses the aircraft's registered SimConnect
-Input Events `INSTRUMENT_QNH_CPT_PUSH` and `INSTRUMENT_QNH_FO_PUSH`. It verifies
-both `KOHLSMAN SETTING STD` readbacks. No in-flight app interaction is required.
+An earlier implementation attempted to use the persisted transition-altitude
+field to trigger automatic STD selection through the Captain and First Officer
+QNH push Input Events.
 
 The Behavior Viewer `_Push_Mode` alias and command-LVar approaches did not
 operate the QNH mode in live tests. Input Event enumeration exposed the actual
@@ -407,7 +431,11 @@ Flow 5 now includes WXR/PWS as a First Officer after-start action. It always
 selects center position 1 using `AIRLINER_WER_SWITCH_PWS_State2` and verifies
 `INI_WX_SYS_SWITCH = 1`.
 
-## Flow 8 cruise — pending live verification
+Result: **Passed.** The complete Flow 7 takeoff/climb sequence and callouts,
+including gear UP, spoiler disarm, flap cleanup, nose light OFF, and landing
+light retraction above 10,000 feet, were verified.
+
+## Flow 8 cruise — live verified
 
 Flow 8 has no confirmation step. Once cruise is established above 10,000 feet
 AGL with vertical speed within 300 feet per minute, the First Officer sets
@@ -417,6 +445,8 @@ when measured G-load leaves the 0.85–1.15 range, and returns them OFF only
 after five continuous minutes of smooth flight with vertical speed within
 500 feet per minute.
 
+Result: **Passed.**
+
 ## Flow selector UI
 
 The flow list is updated in place during telemetry refreshes. The user's
@@ -424,7 +454,7 @@ selected flow and scroll position are preserved; active/recommended flow
 markers no longer force selection back to another item or snap the list to
 the top.
 
-## Voice callouts — pending live verification
+## Voice callouts — live verified except prepare for landing
 
 The dashboard now has a persisted `Voice callouts` option using Windows
 offline speech synthesis. Flow 7 speaks `Thrust set`, `One hundred knots`,
@@ -439,7 +469,10 @@ Flow 4 also speaks each engine's `On`, `Starter valve open`, `Fuel flow`, and
 `Stabilized` milestones. Flow 6 automatically calls `Cabin crew, prepare for
 takeoff` at the former cabin-confirmation step.
 
-## Nose and landing light sequence — pending live verification
+All listed voice callouts have been live verified except Flow 10's newly added
+`Cabin crew, prepare for landing`.
+
+## Nose and landing light sequence — live verified
 
 - Flow 5: First Officer sets nose light TAXI.
 - Flow 6: First Officer sets nose light T.O. and both landing lights ON.
@@ -448,8 +481,9 @@ takeoff` at the former cabin-confirmation step.
   10,000 feet indicated altitude.
 
 All commands use the exact aircraft B-events and native selector readbacks.
+The complete light sequence passed live testing.
 
-## Flow 9 and Flow 10 structure
+## Flow 9 and Flow 10 structure — live verified
 
 Flow 9 is Captain-only and covers flight-computer descent preparation:
 arrival/approach entry, PERF APPR destination data, and descent-profile review.
@@ -457,7 +491,10 @@ Landing autobrake was removed from Flow 9. Flow 10 begins with an automatic
 First Officer selection of autobrake LOW using native
 `INI_AUTOBRAKE_LEVEL = 1` readback.
 
-## Flow 10 approach and landing — pending live verification
+Result: **Passed.** Flow 9's Captain-only descent preparation and its handoff
+to Flow 10 were verified.
+
+## Flow 10 approach and landing — live verified
 
 Flow 10 contains no app-confirmation steps. It monitors descent and
 automatically performs the First Officer workload using gated aircraft state:
@@ -489,6 +526,10 @@ The first live test established that selector values follow physical
 top-to-bottom order: nose T.O./TAXI/OFF = 0/1/2 and landing
 ON/OFF/RETRACT = 0/1/2. The original labels were reversed and are now
 corrected.
+
+Result: **Passed.** The complete Flow 10 sequence has been live verified,
+including late-start handling below 10,000 feet. Only the newly added
+`Cabin crew, prepare for landing` voice callout remains untested.
 
 ## Flow 11 after landing and taxi — pending live verification
 

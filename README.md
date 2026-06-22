@@ -144,6 +144,7 @@ See [docs/NATIVE_CONTROL_STRATEGY.md](docs/NATIVE_CONTROL_STRATEGY.md) and
 
 ## Development status
 
-The 12 flows are implemented, but later flows still require full end-to-end
-live testing. Treat this as active development software and remain ready to
-operate the aircraft manually.
+All behavior through Flow 10 has been live verified except the newly added
+`Cabin crew, prepare for landing` callout. Complete end-to-end testing remains
+for Flows 11 and 12. Treat this as active development software and remain ready
+to operate the aircraft manually.

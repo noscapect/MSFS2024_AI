@@ -193,15 +193,16 @@ after the aircraft is already below 10,000 feet.
 6. **F/O automatic:** Turn both landing lights ON.
 7. **F/O automatic:** Set nose light to TAXI.
 8. **Monitor:** Approach configuration point below 10,000 feet indicated and
-   at or below 220 knots.
+   at or below 220 knots by default.
 9. **F/O automatic:** Set flaps CONFIG 1.
-10. **Monitor:** Gear-down point at or below 2,000 feet AGL and 210 knots.
+10. **Monitor:** Gear-down point at or below 2,000 feet AGL and 210 knots by
+    default.
 11. **F/O automatic/callout:** Lower landing gear and say “Landing gear down”
     after verified DOWN readback.
 12. **F/O automatic:** Arm ground spoilers.
 13. **F/O automatic:** Set flaps CONFIG 2.
 14. **Monitor:** Landing-configuration point at or below 1,200 feet AGL and
-    185 knots.
+    185 knots by default.
 15. **F/O automatic:** Set flaps CONFIG 3.
 16. **F/O automatic:** Set flaps FULL.
 17. **F/O callout:** “Approaching minimums” at decision height plus 100 feet.
@@ -211,9 +212,12 @@ after the aircraft is already below 10,000 feet.
 21. **F/O callout:** “Reverse green” after reverse thrust engages.
 22. **F/O callout:** “Decel” when autobrakes are active or groundspeed falls
     below 80 knots.
-23. **Automatic handoff:** Start Flow 11 after Flow 10 completes.
+23. **Automatic handoff:** Start Flow 11 after Flow 10 completes when the
+    standard Flow 10-to-11 chaining option is enabled.
 
 Destination QNH remains pilot-managed and is not operated or monitored.
+The three approach gates above use the included standard configuration and
+can be overridden in `Approach & chaining settings`.
 
 ## 11. After Landing & Taxi
 

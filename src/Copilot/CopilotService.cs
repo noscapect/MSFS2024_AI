@@ -5,12 +5,13 @@ using Msfs2024Ai.Copilot.Diagnostics;
 using Msfs2024Ai.Copilot.Domain;
 using Msfs2024Ai.Copilot.Procedures;
 using Msfs2024Ai.Copilot.Settings;
+using Msfs2024Ai.Copilot.Telemetry;
+using Msfs2024Ai.Copilot.Voice;
 using System.Collections.Concurrent;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
 using System.Runtime.InteropServices;
-using System.Speech.Synthesis;
 using System.Threading;
 using System.Windows.Forms;
 
@@ -28,7 +29,12 @@ internal sealed class CopilotService : Form
     private readonly ProcedureSession _procedureSession;
     private readonly ConcurrentQueue<string> _commands = new();
     private readonly ProcedureRunner _procedureRunner;
-    private SpeechSynthesizer? _speechSynthesizer;
+    private VoiceCalloutQueue? _voiceCalloutQueue;
+    private readonly FlightTelemetryStore _flightTelemetryStore;
+    private System.Windows.Forms.Timer? _replayTimer;
+    private IReadOnlyList<AircraftState> _replayStates = Array.Empty<AircraftState>();
+    private int _replayIndex;
+    private bool _replayActive;
     private readonly HashSet<string> _completedProcedureIds =
         new(StringComparer.OrdinalIgnoreCase);
     private SimConnect? _simConnect;
@@ -167,6 +173,7 @@ internal sealed class CopilotService : Form
     private NumericUpDown? _takeoffV1Box;
     private NumericUpDown? _takeoffRotateBox;
     private CheckBox? _voiceCalloutsBox;
+    private ComboBox? _replayFlightBox;
     private ListBox? _eventLog;
     private ListBox? _flowList;
     private ListBox? _checklistList;
@@ -454,23 +461,28 @@ internal sealed class CopilotService : Form
         _oneShotCommand = oneShotCommand;
         _showUi = showUi;
         _settings = SettingsStore.Load();
+        _flightTelemetryStore = new FlightTelemetryStore();
         _procedureSession = ProcedureSessionStore.Load();
         foreach (var procedureId in _procedureSession.CompletedProcedureIds)
         {
             _completedProcedureIds.Add(procedureId);
         }
         _procedureRunner = new ProcedureRunner(
-            command => _commands.Enqueue(command),
+            command =>
+            {
+                if (_replayActive)
+                {
+                    AppendDashboardLog($"Replay action: {command}");
+                    return;
+                }
+                _commands.Enqueue(command);
+            },
             () => _settings.AutomationPolicy);
         _procedureRunner.Changed += OnProcedureChanged;
         _procedureRunner.StepCompleted += SpeakProcedureCallout;
         try
         {
-            _speechSynthesizer = new SpeechSynthesizer
-            {
-                Rate = 0,
-                Volume = 100
-            };
+            _voiceCalloutQueue = new VoiceCalloutQueue();
         }
         catch (Exception ex)
         {
@@ -1043,6 +1055,10 @@ internal sealed class CopilotService : Form
 
     private void ApplyNativeAircraftState()
     {
+        if (_replayActive)
+        {
+            return;
+        }
         if (_state == null)
         {
             return;
@@ -1174,6 +1190,10 @@ internal sealed class CopilotService : Form
 
     private void OnAircraftData(SimConnect sender, SIMCONNECT_RECV_SIMOBJECT_DATA data)
     {
+        if (_replayActive)
+        {
+            return;
+        }
         if ((Request)data.dwRequestID != Request.AircraftState || data.dwData.Length == 0)
         {
             return;
@@ -1238,6 +1258,14 @@ internal sealed class CopilotService : Form
             IndicatedAirspeedKnots = raw.IndicatedAirspeed,
             TakeoffV1SpeedKnots = _settings.TakeoffV1SpeedKnots,
             TakeoffRotateSpeedKnots = _settings.TakeoffRotateSpeedKnots,
+            ApproachFlaps1AltitudeFeet = _settings.ApproachFlaps1AltitudeFeet,
+            ApproachFlaps1SpeedKnots = _settings.ApproachFlaps1SpeedKnots,
+            ApproachGearAltitudeAglFeet = _settings.ApproachGearAltitudeAglFeet,
+            ApproachGearSpeedKnots = _settings.ApproachGearSpeedKnots,
+            ApproachLandingConfigAltitudeAglFeet =
+                _settings.ApproachLandingConfigAltitudeAglFeet,
+            ApproachLandingConfigSpeedKnots =
+                _settings.ApproachLandingConfigSpeedKnots,
             VerticalSpeedFeetPerMinute = raw.VerticalSpeed,
             GForce = raw.GForce,
             RadioHeightFeet = raw.RadioHeight,
@@ -1310,6 +1338,7 @@ internal sealed class CopilotService : Form
         };
         UpdateTelemetrySanity(_state);
         UpdateCockpitDisplayReadiness(_state);
+        _flightTelemetryStore.Record(_state, DateTime.UtcNow);
 
         VerifyPendingProcedure();
         VerifyPendingFireTest();
@@ -1470,6 +1499,19 @@ internal sealed class CopilotService : Form
     private void ExecuteCommand(string command)
     {
         var normalized = command.Trim().ToLowerInvariant();
+        if (_replayActive
+            && !normalized.StartsWith("procedure ", StringComparison.Ordinal)
+            && normalized is not "status"
+                and not "checklist"
+                and not "phase"
+                and not "capabilities"
+                and not "help")
+        {
+            AppendDashboardLog(
+                $"Replay blocked cockpit command: {normalized}");
+            FinishOneShot();
+            return;
+        }
         switch (normalized)
         {
             case "status":
@@ -1802,6 +1844,31 @@ internal sealed class CopilotService : Form
         StartProcedure(definition);
     }
 
+    private ProcedureDefinition? GetAutomaticNextFlow(string completedId)
+    {
+        var flows = A320ProcedureLibrary.GateToGate;
+        var index = flows
+            .Select((definition, flowIndex) => new { definition, flowIndex })
+            .FirstOrDefault(item =>
+                string.Equals(
+                    item.definition.Id,
+                    completedId,
+                    StringComparison.OrdinalIgnoreCase))
+            ?.flowIndex ?? -1;
+        if (index < 0 || index >= flows.Count - 1)
+        {
+            return null;
+        }
+
+        var enabled = completedId switch
+        {
+            "approach-landing" => _settings.AutoChainFlow10To11,
+            "after-landing-taxi" => _settings.AutoChainFlow11To12,
+            _ => _settings.AutoChainEarlierFlows
+        };
+        return enabled ? flows[index + 1] : null;
+    }
+
     private void ConfirmProcedureStep()
     {
         if (_state == null)
@@ -1841,14 +1908,14 @@ internal sealed class CopilotService : Form
         SaveProcedureSession();
         PrintProcedureUpdate();
 
-        if (string.Equals(
-                completedDefinition?.Id,
-                "approach-landing",
-                StringComparison.OrdinalIgnoreCase))
+        var nextFlow = completedDefinition == null
+            ? null
+            : GetAutomaticNextFlow(completedDefinition.Id);
+        if (nextFlow != null)
         {
             AppendDashboardLog(
-                "Flow 10 complete; Flow 11 will start automatically.");
-            _commands.Enqueue("procedure start after-landing-taxi");
+                $"{completedDefinition!.Name} complete; {nextFlow.Name} will start automatically.");
+            _commands.Enqueue($"procedure start {nextFlow.Id}");
         }
     }
 
@@ -1892,7 +1959,7 @@ internal sealed class CopilotService : Form
 
     private void SpeakProcedureCallout(ProcedureStep step)
     {
-        if (!_settings.EnableStandardCallouts || _speechSynthesizer == null)
+        if (!_settings.EnableStandardCallouts || _voiceCalloutQueue == null)
         {
             return;
         }
@@ -1930,7 +1997,7 @@ internal sealed class CopilotService : Form
 
         try
         {
-            _speechSynthesizer.SpeakAsync(phrase);
+            _voiceCalloutQueue.Enqueue(phrase, GetCalloutPriority(step.Id));
             AppendDashboardLog($"Voice callout: {phrase}");
         }
         catch (InvalidOperationException ex)
@@ -1938,6 +2005,19 @@ internal sealed class CopilotService : Form
             AppLog.Write($"Voice callout failed: {ex.Message}");
         }
     }
+
+    private static int GetCalloutPriority(string stepId) =>
+        stepId switch
+        {
+            "fo-100-knots" or "fo-v1" or "fo-rotate"
+                or "positive-climb" or "fo-gear-up"
+                or "fo-gear-down" or "fo-approaching-minimums"
+                or "fo-minimums" or "fo-spoilers-callout"
+                or "fo-reverse-callout" or "fo-decel-callout" => 100,
+            "captain-takeoff" or "fo-cabin-call"
+                or "fo-cabin-landing-call" => 70,
+            _ => 30
+        };
 
     private void PrintProcedureStatus()
     {
@@ -3888,7 +3968,7 @@ internal sealed class CopilotService : Form
             Text = "Voice callouts",
             AutoSize = true,
             Checked = _settings.EnableStandardCallouts,
-            Enabled = _speechSynthesizer != null,
+            Enabled = _voiceCalloutQueue != null,
             Margin = new Padding(18, 5, 0, 0)
         };
         _voiceCalloutsBox.CheckedChanged += (_, _) =>
@@ -3897,10 +3977,19 @@ internal sealed class CopilotService : Form
             SettingsStore.Save(_settings);
             if (!_voiceCalloutsBox.Checked)
             {
-                _speechSynthesizer?.SpeakAsyncCancelAll();
+                _voiceCalloutQueue?.Clear();
             }
         };
         settingsPanel.Controls.Add(_voiceCalloutsBox);
+
+        var featureSettingsButton = new Button
+        {
+            Text = "Approach & chaining settings",
+            AutoSize = true,
+            Margin = new Padding(18, 2, 0, 0)
+        };
+        featureSettingsButton.Click += (_, _) => ShowFeatureSettingsDialog();
+        settingsPanel.Controls.Add(featureSettingsButton);
 
         settingsPanel.Controls.Add(new Label
         {
@@ -4140,7 +4229,260 @@ internal sealed class CopilotService : Form
         actions.Controls.Add(NewCommandButton("NAV&LOGO OFF", "nav-logo off"));
         actions.Controls.Add(NewCommandButton("BAT 1 ON", "battery-1 on"));
         actions.Controls.Add(NewCommandButton("BAT 2 ON", "battery-2 on"));
+        _replayFlightBox = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Width = 190,
+            Margin = new Padding(18, 3, 0, 0)
+        };
+        RefreshReplayFlightList();
+        actions.Controls.Add(_replayFlightBox);
+        var replayButton = new Button
+        {
+            Text = "Replay flight (10x)",
+            AutoSize = true
+        };
+        replayButton.Click += (_, _) => StartSelectedReplay();
+        actions.Controls.Add(replayButton);
+        var stopReplayButton = new Button
+        {
+            Text = "Stop replay",
+            AutoSize = true
+        };
+        stopReplayButton.Click += (_, _) => StopReplay();
+        actions.Controls.Add(stopReplayButton);
         root.Controls.Add(actions);
+    }
+
+    private void ShowFeatureSettingsDialog()
+    {
+        using var dialog = new Form
+        {
+            Text = "Approach schedule and flow chaining",
+            Width = 540,
+            Height = 470,
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false
+        };
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(14),
+            ColumnCount = 3,
+            AutoScroll = true
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 60));
+        dialog.Controls.Add(layout);
+
+        NumericUpDown AddNumber(string label, int value, int minimum, int maximum, string unit)
+        {
+            var row = layout.RowCount++;
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            layout.Controls.Add(new Label
+            {
+                Text = label,
+                AutoSize = true,
+                Margin = new Padding(0, 8, 4, 0)
+            }, 0, row);
+            var box = new NumericUpDown
+            {
+                Minimum = minimum,
+                Maximum = maximum,
+                Value = Math.Max(minimum, Math.Min(maximum, value)),
+                Width = 80,
+                ThousandsSeparator = true
+            };
+            layout.Controls.Add(box, 1, row);
+            layout.Controls.Add(new Label
+            {
+                Text = unit,
+                AutoSize = true,
+                Margin = new Padding(2, 8, 0, 0)
+            }, 2, row);
+            return box;
+        }
+
+        var flapAltitude = AddNumber(
+            "Flaps 1 maximum indicated altitude",
+            _settings.ApproachFlaps1AltitudeFeet, 1000, 20000, "ft");
+        var flapSpeed = AddNumber(
+            "Flaps 1 target speed",
+            _settings.ApproachFlaps1SpeedKnots, 100, 250, "kt");
+        var gearAltitude = AddNumber(
+            "Gear-down maximum radio altitude",
+            _settings.ApproachGearAltitudeAglFeet, 500, 5000, "ft");
+        var gearSpeed = AddNumber(
+            "Gear-down target speed",
+            _settings.ApproachGearSpeedKnots, 100, 250, "kt");
+        var landingAltitude = AddNumber(
+            "Landing configuration maximum radio altitude",
+            _settings.ApproachLandingConfigAltitudeAglFeet, 300, 3000, "ft");
+        var landingSpeed = AddNumber(
+            "Landing configuration target speed",
+            _settings.ApproachLandingConfigSpeedKnots, 100, 220, "kt");
+
+        CheckBox AddCheck(string text, bool value)
+        {
+            var row = layout.RowCount++;
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            var box = new CheckBox
+            {
+                Text = text,
+                Checked = value,
+                AutoSize = true,
+                Margin = new Padding(0, 10, 0, 0)
+            };
+            layout.Controls.Add(box, 0, row);
+            layout.SetColumnSpan(box, 3);
+            return box;
+        }
+
+        var earlierChains = AddCheck(
+            "Automatically chain Flows 1 through 9",
+            _settings.AutoChainEarlierFlows);
+        var flow10Chain = AddCheck(
+            "Automatically start Flow 11 after Flow 10",
+            _settings.AutoChainFlow10To11);
+        var flow11Chain = AddCheck(
+            "Automatically start Flow 12 after Flow 11",
+            _settings.AutoChainFlow11To12);
+
+        var buttons = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.RightToLeft,
+            Dock = DockStyle.Fill,
+            AutoSize = true
+        };
+        var save = new Button { Text = "Save", DialogResult = DialogResult.OK };
+        var defaults = new Button { Text = "Restore standard" };
+        defaults.Click += (_, _) =>
+        {
+            flapAltitude.Value = 10000;
+            flapSpeed.Value = 220;
+            gearAltitude.Value = 2000;
+            gearSpeed.Value = 210;
+            landingAltitude.Value = 1200;
+            landingSpeed.Value = 185;
+            earlierChains.Checked = false;
+            flow10Chain.Checked = true;
+            flow11Chain.Checked = false;
+        };
+        buttons.Controls.Add(save);
+        buttons.Controls.Add(defaults);
+        var buttonRow = layout.RowCount++;
+        layout.Controls.Add(buttons, 0, buttonRow);
+        layout.SetColumnSpan(buttons, 3);
+        dialog.AcceptButton = save;
+
+        if (dialog.ShowDialog(this) != DialogResult.OK)
+        {
+            return;
+        }
+
+        _settings.ApproachFlaps1AltitudeFeet = (int)flapAltitude.Value;
+        _settings.ApproachFlaps1SpeedKnots = (int)flapSpeed.Value;
+        _settings.ApproachGearAltitudeAglFeet = (int)gearAltitude.Value;
+        _settings.ApproachGearSpeedKnots = (int)gearSpeed.Value;
+        _settings.ApproachLandingConfigAltitudeAglFeet = (int)landingAltitude.Value;
+        _settings.ApproachLandingConfigSpeedKnots = (int)landingSpeed.Value;
+        _settings.AutoChainEarlierFlows = earlierChains.Checked;
+        _settings.AutoChainFlow10To11 = flow10Chain.Checked;
+        _settings.AutoChainFlow11To12 = flow11Chain.Checked;
+        SettingsStore.Save(_settings);
+        ApplyApproachSettingsToState();
+        AppendDashboardLog("Approach schedule and flow chaining settings saved.");
+    }
+
+    private void ApplyApproachSettingsToState()
+    {
+        if (_state == null)
+        {
+            return;
+        }
+        _state.ApproachFlaps1AltitudeFeet = _settings.ApproachFlaps1AltitudeFeet;
+        _state.ApproachFlaps1SpeedKnots = _settings.ApproachFlaps1SpeedKnots;
+        _state.ApproachGearAltitudeAglFeet = _settings.ApproachGearAltitudeAglFeet;
+        _state.ApproachGearSpeedKnots = _settings.ApproachGearSpeedKnots;
+        _state.ApproachLandingConfigAltitudeAglFeet =
+            _settings.ApproachLandingConfigAltitudeAglFeet;
+        _state.ApproachLandingConfigSpeedKnots =
+            _settings.ApproachLandingConfigSpeedKnots;
+    }
+
+    private void RefreshReplayFlightList()
+    {
+        if (_replayFlightBox == null)
+        {
+            return;
+        }
+        _replayFlightBox.Items.Clear();
+        foreach (var recording in _flightTelemetryStore.Recordings)
+        {
+            _replayFlightBox.Items.Add(new ReplayFlightItem(recording));
+        }
+        if (_replayFlightBox.Items.Count > 0)
+        {
+            _replayFlightBox.SelectedIndex = 0;
+        }
+    }
+
+    private void StartSelectedReplay()
+    {
+        if (_replayFlightBox?.SelectedItem is not ReplayFlightItem item)
+        {
+            AppendDashboardLog("No completed flight recording is available.");
+            return;
+        }
+
+        StopReplay();
+        _replayStates = _flightTelemetryStore.Load(item.Path);
+        if (_replayStates.Count == 0)
+        {
+            AppendDashboardLog("The selected flight recording is empty.");
+            return;
+        }
+
+        _replayActive = true;
+        _replayIndex = 0;
+        _replayTimer = new System.Windows.Forms.Timer { Interval = 100 };
+        _replayTimer.Tick += (_, _) => AdvanceReplay();
+        _replayTimer.Start();
+        AppendDashboardLog(
+            $"Replay started: {Path.GetFileName(item.Path)} at 10x speed. Cockpit commands are suppressed.");
+    }
+
+    private void AdvanceReplay()
+    {
+        if (!_replayActive || _replayIndex >= _replayStates.Count)
+        {
+            StopReplay();
+            return;
+        }
+
+        _state = _replayStates[_replayIndex++];
+        UpdateTelemetrySanity(_state);
+        _procedureRunner.Update(_state);
+        UpdateDashboard();
+    }
+
+    private void StopReplay()
+    {
+        var wasActive = _replayActive;
+        _replayTimer?.Stop();
+        _replayTimer?.Dispose();
+        _replayTimer = null;
+        _replayStates = Array.Empty<AircraftState>();
+        _replayIndex = 0;
+        _replayActive = false;
+        if (wasActive)
+        {
+            AppendDashboardLog("Replay stopped; live simulator telemetry resumed.");
+        }
+        RefreshReplayFlightList();
     }
 
     private void AppendDashboardLog(string message)
@@ -4277,9 +4619,11 @@ internal sealed class CopilotService : Form
             "fo-v1" => $"{flight} | target V1 {state.TakeoffV1SpeedKnots} kt",
             "fo-rotate" => $"{flight} | target VR {state.TakeoffRotateSpeedKnots} kt",
             "approach-config-start" =>
-                $"{flight} | trigger below 10,000 ft and ≤220 kt",
-            "gear-down-point" => $"{flight} | trigger ≤2000 ft AGL and ≤210 kt",
-            "landing-config-point" => $"{flight} | trigger ≤1200 ft AGL and ≤185 kt",
+                $"{flight} | trigger ≤{state.ApproachFlaps1AltitudeFeet:N0} ft indicated and ≤{state.ApproachFlaps1SpeedKnots} kt",
+            "gear-down-point" =>
+                $"{flight} | trigger ≤{state.ApproachGearAltitudeAglFeet:N0} ft AGL and ≤{state.ApproachGearSpeedKnots} kt",
+            "landing-config-point" =>
+                $"{flight} | trigger ≤{state.ApproachLandingConfigAltitudeAglFeet:N0} ft AGL and ≤{state.ApproachLandingConfigSpeedKnots} kt",
             "fo-approaching-minimums" or "fo-minimums" =>
                 $"{flight} | RA {state.RadioHeightFeet:F0} ft | DH {state.DecisionHeightFeet:F0} ft",
             "fo-flaps-one" or "fo-flaps-two" or "fo-flaps-three" or "fo-flaps-full"
@@ -4505,9 +4849,10 @@ internal sealed class CopilotService : Form
                 pulseTimer.Dispose();
             }
             _nativePulseTimers.Clear();
-            _speechSynthesizer?.SpeakAsyncCancelAll();
-            _speechSynthesizer?.Dispose();
-            _speechSynthesizer = null;
+            StopReplay();
+            _flightTelemetryStore.Dispose();
+            _voiceCalloutQueue?.Dispose();
+            _voiceCalloutQueue = null;
             _simConnect?.Dispose();
         }
 
@@ -4524,6 +4869,20 @@ internal sealed class CopilotService : Form
 
         public bool DesiredOn { get; }
         public DateTime DeadlineUtc { get; }
+    }
+
+    private sealed class ReplayFlightItem
+    {
+        public ReplayFlightItem(string path)
+        {
+            Path = path;
+        }
+
+        public string Path { get; }
+
+        public override string ToString() =>
+            System.IO.Path.GetFileNameWithoutExtension(Path)
+                .Replace("flight-", "Flight ");
     }
 
     private sealed class PendingBeaconProcedure

@@ -26,6 +26,13 @@ important callouts.
 - Verification after every automatic aircraft action
 - Optional Windows offline voice callouts
 - Persistent preflight settings for V1, VR, and transition altitude
+- A standard approach schedule that can be overridden for flap, gear, and
+  landing-configuration gates
+- Configurable automatic chaining between earlier flows, Flow 10 to 11, and
+  Flow 11 to 12
+- One-second flight telemetry recording with 10x replay for procedure testing;
+  only the latest three flights are retained
+- Prioritized voice-callout queue that prevents overlapping speech
 - Automatic flow recommendation based on the current flight phase
 - Saved active-procedure sessions that resume after app or simulator restarts
 - Late-start recovery for transient engine-start and takeoff milestones
@@ -90,7 +97,10 @@ Start MSFS 2024, load the iniBuilds A320neo V2, and then run:
 
 The dashboard lets you select and start each flow, choose the automation
 policy, enable voice callouts, pause or cancel a procedure, and inspect live
-aircraft status.
+aircraft status. `Approach & chaining settings` opens the configurable
+approach schedule and flow-handoff options. Completed recordings can be
+selected at the bottom of the dashboard and replayed at 10x speed; replay
+never transmits cockpit commands.
 
 Settings are stored in:
 
@@ -102,6 +112,12 @@ Runtime logs are stored in:
 
 ```text
 %LOCALAPPDATA%\MSFS2024_AI\logs\copilot.log
+```
+
+The latest three flight telemetry recordings are stored in:
+
+```text
+%LOCALAPPDATA%\MSFS2024_AI\flights
 ```
 
 The resumable flight session is stored in:

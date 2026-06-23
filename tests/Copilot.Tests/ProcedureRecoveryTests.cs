@@ -98,4 +98,32 @@ public sealed class ProcedureRecoveryTests
 
         Assert.IsTrue(state.FlapsAtDetent(1));
     }
+
+    [TestMethod]
+    public void ApproachFlapsOneGateUsesConfiguredSchedule()
+    {
+        var commands = new List<string>();
+        var runner = new ProcedureRunner(
+            commands.Add,
+            () => AutomationPolicy.AutomaticWhenSupported);
+        var definition = A320ProcedureLibrary.ApproachAndLanding;
+        var gateIndex = definition.Steps
+            .Select((step, index) => new { step.Id, index })
+            .Single(item => item.Id == "approach-config-start")
+            .index;
+        var state = new AircraftState
+        {
+            Title = "A320neo V2",
+            OnGround = false,
+            IndicatedAltitudeFeet = 8500,
+            IndicatedAirspeedKnots = 215,
+            ApproachFlaps1AltitudeFeet = 9000,
+            ApproachFlaps1SpeedKnots = 215,
+            FlapsHandleIndex = 0
+        };
+
+        runner.Restore(definition, gateIndex, state);
+
+        CollectionAssert.AreEqual(new[] { "flaps config-1" }, commands);
+    }
 }

@@ -47,6 +47,20 @@ defined in `docs/NATIVE_CONTROL_STRATEGY.md`.
 Maintains the simulator connection, subscriptions, event transmission,
 reconnection, and raw telemetry. It contains no procedural decisions.
 
+### Flight telemetry and replay
+
+The app records one normalized aircraft-state snapshot per second while a
+flight is active. Recordings are finalized after landing and one minute
+stationary, and retention is limited to the newest three flights. Replay feeds
+the same normalized state into the procedure engine at 10x speed while
+simulator commands are suppressed.
+
+### Voice queue
+
+Spoken callouts use one non-overlapping priority queue. Time-critical takeoff,
+gear, minimums, and landing calls are ordered ahead of routine queued speech;
+calls with equal priority preserve their original sequence.
+
 ## Operational state
 
 ```text

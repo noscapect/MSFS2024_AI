@@ -8,6 +8,11 @@ lighting, landing configuration, and existing voice callouts.
 
 The only items still awaiting live verification are:
 
+- Configurable approach-schedule overrides.
+- Automatic flow chaining options, including the standard Flow 10-to-11
+  handoff.
+- Three-flight telemetry retention and 10x command-suppressed replay.
+- Prioritized, non-overlapping voice callout playback.
 - Procedure-session restoration after restarting the app or simulator.
 - Late-start recovery for transient engine-start and takeoff milestones.
 - Current-step telemetry and flap handle/surface sanity warnings.

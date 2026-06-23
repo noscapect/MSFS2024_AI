@@ -506,8 +506,10 @@ internal static class A320ProcedureLibrary
                 Observe(
                     "approach-config-start",
                     "Approach configuration point",
-                    state => state.IndicatedAltitudeFeet <= 10000
-                             && state.IndicatedAirspeedKnots <= 220,
+                    state => state.IndicatedAltitudeFeet
+                                 <= state.ApproachFlaps1AltitudeFeet
+                             && state.IndicatedAirspeedKnots
+                                 <= state.ApproachFlaps1SpeedKnots,
                     CrewRole.FirstOfficer),
                 Automatic(
                     "fo-flaps-one",
@@ -517,8 +519,10 @@ internal static class A320ProcedureLibrary
                 Observe(
                     "gear-down-point",
                     "Gear-down point",
-                    state => state.AltitudeAboveGroundFeet <= 2000
-                             && state.IndicatedAirspeedKnots <= 210,
+                    state => state.AltitudeAboveGroundFeet
+                                 <= state.ApproachGearAltitudeAglFeet
+                             && state.IndicatedAirspeedKnots
+                                 <= state.ApproachGearSpeedKnots,
                     CrewRole.FirstOfficer),
                 Automatic(
                     "fo-gear-down",
@@ -538,8 +542,10 @@ internal static class A320ProcedureLibrary
                 Observe(
                     "landing-config-point",
                     "Landing configuration point",
-                    state => state.AltitudeAboveGroundFeet <= 1200
-                             && state.IndicatedAirspeedKnots <= 185,
+                    state => state.AltitudeAboveGroundFeet
+                                 <= state.ApproachLandingConfigAltitudeAglFeet
+                             && state.IndicatedAirspeedKnots
+                                 <= state.ApproachLandingConfigSpeedKnots,
                     CrewRole.FirstOfficer),
                 Automatic(
                     "fo-flaps-three",

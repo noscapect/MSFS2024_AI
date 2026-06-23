@@ -88,6 +88,10 @@ ColdAndDark
 Transitions use aircraft state and explicit pilot authorization. They are not
 based only on elapsed time.
 
+Active and completed flow progress is persisted across restarts. The
+`New flight / Reset progress` action clears only that procedure-session state;
+user settings and the retained telemetry recordings are preserved.
+
 ## Safety model
 
 The application separates deciding from doing:

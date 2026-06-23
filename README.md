@@ -35,6 +35,8 @@ important callouts.
 - Prioritized voice-callout queue that prevents overlapping speech
 - Automatic flow recommendation based on the current flight phase
 - Saved active-procedure sessions that resume after app or simulator restarts
+- A `New flight / Reset progress` control that clears restored flow progress
+  without changing settings or deleting flight recordings
 - Late-start recovery for transient engine-start and takeoff milestones
 - Current-step telemetry with the active altitude, speed, configuration, and
   trigger thresholds
@@ -100,7 +102,8 @@ policy, enable voice callouts, pause or cancel a procedure, and inspect live
 aircraft status. `Approach & chaining settings` opens the configurable
 approach schedule and flow-handoff options. Completed recordings can be
 selected at the bottom of the dashboard and replayed at 10x speed; replay
-never transmits cockpit commands.
+never transmits cockpit commands. Use `New flight / Reset progress` before a
+new sector when the previous flight's saved progress is still displayed.
 
 Settings are stored in:
 

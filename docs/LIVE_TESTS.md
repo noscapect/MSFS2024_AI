@@ -8,6 +8,7 @@ lighting, landing configuration, and existing voice callouts.
 
 The only items still awaiting live verification are:
 
+- New-flight reset of active and completed procedure progress.
 - Configurable approach-schedule overrides.
 - Automatic flow chaining options, including the standard Flow 10-to-11
   handoff.

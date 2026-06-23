@@ -1552,6 +1552,9 @@ internal sealed class CopilotService : Form
                 _procedureRunner.Cancel();
                 FinishOneShot();
                 break;
+            case "procedure reset":
+                ResetFlightProgress();
+                break;
             case "external-power on":
                 SetExternalPower(true);
                 break;
@@ -1842,6 +1845,26 @@ internal sealed class CopilotService : Form
         }
 
         StartProcedure(definition);
+    }
+
+    private void ResetFlightProgress()
+    {
+        CancelFuelPumpSequence();
+        _procedureRunner.Cancel();
+        _completedProcedureIds.Clear();
+        _procedureSession.ResetProgress(DateTime.UtcNow);
+        ProcedureSessionStore.Save(_procedureSession);
+        _cruiseSeatbeltMonitoring = false;
+        _smoothCruiseSinceUtc = null;
+        _nextCruiseSeatbeltCommandUtc = DateTime.MinValue;
+        if (_flowList != null && _flowList.Items.Count > 0)
+        {
+            _flowList.SelectedIndex = 0;
+        }
+        AppendDashboardLog(
+            "New flight started: all saved flow progress was reset.");
+        UpdateDashboard();
+        FinishOneShot();
     }
 
     private ProcedureDefinition? GetAutomaticNextFlow(string completedId)
@@ -3855,7 +3878,7 @@ internal sealed class CopilotService : Form
         Console.WriteLine("          tcas altitude-reporting on | tcas traffic tara");
         Console.WriteLine("          procedure start <flow-id> | procedure status");
         Console.WriteLine("          flow ids: power-up-initial-setup through parking-shutdown");
-        Console.WriteLine("          procedure confirm | procedure pause | procedure resume | procedure cancel");
+        Console.WriteLine("          procedure confirm | procedure pause | procedure resume | procedure cancel | procedure reset");
         Console.WriteLine("          help | quit");
     }
 
@@ -4197,6 +4220,26 @@ internal sealed class CopilotService : Form
         procedureButtons.Controls.Add(NewCommandButton("Pause", "procedure pause"));
         procedureButtons.Controls.Add(NewCommandButton("Resume", "procedure resume"));
         procedureButtons.Controls.Add(NewCommandButton("Cancel", "procedure cancel"));
+        var resetProgressButton = new Button
+        {
+            Text = "New flight / Reset progress",
+            AutoSize = true
+        };
+        resetProgressButton.Click += (_, _) =>
+        {
+            var result = MessageBox.Show(
+                this,
+                "Reset the active flow and all completed-flow progress for a new flight?\n\nSettings and saved flight replays will be kept.",
+                "Start a new flight",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Question,
+                MessageBoxDefaultButton.Button2);
+            if (result == DialogResult.Yes)
+            {
+                _commands.Enqueue("procedure reset");
+            }
+        };
+        procedureButtons.Controls.Add(resetProgressButton);
         procedureLayout.Controls.Add(procedureButtons);
 
         var logGroup = new GroupBox

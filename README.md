@@ -155,6 +155,17 @@ Procedure recovery and aircraft-state sanity checks can be run without MSFS:
 dotnet test .\tests\Copilot.Tests\Copilot.Tests.csproj -c Release
 ```
 
+## Publishing a release
+
+Maintainers can build, test, package, tag, and publish the current version with:
+
+```powershell
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+  -File .\tools\Publish-Release.ps1
+```
+
+See [docs/RELEASING.md](docs/RELEASING.md).
+
 ## Project structure
 
 - `src/Copilot` — WinForms application, simulator integration, procedures, and UI

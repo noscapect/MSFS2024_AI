@@ -2,6 +2,7 @@
 **/bin/
 **/obj/
 build-check/
+artifacts/
 
 # Temporary development dependencies and scratch data
 .tmp/

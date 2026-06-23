@@ -23,6 +23,12 @@ important callouts.
 - Optional Windows offline voice callouts
 - Persistent preflight settings for V1, VR, and transition altitude
 - Automatic flow recommendation based on the current flight phase
+- Saved active-procedure sessions that resume after app or simulator restarts
+- Late-start recovery for transient engine-start and takeoff milestones
+- Current-step telemetry with the active altitude, speed, configuration, and
+  trigger thresholds
+- Readback sanity checks comparing flap-handle and flap-surface telemetry
+- Visible application version and GitHub release update status
 - Monitor-only and confirmation-based automation modes
 - Runtime activity log and diagnostic status display
 
@@ -91,6 +97,12 @@ Runtime logs are stored in:
 %LOCALAPPDATA%\MSFS2024_AI\logs\copilot.log
 ```
 
+The resumable flight session is stored in:
+
+```text
+%LOCALAPPDATA%\MSFS2024_AI\session.xml
+```
+
 ## Gate-to-gate flows
 
 1. Power Up & Initial Setup
@@ -134,6 +146,14 @@ dotnet build .\src\SimConnectProbe\SimConnectProbe.csproj -c Release
 
 See [docs/NATIVE_CONTROL_STRATEGY.md](docs/NATIVE_CONTROL_STRATEGY.md) and
 [docs/LIVE_TESTS.md](docs/LIVE_TESTS.md) for control evidence and test history.
+
+## Automated tests
+
+Procedure recovery and aircraft-state sanity checks can be run without MSFS:
+
+```powershell
+dotnet test .\tests\Copilot.Tests\Copilot.Tests.csproj -c Release
+```
 
 ## Project structure
 

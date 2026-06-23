@@ -11,6 +11,7 @@ internal sealed class ProcedureRunner
     private bool _manualConfirmationReceived;
     private string? _lastAutomaticStepId;
     private DateTime _nextAutomaticActionUtc;
+    private bool _recovering;
 
     public ProcedureRunner(
         Action<string> executeCommand,
@@ -28,6 +29,7 @@ internal sealed class ProcedureRunner
             : null;
     public string? Message { get; private set; }
     public int CompletedStepCount => _stepIndex;
+    public int CurrentStepIndex => _stepIndex;
 
     public event Action? Changed;
     public event Action<ProcedureStep>? StepCompleted;
@@ -39,8 +41,25 @@ internal sealed class ProcedureRunner
         _manualConfirmationReceived = false;
         _lastAutomaticStepId = null;
         _nextAutomaticActionUtc = DateTime.MinValue;
+        _recovering = true;
         Status = ProcedureStatus.Running;
         Message = $"Started {definition.Name}.";
+        Advance(state);
+    }
+
+    public void Restore(
+        ProcedureDefinition definition,
+        int stepIndex,
+        AircraftState state)
+    {
+        _definition = definition;
+        _stepIndex = Math.Max(0, Math.Min(stepIndex, definition.Steps.Count));
+        _manualConfirmationReceived = false;
+        _lastAutomaticStepId = null;
+        _nextAutomaticActionUtc = DateTime.MinValue;
+        _recovering = true;
+        Status = ProcedureStatus.Running;
+        Message = $"Resumed {definition.Name} from saved step {_stepIndex + 1}.";
         Advance(state);
     }
 
@@ -100,6 +119,7 @@ internal sealed class ProcedureRunner
         _manualConfirmationReceived = false;
         _lastAutomaticStepId = null;
         _nextAutomaticActionUtc = DateTime.MinValue;
+        _recovering = false;
         Status = ProcedureStatus.Idle;
         Message = "Procedure cancelled.";
         Changed?.Invoke();
@@ -128,7 +148,11 @@ internal sealed class ProcedureRunner
         while (_stepIndex < _definition.Steps.Count)
         {
             var step = _definition.Steps[_stepIndex];
-            if (step.IsComplete(state))
+            var complete =
+                step.IsComplete(state)
+                || (_recovering
+                    && step.IsCompleteWhenRecovering?.Invoke(state) == true);
+            if (complete)
             {
                 var automaticActionWasIssued =
                     step.Kind == ProcedureStepKind.AutomaticAction
@@ -157,6 +181,8 @@ internal sealed class ProcedureRunner
                 StepCompleted?.Invoke(step);
                 continue;
             }
+
+            _recovering = false;
 
             switch (step.Kind)
             {

@@ -8,6 +8,10 @@ lighting, landing configuration, and existing voice callouts.
 
 The only items still awaiting live verification are:
 
+- Procedure-session restoration after restarting the app or simulator.
+- Late-start recovery for transient engine-start and takeoff milestones.
+- Current-step telemetry and flap handle/surface sanity warnings.
+- Version display and GitHub release update status.
 - Revised Flow 1 timing: 45-second display/warning-system initialization gate
   before fire tests.
 - Revised automatic-action pacing and one-second fuel-pump intervals.
@@ -19,6 +23,31 @@ The only items still awaiting live verification are:
 
 Earlier failed tests remain documented below as development history. Where an
 older note conflicts with this summary, this current status is authoritative.
+
+## 2026-06-23 - Reliability and recovery upgrade
+
+The application now persists the active procedure ID, exact step index, and
+completed-flow IDs in `%LOCALAPPDATA%\MSFS2024_AI\session.xml`. Once valid
+A320 and native state are available after restart, the saved procedure resumes
+from that step and re-evaluates current aircraft state.
+
+Transient engine-start and takeoff milestones have explicit recovery
+conditions so starting or restoring a flow after the event does not leave it
+waiting for an event that cannot occur again.
+
+The dashboard now shows telemetry relevant to the current step, including
+altitude, AGL, airspeed, vertical speed, flap handle/surface state, gear state,
+minimums, and active trigger thresholds.
+
+Flap verification now cross-checks handle detent against left and right
+trailing-edge flap positions. Contradictory or impossible telemetry is shown as
+`READBACK INCONSISTENT` and cannot satisfy an automatic flap step.
+
+The dashboard displays application version 0.3.0 and checks the public GitHub
+repository for a newer published release.
+
+Five automated tests cover procedure recovery and recorded-state sanity cases.
+They pass under .NET Framework 4.7.2 without a running simulator.
 
 ## 2026-06-21 - Transponder mode selector
 

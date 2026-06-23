@@ -60,6 +60,11 @@ internal sealed class AircraftState
     public double LeftSpoilerPositionPercent { get; set; }
     public double RightSpoilerPositionPercent { get; set; }
     public double FlapsHandleIndex { get; set; }
+    public double LeftFlapPositionPercent { get; set; }
+    public double RightFlapPositionPercent { get; set; }
+    public bool FlapReadbackSane { get; set; } = true;
+    public IReadOnlyList<string> TelemetryIssues { get; set; } =
+        Array.Empty<string>();
     public bool GroundSpoilersArmed { get; set; }
     public double? AutobrakeLevel { get; set; }
     public double? WeatherRadarPwsSelectorPosition { get; set; }
@@ -139,6 +144,10 @@ internal sealed class AircraftState
         Math.Abs(Adirs1SelectorState - 1) < 0.1
         && Math.Abs(Adirs2SelectorState - 1) < 0.1
         && Math.Abs(Adirs3SelectorState - 1) < 0.1;
+
+    public bool FlapsAtDetent(int detent) =>
+        FlapReadbackSane
+        && Math.Abs(FlapsHandleIndex - detent) < 0.1;
 }
 
 internal sealed class AircraftExitState

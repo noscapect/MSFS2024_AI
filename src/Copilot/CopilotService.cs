@@ -6,6 +6,9 @@ using Msfs2024Ai.Copilot.Domain;
 using Msfs2024Ai.Copilot.Procedures;
 using Msfs2024Ai.Copilot.Settings;
 using System.Collections.Concurrent;
+using System.Net;
+using System.Net.Http;
+using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Speech.Synthesis;
 using System.Threading;
@@ -22,6 +25,7 @@ internal sealed class CopilotService : Form
     private readonly string? _oneShotCommand;
     private readonly bool _showUi;
     private readonly CopilotSettings _settings;
+    private readonly ProcedureSession _procedureSession;
     private readonly ConcurrentQueue<string> _commands = new();
     private readonly ProcedureRunner _procedureRunner;
     private SpeechSynthesizer? _speechSynthesizer;
@@ -140,6 +144,7 @@ internal sealed class CopilotService : Form
     private System.Windows.Forms.Timer? _reconnectTimer;
     private bool _initialStateReceived;
     private bool _oneShotCommandExecuted;
+    private bool _procedureSessionRestoreAttempted;
     private DateTime? _electricalPowerStableSinceUtc;
     private bool _cruiseSeatbeltMonitoring;
     private DateTime? _smoothCruiseSinceUtc;
@@ -149,6 +154,8 @@ internal sealed class CopilotService : Form
     private Label? _phaseLabel;
     private Label? _electricalLabel;
     private Label? _recommendationLabel;
+    private Label? _telemetryLabel;
+    private Label? _versionLabel;
     private Label? _adapterLabel;
     private Label? _procedureLabel;
     private Label? _stepLabel;
@@ -408,6 +415,8 @@ internal sealed class CopilotService : Form
         public double SpoilersArmed;
         public double CaptainBaroStandard;
         public double FirstOfficerBaroStandard;
+        public double LeftFlapPosition;
+        public double RightFlapPosition;
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -445,10 +454,15 @@ internal sealed class CopilotService : Form
         _oneShotCommand = oneShotCommand;
         _showUi = showUi;
         _settings = SettingsStore.Load();
+        _procedureSession = ProcedureSessionStore.Load();
+        foreach (var procedureId in _procedureSession.CompletedProcedureIds)
+        {
+            _completedProcedureIds.Add(procedureId);
+        }
         _procedureRunner = new ProcedureRunner(
             command => _commands.Enqueue(command),
             () => _settings.AutomationPolicy);
-        _procedureRunner.Changed += PrintProcedureUpdate;
+        _procedureRunner.Changed += OnProcedureChanged;
         _procedureRunner.StepCompleted += SpeakProcedureCallout;
         try
         {
@@ -469,6 +483,7 @@ internal sealed class CopilotService : Form
         if (showUi)
         {
             BuildDashboard();
+            Shown += async (_, _) => await CheckForUpdatesAsync();
         }
     }
 
@@ -612,6 +627,8 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "SPOILERS ARMED", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "KOHLSMAN SETTING STD:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "KOHLSMAN SETTING STD:2", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "TRAILING EDGE FLAPS LEFT PERCENT", "Percent", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "TRAILING EDGE FLAPS RIGHT PERCENT", "Percent", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.RegisterDataDefineStruct<AircraftData>(Definition.AircraftState);
         sender.MapClientEventToSimEvent(CopilotEvent.SetExternalPower, "SET_EXTERNAL_POWER");
         sender.MapClientEventToSimEvent(CopilotEvent.SetBeacon, "BEACON_LIGHTS_SET");
@@ -1142,6 +1159,7 @@ internal sealed class CopilotService : Form
         _state.ApuFireTestCompleted = _apuFireTestCompleted;
         _state.Engine1FireTestCompleted = _engine1FireTestCompleted;
         _state.Engine2FireTestCompleted = _engine2FireTestCompleted;
+        UpdateTelemetrySanity(_state);
         UpdateCockpitDisplayReadiness(_state);
 
         VerifyPendingBatteryProcedure();
@@ -1226,6 +1244,8 @@ internal sealed class CopilotService : Form
             LeftSpoilerPositionPercent = raw.LeftSpoilerPosition,
             RightSpoilerPositionPercent = raw.RightSpoilerPosition,
             FlapsHandleIndex = raw.FlapsHandleIndex,
+            LeftFlapPositionPercent = raw.LeftFlapPosition,
+            RightFlapPositionPercent = raw.RightFlapPosition,
             GearHandleDown = _nativeGearHandlePosition.HasValue
                 ? _nativeGearHandlePosition.Value >= 0.5
                 : raw.GearHandle != 0,
@@ -1284,10 +1304,12 @@ internal sealed class CopilotService : Form
             Engine1FireTestCompleted = _engine1FireTestCompleted,
             Engine2FireTestCompleted = _engine2FireTestCompleted
         };
+        UpdateTelemetrySanity(_state);
         UpdateCockpitDisplayReadiness(_state);
 
         VerifyPendingProcedure();
         VerifyPendingFireTest();
+        TryRestoreProcedureSession();
         _procedureRunner.Update(_state);
         UpdateCruiseSeatbeltMonitoring();
         if (_procedureRunner.Status == ProcedureStatus.Completed
@@ -1727,6 +1749,42 @@ internal sealed class CopilotService : Form
         FinishProcedureOneShotIfTerminal();
     }
 
+    private void TryRestoreProcedureSession()
+    {
+        if (_procedureSessionRestoreAttempted
+            || _state == null
+            || !_state.IsA320NeoV2
+            || !NativeStateReady)
+        {
+            return;
+        }
+
+        _procedureSessionRestoreAttempted = true;
+        var activeProcedureId = _procedureSession.ActiveProcedureId;
+        if (string.IsNullOrWhiteSpace(activeProcedureId))
+        {
+            return;
+        }
+
+        var definition =
+            A320ProcedureLibrary.Find(activeProcedureId!);
+        if (definition == null)
+        {
+            _procedureSession.ActiveProcedureId = null;
+            SaveProcedureSession();
+            return;
+        }
+
+        _cruiseSeatbeltMonitoring =
+            string.Equals(definition.Id, "cruise", StringComparison.OrdinalIgnoreCase);
+        _procedureRunner.Restore(
+            definition,
+            _procedureSession.ActiveStepIndex,
+            _state);
+        AppendDashboardLog(
+            $"Restored saved procedure session: {definition.Name}.");
+    }
+
     private void StartProcedureById(string id)
     {
         var definition = A320ProcedureLibrary.Find(id);
@@ -1764,6 +1822,35 @@ internal sealed class CopilotService : Form
 
         _procedureRunner.Resume(_state);
         FinishProcedureOneShotIfTerminal();
+    }
+
+    private void OnProcedureChanged()
+    {
+        if (_procedureRunner.Status == ProcedureStatus.Completed
+            && _procedureRunner.Definition != null)
+        {
+            _completedProcedureIds.Add(_procedureRunner.Definition.Id);
+        }
+        SaveProcedureSession();
+        PrintProcedureUpdate();
+    }
+
+    private void SaveProcedureSession()
+    {
+        var active =
+            _procedureRunner.Definition != null
+            && _procedureRunner.Status is ProcedureStatus.Running
+                or ProcedureStatus.WaitingForManualAction
+                or ProcedureStatus.WaitingForVerification
+                or ProcedureStatus.Paused;
+        _procedureSession.ActiveProcedureId =
+            active ? _procedureRunner.Definition!.Id : null;
+        _procedureSession.ActiveStepIndex =
+            active ? _procedureRunner.CurrentStepIndex : 0;
+        _procedureSession.CompletedProcedureIds =
+            _completedProcedureIds.OrderBy(id => id).ToList();
+        _procedureSession.SavedUtc = DateTime.UtcNow;
+        ProcedureSessionStore.Save(_procedureSession);
     }
 
     private void PrintProcedureUpdate()
@@ -2168,6 +2255,16 @@ internal sealed class CopilotService : Form
         state.CockpitDisplaysReady =
             DateTime.UtcNow - _electricalPowerStableSinceUtc.Value
             >= TimeSpan.FromSeconds(45);
+    }
+
+    private static void UpdateTelemetrySanity(AircraftState state)
+    {
+        state.TelemetryIssues = AircraftStateSanity.Evaluate(state);
+        state.FlapReadbackSane =
+            !state.TelemetryIssues.Any(
+                issue => issue.IndexOf(
+                    "flap",
+                    StringComparison.OrdinalIgnoreCase) >= 0);
     }
 
     private void CancelFuelPumpSequence()
@@ -3105,7 +3202,7 @@ internal sealed class CopilotService : Form
         {
             return;
         }
-        if (Math.Abs(_state!.FlapsHandleIndex - handleIndex) < 0.1)
+        if (_state!.FlapsAtDetent((int)handleIndex))
         {
             AppendDashboardLog($"Takeoff flaps already CONFIG {handleIndex}.");
             FinishOneShot();
@@ -3118,7 +3215,7 @@ internal sealed class CopilotService : Form
         SendMobiFlightCommand("MF.DummyCmd");
         BeginNativeAction(
             "Takeoff flaps",
-            state => Math.Abs(state.FlapsHandleIndex - handleIndex) < 0.1,
+            state => state.FlapsAtDetent((int)handleIndex),
             true);
     }
 
@@ -3130,7 +3227,7 @@ internal sealed class CopilotService : Form
             FinishOneShot(3);
             return;
         }
-        if (Math.Abs(_state.FlapsHandleIndex - desiredPosition) < 0.1)
+        if (_state.FlapsAtDetent((int)desiredPosition))
         {
             AppendDashboardLog(
                 $"Flaps already CONFIG {desiredPosition} " +
@@ -3152,7 +3249,7 @@ internal sealed class CopilotService : Form
         SendMobiFlightCommand("MF.DummyCmd");
         BeginNativeAction(
             $"Flaps CONFIG {desiredPosition}",
-            state => Math.Abs(state.FlapsHandleIndex - desiredPosition) < 0.1,
+            state => state.FlapsAtDetent((int)desiredPosition),
             true,
             TimeSpan.FromSeconds(15));
     }
@@ -3165,7 +3262,7 @@ internal sealed class CopilotService : Form
             FinishOneShot(3);
             return;
         }
-        if (_state.FlapsHandleIndex <= 0)
+        if (_state.FlapsAtDetent(0))
         {
             AppendDashboardLog("Flaps already CLEAN.");
             FinishOneShot();
@@ -3187,7 +3284,7 @@ internal sealed class CopilotService : Form
         SendMobiFlightCommand("MF.DummyCmd");
         BeginNativeAction(
             "Flaps CLEAN",
-            state => state.FlapsHandleIndex <= 0,
+            state => state.FlapsAtDetent(0),
             true,
             TimeSpan.FromSeconds(15));
     }
@@ -3715,6 +3812,11 @@ internal sealed class CopilotService : Form
         _electricalLabel = AddDashboardRow(statusPanel, "Electrical", "Waiting for state...");
         _adapterLabel = AddDashboardRow(statusPanel, "Aircraft adapter", "Connecting...");
         _recommendationLabel = AddDashboardRow(statusPanel, "Recommended flow", "Waiting for state...");
+        _telemetryLabel = AddDashboardRow(statusPanel, "Current-step telemetry", "Waiting for state...");
+        _versionLabel = AddDashboardRow(
+            statusPanel,
+            "Version",
+            $"{GetApplicationVersion()} — checking GitHub releases...");
 
         var settingsPanel = new FlowLayoutPanel
         {
@@ -4106,6 +4208,10 @@ internal sealed class CopilotService : Form
         _adapterLabel.ForeColor = _mobiFlightReady
             ? System.Drawing.Color.DarkGreen
             : System.Drawing.Color.DarkRed;
+        _telemetryLabel!.Text = FormatCurrentStepTelemetry(_state);
+        _telemetryLabel.ForeColor = _state.TelemetryIssues.Count == 0
+            ? System.Drawing.Color.DarkSlateBlue
+            : System.Drawing.Color.DarkRed;
 
         var definition = _procedureRunner.Definition;
         _procedureLabel!.Text =
@@ -4133,6 +4239,101 @@ internal sealed class CopilotService : Form
             ? System.Drawing.Color.DarkRed
             : System.Drawing.Color.DarkBlue;
         RefreshFlowList(recommendation.Procedure.Id, definition?.Id);
+    }
+
+    private string FormatCurrentStepTelemetry(AircraftState state)
+    {
+        if (state.TelemetryIssues.Count > 0)
+        {
+            return "READBACK INCONSISTENT — " +
+                   string.Join(" ", state.TelemetryIssues);
+        }
+
+        var stepId = _procedureRunner.CurrentStep?.Id;
+        var flight =
+            $"AGL {state.AltitudeAboveGroundFeet:F0} ft | " +
+            $"ALT {state.IndicatedAltitudeFeet:F0} ft | " +
+            $"IAS {state.IndicatedAirspeedKnots:F0} kt | " +
+            $"VS {state.VerticalSpeedFeetPerMinute:F0} fpm";
+        return stepId switch
+        {
+            "fo-v1" => $"{flight} | target V1 {state.TakeoffV1SpeedKnots} kt",
+            "fo-rotate" => $"{flight} | target VR {state.TakeoffRotateSpeedKnots} kt",
+            "approach-config-start" => $"{flight} | trigger ≤5000 ft AGL and ≤230 kt",
+            "gear-down-point" => $"{flight} | trigger ≤2000 ft AGL and ≤210 kt",
+            "landing-config-point" => $"{flight} | trigger ≤1200 ft AGL and ≤185 kt",
+            "fo-approaching-minimums" or "fo-minimums" =>
+                $"{flight} | RA {state.RadioHeightFeet:F0} ft | DH {state.DecisionHeightFeet:F0} ft",
+            "fo-flaps-one" or "fo-flaps-two" or "fo-flaps-three" or "fo-flaps-full"
+                or "fo-flaps" or "fo-flaps-zero" =>
+                $"{flight} | flap handle {state.FlapsHandleIndex:F0} | " +
+                $"surfaces L/R {state.LeftFlapPositionPercent:F1}/{state.RightFlapPositionPercent:F1}%",
+            "fo-gear-up" or "fo-gear-down" =>
+                $"{flight} | gear {(state.GearHandleDown ? "DOWN" : "UP")}",
+            "fo-display-initialization" =>
+                $"BAT 1/2 {state.Battery1On.ToOnOff()}/{state.Battery2On.ToOnOff()} | " +
+                $"EXT PWR {state.ExternalPowerOn.ToOnOff()} | waiting for 45 s stable power",
+            _ => flight
+        };
+    }
+
+    private static string GetApplicationVersion() =>
+        Assembly.GetExecutingAssembly().GetName().Version?.ToString(3)
+        ?? "development";
+
+    private async Task CheckForUpdatesAsync()
+    {
+        if (_versionLabel == null)
+        {
+            return;
+        }
+
+        try
+        {
+            ServicePointManager.SecurityProtocol |= SecurityProtocolType.Tls12;
+            using var client = new HttpClient
+            {
+                Timeout = TimeSpan.FromSeconds(8)
+            };
+            client.DefaultRequestHeaders.UserAgent.ParseAdd(
+                "MSFS2024-AI-First-Officer");
+            using var response = await client.GetAsync(
+                "https://api.github.com/repos/noscapect/MSFS2024_AI/releases/latest");
+            if (response.StatusCode == HttpStatusCode.NotFound)
+            {
+                _versionLabel.Text =
+                    $"{GetApplicationVersion()} — no GitHub release published";
+                return;
+            }
+            response.EnsureSuccessStatusCode();
+            var json = await response.Content.ReadAsStringAsync();
+            var match = System.Text.RegularExpressions.Regex.Match(
+                json,
+                "\"tag_name\"\\s*:\\s*\"v?(?<version>[^\"]+)\"");
+            if (!match.Success
+                || !Version.TryParse(match.Groups["version"].Value, out var latest))
+            {
+                _versionLabel.Text =
+                    $"{GetApplicationVersion()} — release status unavailable";
+                return;
+            }
+
+            var current =
+                Assembly.GetExecutingAssembly().GetName().Version
+                ?? new Version();
+            _versionLabel.Text = latest > current
+                ? $"{GetApplicationVersion()} — update available: {latest}"
+                : $"{GetApplicationVersion()} — up to date";
+            _versionLabel.ForeColor = latest > current
+                ? System.Drawing.Color.DarkOrange
+                : System.Drawing.Color.DarkGreen;
+        }
+        catch (Exception ex)
+        {
+            _versionLabel.Text =
+                $"{GetApplicationVersion()} — update check unavailable";
+            AppLog.Write($"GitHub update check failed: {ex.Message}");
+        }
     }
 
     private void RefreshChecklist(string? procedureId)

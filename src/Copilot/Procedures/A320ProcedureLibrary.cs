@@ -45,30 +45,47 @@ internal static class A320ProcedureLibrary
         string id,
         string label,
         Func<AircraftState, bool> complete,
-        CrewRole role = CrewRole.FirstOfficer) =>
-        new(id, label, ProcedureStepKind.Observe, complete, role);
+        CrewRole role = CrewRole.FirstOfficer,
+        Func<AircraftState, bool>? recoveryComplete = null) =>
+        new(
+            id,
+            label,
+            ProcedureStepKind.Observe,
+            complete,
+            role,
+            isCompleteWhenRecovering: recoveryComplete);
 
     private static ProcedureStep Manual(
         string id,
         string label,
         string instruction,
         CrewRole role,
-        Func<AircraftState, bool>? complete = null) =>
+        Func<AircraftState, bool>? complete = null,
+        Func<AircraftState, bool>? recoveryComplete = null) =>
         new(
             id,
             label,
             ProcedureStepKind.ManualAction,
             complete ?? (_ => false),
             role,
-            manualInstruction: instruction);
+            manualInstruction: instruction,
+            isCompleteWhenRecovering: recoveryComplete);
 
     private static ProcedureStep Automatic(
         string id,
         string label,
         Func<AircraftState, bool> complete,
         string command,
-        CrewRole role = CrewRole.FirstOfficer) =>
-        new(id, label, ProcedureStepKind.AutomaticAction, complete, role, command);
+        CrewRole role = CrewRole.FirstOfficer,
+        Func<AircraftState, bool>? recoveryComplete = null) =>
+        new(
+            id,
+            label,
+            ProcedureStepKind.AutomaticAction,
+            complete,
+            role,
+            command,
+            isCompleteWhenRecovering: recoveryComplete);
 
     public static ProcedureDefinition PowerUpAndInitialSetup { get; } =
         new(
@@ -185,14 +202,35 @@ internal static class A320ProcedureLibrary
             new[]
             {
                 Observe("start-condition", "Aircraft on ground with beacon ON", state => state.OnGround && state.BeaconOn),
-                Manual("captain-engine-mode-start", "Engine mode selector IGN/START", "Captain: set the engine mode selector to IGN/START, then confirm.", CrewRole.Captain),
+                Manual(
+                    "captain-engine-mode-start",
+                    "Engine mode selector IGN/START",
+                    "Captain: set the engine mode selector to IGN/START, then confirm.",
+                    CrewRole.Captain,
+                    recoveryComplete: state => state.Engine1Running || state.Engine2Running),
                 Manual("captain-engine-two", "Engine 2 master ON", "Captain: set Engine 2 Master ON.", CrewRole.Captain, state => state.Engine2StarterActive || state.Engine2Running),
-                Observe("fo-engine-two-starter", "Engine 2 — Starter Valve Open", state => state.Engine2StarterActive),
-                Observe("fo-engine-two-fuel", "Engine 2 — Fuel Flow", state => state.Engine2FuelFlowPph > 0),
+                Observe(
+                    "fo-engine-two-starter",
+                    "Engine 2 — Starter Valve Open",
+                    state => state.Engine2StarterActive,
+                    recoveryComplete: state => state.Engine2StartStabilized),
+                Observe(
+                    "fo-engine-two-fuel",
+                    "Engine 2 — Fuel Flow",
+                    state => state.Engine2FuelFlowPph > 0,
+                    recoveryComplete: state => state.Engine2StartStabilized),
                 Observe("fo-engine-two-stable", "Engine 2 — Stabilized", state => state.Engine2StartStabilized),
                 Manual("captain-engine-one", "Engine 1 master ON", "Captain: once Engine 2 is stable, set Engine 1 Master ON.", CrewRole.Captain, state => state.Engine1StarterActive || state.Engine1Running),
-                Observe("fo-engine-one-starter", "Engine 1 — Starter Valve Open", state => state.Engine1StarterActive),
-                Observe("fo-engine-one-fuel", "Engine 1 — Fuel Flow", state => state.Engine1FuelFlowPph > 0),
+                Observe(
+                    "fo-engine-one-starter",
+                    "Engine 1 — Starter Valve Open",
+                    state => state.Engine1StarterActive,
+                    recoveryComplete: state => state.Engine1StartStabilized),
+                Observe(
+                    "fo-engine-one-fuel",
+                    "Engine 1 — Fuel Flow",
+                    state => state.Engine1FuelFlowPph > 0,
+                    recoveryComplete: state => state.Engine1StartStabilized),
                 Observe("fo-engine-one-stable", "Engine 1 — Stabilized", state => state.Engine1StartStabilized),
                 Manual("captain-engine-mode-normal", "Engine mode selector NORM", "Captain: return the engine mode selector to NORM, then confirm.", CrewRole.Captain)
             });
@@ -207,7 +245,7 @@ internal static class A320ProcedureLibrary
                 Automatic("fo-apu-bleed-off", "APU BLEED OFF", state => !state.ApuBleedOn, "apu-bleed off"),
                 Automatic("fo-apu-master-off", "APU MASTER OFF", state => !state.ApuMasterSwitchOn, "apu-master off"),
                 Automatic("fo-ground-spoilers", "Ground spoilers ARMED", state => state.GroundSpoilersArmed, "ground-spoilers arm"),
-                Automatic("fo-takeoff-flaps", "Takeoff flaps CONFIG 1", state => Math.Abs(state.FlapsHandleIndex - 1) < 0.1, "flaps config-1"),
+                Automatic("fo-takeoff-flaps", "Takeoff flaps CONFIG 1", state => state.FlapsAtDetent(1), "flaps config-1"),
                 Automatic("fo-autobrake-max", "Auto-brake MAX", state => state.AutobrakeLevel.HasValue && Math.Abs(state.AutobrakeLevel.Value - 3) < 0.1, "autobrake max"),
                 Automatic(
                     "fo-wxr-pws",
@@ -291,30 +329,37 @@ internal static class A320ProcedureLibrary
                     state => state.OnGround
                              && state.IndicatedAirspeedKnots > 20
                              && state.Engine1N1Percent >= 80
-                             && state.Engine2N1Percent >= 80),
+                             && state.Engine2N1Percent >= 80,
+                    recoveryComplete: state => !state.OnGround),
                 Observe(
                     "takeoff-roll",
                     "Takeoff roll",
-                    state => state.OnGround && state.IndicatedAirspeedKnots > 40),
+                    state => state.OnGround && state.IndicatedAirspeedKnots > 40,
+                    recoveryComplete: state => !state.OnGround),
                 Observe(
                     "fo-100-knots",
                     "100 Knots",
-                    state => state.OnGround && state.IndicatedAirspeedKnots >= 100),
+                    state => state.OnGround && state.IndicatedAirspeedKnots >= 100,
+                    recoveryComplete: state => !state.OnGround),
                 Observe(
                     "fo-v1",
                     "V1",
                     state => state.OnGround
                              && state.IndicatedAirspeedKnots
-                                >= state.TakeoffV1SpeedKnots),
+                                >= state.TakeoffV1SpeedKnots,
+                    recoveryComplete: state => !state.OnGround),
                 Observe(
                     "fo-rotate",
                     "Rotate",
                     state => state.IndicatedAirspeedKnots
-                             >= state.TakeoffRotateSpeedKnots),
+                             >= state.TakeoffRotateSpeedKnots,
+                    recoveryComplete: state => !state.OnGround),
                 Observe(
                     "positive-climb",
                     "Positive Climb",
-                    state => !state.OnGround && state.VerticalSpeedFeetPerMinute > 100),
+                    state => !state.OnGround && state.VerticalSpeedFeetPerMinute > 100,
+                    recoveryComplete: state => !state.OnGround
+                                               && state.AltitudeAboveGroundFeet >= 100),
                 Automatic(
                     "fo-ground-spoilers-disarm",
                     "Ground spoilers DISARMED",
@@ -345,7 +390,7 @@ internal static class A320ProcedureLibrary
                 Automatic(
                     "fo-flaps",
                     "Flaps retracted on schedule",
-                    state => state.FlapsHandleIndex <= 0,
+                    state => state.FlapsAtDetent(0),
                     "flaps clean"),
                 Observe(
                     "above-ten-thousand",
@@ -464,7 +509,7 @@ internal static class A320ProcedureLibrary
                 Automatic(
                     "fo-flaps-one",
                     "Flaps CONFIG 1",
-                    state => Math.Abs(state.FlapsHandleIndex - 1) < 0.1,
+                    state => state.FlapsAtDetent(1),
                     "flaps config-1"),
                 Observe(
                     "gear-down-point",
@@ -485,7 +530,7 @@ internal static class A320ProcedureLibrary
                 Automatic(
                     "fo-flaps-two",
                     "Flaps CONFIG 2",
-                    state => Math.Abs(state.FlapsHandleIndex - 2) < 0.1,
+                    state => state.FlapsAtDetent(2),
                     "flaps config-2"),
                 Observe(
                     "landing-config-point",
@@ -496,12 +541,12 @@ internal static class A320ProcedureLibrary
                 Automatic(
                     "fo-flaps-three",
                     "Flaps CONFIG 3",
-                    state => Math.Abs(state.FlapsHandleIndex - 3) < 0.1,
+                    state => state.FlapsAtDetent(3),
                     "flaps config-3"),
                 Automatic(
                     "fo-flaps-full",
                     "Flaps FULL",
-                    state => Math.Abs(state.FlapsHandleIndex - 4) < 0.1,
+                    state => state.FlapsAtDetent(4),
                     "flaps full"),
                 Observe(
                     "fo-approaching-minimums",
@@ -590,7 +635,7 @@ internal static class A320ProcedureLibrary
                 Automatic(
                     "fo-flaps-zero",
                     "Flaps retracted to zero",
-                    state => state.FlapsHandleIndex <= 0,
+                    state => state.FlapsAtDetent(0),
                     "flaps clean"),
                 Automatic("fo-apu-master-on", "APU MASTER ON", state => state.ApuMasterSwitchOn, "apu-master on"),
                 Observe("fo-apu-flap-open", "APU intake flap open", state => state.ApuFlapPercent >= 0.95),

@@ -7,6 +7,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
+    <Version>0.3.0</Version>
+    <AssemblyVersion>0.3.0.0</AssemblyVersion>
+    <FileVersion>0.3.0.0</FileVersion>
   </PropertyGroup>
 
   <ItemGroup>
@@ -16,6 +19,7 @@
       <Private>true</Private>
     </Reference>
     <Reference Include="System.Speech" />
+    <Reference Include="System.Net.Http" />
     <Content Include="C:\MSFS 2024 SDK\SimConnect SDK\lib\SimConnect.dll">
       <Link>SimConnect.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

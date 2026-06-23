@@ -4,6 +4,10 @@ This document mirrors the flows currently implemented in
 `src/Copilot/Procedures/A320ProcedureLibrary.cs`. The application code is
 authoritative. Update this file whenever a flow changes.
 
+An interrupted active flow is saved locally and restored at its exact step
+after restart. During restoration, transient milestones that have already
+passed are recovered from current aircraft state rather than awaited again.
+
 Step types:
 
 - **Monitor** — the app waits for aircraft state; no app confirmation.

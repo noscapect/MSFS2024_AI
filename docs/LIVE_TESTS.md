@@ -11,6 +11,7 @@ The only items still awaiting live verification are:
 - Revised Flow 1 timing: 45-second display/warning-system initialization gate
   before fire tests.
 - Revised automatic-action pacing and one-second fuel-pump intervals.
+- Revised Flow 10 exact flap-detent verification and 230-knot CONFIG 1 trigger.
 - Flow 10 voice callout: `Cabin crew, prepare for landing`.
 - Complete Flow 11: After Landing & Taxi.
 - Complete Flow 12: Parking & Shutdown, including optional cold-and-dark
@@ -518,7 +519,7 @@ automatically performs the First Officer workload using gated aircraft state:
 - On passing or starting below 10,000 feet, the First Officer calls
   `Cabin crew, prepare for landing`.
 - Below 10,000 feet: seatbelts ON, landing lights ON, nose light TAXI.
-- At or below 5,000 feet AGL and 220 knots: flaps CONFIG 1.
+- At or below 5,000 feet AGL and 230 knots: flaps CONFIG 1.
 - At or below 2,000 feet AGL and 210 knots: gear DOWN, spoilers ARMED, flaps 2.
 - At or below 1,200 feet AGL and 185 knots: flaps 3 then FULL.
 
@@ -544,6 +545,13 @@ corrected.
 Result: **Passed.** The complete Flow 10 sequence has been live verified,
 including late-start handling below 10,000 feet. Only the newly added
 `Cabin crew, prepare for landing` voice callout remains untested.
+
+During a later Flow 10 test, all four flap steps were incorrectly skipped as
+`Already set`. The completion conditions used permissive `>=` comparisons, so
+an unexpected higher handle-index value satisfied every detent. CONFIG 1, 2,
+3, and FULL now require exact handle-index readback values 1, 2, 3, and 4.
+CONFIG 1 also begins at 230 knots instead of 220 knots to provide more time for
+the landing sequence. This correction awaits live verification.
 
 ## Flow 11 after landing and taxi — pending live verification
 

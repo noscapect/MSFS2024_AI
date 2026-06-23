@@ -189,7 +189,7 @@ after the aircraft is already below 10,000 feet.
 6. **F/O automatic:** Turn both landing lights ON.
 7. **F/O automatic:** Set nose light to TAXI.
 8. **Monitor:** Approach configuration point at or below 5,000 feet AGL and
-   220 knots.
+   230 knots.
 9. **F/O automatic:** Set flaps CONFIG 1.
 10. **Monitor:** Gear-down point at or below 2,000 feet AGL and 210 knots.
 11. **F/O automatic/callout:** Lower landing gear and say “Landing gear down”

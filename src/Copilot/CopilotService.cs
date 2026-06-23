@@ -3132,7 +3132,9 @@ internal sealed class CopilotService : Form
         }
         if (Math.Abs(_state.FlapsHandleIndex - desiredPosition) < 0.1)
         {
-            AppendDashboardLog($"Flaps already CONFIG {desiredPosition}.");
+            AppendDashboardLog(
+                $"Flaps already CONFIG {desiredPosition} " +
+                $"(handle index {_state.FlapsHandleIndex:F2}).");
             FinishOneShot();
             return;
         }

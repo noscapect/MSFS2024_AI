@@ -459,12 +459,12 @@ internal static class A320ProcedureLibrary
                     "approach-config-start",
                     "Approach configuration point",
                     state => state.AltitudeAboveGroundFeet <= 5000
-                             && state.IndicatedAirspeedKnots <= 220,
+                             && state.IndicatedAirspeedKnots <= 230,
                     CrewRole.FirstOfficer),
                 Automatic(
                     "fo-flaps-one",
                     "Flaps CONFIG 1",
-                    state => state.FlapsHandleIndex >= 1,
+                    state => Math.Abs(state.FlapsHandleIndex - 1) < 0.1,
                     "flaps config-1"),
                 Observe(
                     "gear-down-point",
@@ -485,7 +485,7 @@ internal static class A320ProcedureLibrary
                 Automatic(
                     "fo-flaps-two",
                     "Flaps CONFIG 2",
-                    state => state.FlapsHandleIndex >= 2,
+                    state => Math.Abs(state.FlapsHandleIndex - 2) < 0.1,
                     "flaps config-2"),
                 Observe(
                     "landing-config-point",
@@ -496,12 +496,12 @@ internal static class A320ProcedureLibrary
                 Automatic(
                     "fo-flaps-three",
                     "Flaps CONFIG 3",
-                    state => state.FlapsHandleIndex >= 3,
+                    state => Math.Abs(state.FlapsHandleIndex - 3) < 0.1,
                     "flaps config-3"),
                 Automatic(
                     "fo-flaps-full",
                     "Flaps FULL",
-                    state => state.FlapsHandleIndex >= 4,
+                    state => Math.Abs(state.FlapsHandleIndex - 4) < 0.1,
                     "flaps full"),
                 Observe(
                     "fo-approaching-minimums",

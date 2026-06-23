@@ -32,8 +32,8 @@ Step types:
 12. **F/O automatic:** Set NAV & LOGO lights ON at selector position 2.
 13. **F/O automatic:** Set strobes to AUTO.
 14. **Monitor:** Wait until BAT 1, BAT 2, and external power have remained
-    continuously established for 20 seconds so the cockpit displays and
-    warning systems can finish initializing.
+    continuously established for 45 seconds so the approximately 40-second
+    cockpit display and warning-system tests can finish.
 15. **F/O automatic:** Hold and verify the APU fire test.
 16. **F/O automatic:** Hold and verify the Engine 1 fire test.
 17. **F/O automatic:** Hold and verify the Engine 2 fire test.

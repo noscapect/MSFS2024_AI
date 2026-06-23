@@ -8,7 +8,7 @@ lighting, landing configuration, and existing voice callouts.
 
 The only items still awaiting live verification are:
 
-- Revised Flow 1 timing: 20-second display/warning-system initialization gate
+- Revised Flow 1 timing: 45-second display/warning-system initialization gate
   before fire tests.
 - Revised automatic-action pacing and one-second fuel-pump intervals.
 - Flow 10 voice callout: `Cabin crew, prepare for landing`.
@@ -93,14 +93,16 @@ Each test:
 
 APU, Engine 1, and Engine 2 all passed the complete cycle independently.
 
-After later testing showed the first two fire tests could begin while the
-aircraft display self-tests were still running, Flow 1 gained a 20-second
-continuous electrical-power stabilization gate before the APU fire test.
-This revised timing awaits live verification.
+After later testing showed the first fire test could begin while the aircraft
+display self-tests were still running, Flow 1 gained a 45-second continuous
+electrical-power stabilization gate before the APU fire test. The aircraft's
+display tests normally take approximately 40 seconds, leaving a five-second
+safety margin. This revised timing awaits live verification.
 
 Separate automatic cockpit actions now also observe a one-second minimum
-cadence after the preceding automatic action completes. This pacing change
-awaits live verification.
+cadence after the preceding automatic action completes. The delay is internal
+and is not written to the activity log. This pacing change awaits live
+verification.
 
 ## 2026-06-20 - STROBE selector
 

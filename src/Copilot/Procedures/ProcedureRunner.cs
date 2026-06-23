@@ -183,9 +183,6 @@ internal sealed class ProcedureRunner
                 case ProcedureStepKind.AutomaticAction:
                     if (DateTime.UtcNow < _nextAutomaticActionUtc)
                     {
-                        SetWaitingState(
-                            ProcedureStatus.WaitingForVerification,
-                            "First Officer pausing before the next cockpit action.");
                         return;
                     }
 

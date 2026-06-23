@@ -2167,7 +2167,7 @@ internal sealed class CopilotService : Form
         _electricalPowerStableSinceUtc ??= DateTime.UtcNow;
         state.CockpitDisplaysReady =
             DateTime.UtcNow - _electricalPowerStableSinceUtc.Value
-            >= TimeSpan.FromSeconds(20);
+            >= TimeSpan.FromSeconds(45);
     }
 
     private void CancelFuelPumpSequence()

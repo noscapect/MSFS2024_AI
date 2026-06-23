@@ -3,6 +3,8 @@
 A Windows first-officer companion for the **iniBuilds A320neo V2** in
 Microsoft Flight Simulator 2024.
 
+Application icon artwork contributed by the project owner.
+
 The application connects to the simulator through SimConnect and the installed
 MobiFlight WASM module. It guides a complete 12-flow gate-to-gate flight,
 automates verified First Officer actions, monitors Captain actions, and speaks

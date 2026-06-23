@@ -477,6 +477,10 @@ internal sealed class CopilotService : Form
             AppLog.Write($"Voice callouts unavailable: {ex.Message}");
         }
         Text = "MSFS 2024 AI Copilot";
+        Icon = System.Drawing.Icon.ExtractAssociatedIcon(
+                   Application.ExecutablePath)
+               ?? Icon;
+        ShowIcon = true;
         ShowInTaskbar = showUi;
         WindowState = showUi ? FormWindowState.Normal : FormWindowState.Minimized;
         Opacity = showUi ? 1 : 0;

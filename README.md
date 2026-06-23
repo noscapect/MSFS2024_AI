@@ -4,6 +4,8 @@ A Windows first-officer companion for the **iniBuilds A320neo V2** in
 Microsoft Flight Simulator 2024.
 
 Application icon artwork contributed by the project owner.
+The icon is embedded in the executable and assigned to the running WinForms
+window so it is also used by the Windows taskbar.
 
 The application connects to the simulator through SimConnect and the installed
 MobiFlight WASM module. It guides a complete 12-flow gate-to-gate flight,

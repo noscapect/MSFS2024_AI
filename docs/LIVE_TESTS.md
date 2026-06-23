@@ -43,7 +43,7 @@ Flap verification now cross-checks handle detent against left and right
 trailing-edge flap positions. Contradictory or impossible telemetry is shown as
 `READBACK INCONSISTENT` and cannot satisfy an automatic flap step.
 
-The dashboard displays application version 0.3.0 and checks the public GitHub
+The dashboard displays the application version and checks the public GitHub
 repository for a newer published release.
 
 Five automated tests cover procedure recovery and recorded-state sanity cases.

@@ -79,6 +79,8 @@ New-Item -ItemType Directory -Force -Path $stageRoot | Out-Null
 $outputRoot = Join-Path $workspace "src\Copilot\bin\Release\net472"
 Copy-Item -LiteralPath (Join-Path $outputRoot "Copilot.exe") -Destination $stageRoot
 Copy-Item -LiteralPath (Join-Path $outputRoot "Copilot.exe.config") -Destination $stageRoot
+Copy-Item -LiteralPath (Join-Path $outputRoot "Microsoft.FlightSimulator.SimConnect.dll") -Destination $stageRoot
+Copy-Item -LiteralPath (Join-Path $outputRoot "SimConnect.dll") -Destination $stageRoot
 Copy-Item -LiteralPath (Join-Path $workspace "README.md") -Destination $stageRoot
 
 $installText = @"
@@ -90,15 +92,9 @@ Requirements:
 - iniBuilds A320neo V2
 - MobiFlight WASM module installed
 - .NET Framework 4.7.2 or newer
-- Microsoft Flight Simulator 2024 SDK
 
-The Microsoft SimConnect runtime files are not redistributed with this release.
-Copy these two files from your own SDK installation into this folder:
-
-1. C:\MSFS 2024 SDK\SimConnect SDK\lib\managed\Microsoft.FlightSimulator.SimConnect.dll
-2. C:\MSFS 2024 SDK\SimConnect SDK\lib\SimConnect.dll
-
-Then start MSFS 2024, load the iniBuilds A320neo V2, and run Copilot.exe.
+The required Microsoft SimConnect client libraries are included. Start MSFS
+2024, load the iniBuilds A320neo V2, and run Copilot.exe.
 
 Project:
 https://github.com/$Repository
@@ -136,8 +132,8 @@ $changes
 
 ### Installation
 
-Download the ZIP and follow `INSTALL.txt`. Microsoft SimConnect SDK binaries
-are intentionally not redistributed.
+Download the ZIP, extract all files into one folder, and follow `INSTALL.txt`.
+The matching Microsoft SimConnect client libraries are included.
 
 ### Verification
 

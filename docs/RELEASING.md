@@ -22,6 +22,10 @@ GitHub authentication is read from the existing Windows Git credential for
 `https://github.com`. The access token is never printed or written into the
 repository.
 
-Microsoft's MSFS SDK files are not included in the ZIP. Users copy
-`Microsoft.FlightSimulator.SimConnect.dll` and `SimConnect.dll` from their own
-MSFS 2024 SDK installation, as described by the packaged `INSTALL.txt`.
+The release ZIP includes the two Microsoft-classified distributable SimConnect
+client libraries copied into the application output during the build:
+
+- `Microsoft.FlightSimulator.SimConnect.dll`
+- `SimConnect.dll`
+
+Users do not need to install the full MSFS 2024 SDK to run a release.

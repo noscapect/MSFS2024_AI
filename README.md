@@ -53,6 +53,9 @@ To run the application:
 - MobiFlight WASM module installed in MSFS
 - .NET Framework 4.7.2 or newer
 
+GitHub release packages include the matching managed and native Microsoft
+SimConnect client libraries. End users do not need the MSFS SDK.
+
 To build from source:
 
 - .NET SDK 10 or newer

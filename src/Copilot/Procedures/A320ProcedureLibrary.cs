@@ -98,6 +98,11 @@ internal static class A320ProcedureLibrary
                     state => state.StrobeSelectorPosition.HasValue
                              && Math.Abs(state.StrobeSelectorPosition.Value - 1) < 0.1,
                     "strobe auto"),
+                Observe(
+                    "fo-display-initialization",
+                    "Cockpit displays and warning systems initialized",
+                    state => state.CockpitDisplaysReady,
+                    CrewRole.FirstOfficer),
                 Automatic(
                     "fo-apu-fire-test",
                     "APU fire test complete",

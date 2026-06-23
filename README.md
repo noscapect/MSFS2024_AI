@@ -144,7 +144,8 @@ See [docs/NATIVE_CONTROL_STRATEGY.md](docs/NATIVE_CONTROL_STRATEGY.md) and
 
 ## Development status
 
-All behavior through Flow 10 has been live verified except the newly added
-`Cabin crew, prepare for landing` callout. Complete end-to-end testing remains
-for Flows 11 and 12. Treat this as active development software and remain ready
-to operate the aircraft manually.
+All behavior through Flow 10 has been live verified. The latest timing changes
+for display initialization, automatic-action pacing, fuel-pump spacing, and
+the new `Cabin crew, prepare for landing` callout still require confirmation.
+Complete end-to-end testing also remains for Flows 11 and 12. Treat this as
+active development software and remain ready to operate the aircraft manually.

@@ -31,9 +31,12 @@ Step types:
 11. **F/O automatic:** Turn crew oxygen ON.
 12. **F/O automatic:** Set NAV & LOGO lights ON at selector position 2.
 13. **F/O automatic:** Set strobes to AUTO.
-14. **F/O automatic:** Hold and verify the APU fire test.
-15. **F/O automatic:** Hold and verify the Engine 1 fire test.
-16. **F/O automatic:** Hold and verify the Engine 2 fire test.
+14. **Monitor:** Wait until BAT 1, BAT 2, and external power have remained
+    continuously established for 20 seconds so the cockpit displays and
+    warning systems can finish initializing.
+15. **F/O automatic:** Hold and verify the APU fire test.
+16. **F/O automatic:** Hold and verify the Engine 1 fire test.
+17. **F/O automatic:** Hold and verify the Engine 2 fire test.
 
 ## 2. Flight Computer & Pre-Flight
 
@@ -51,7 +54,8 @@ Step types:
    block fuel.
 9. **Captain confirmation:** MCDU PERF complete with V1, VR, V2, transition
    altitude, and takeoff flap setting.
-10. **F/O automatic:** Turn all six fuel pumps ON, pressing them sequentially.
+10. **F/O automatic:** Turn all six fuel pumps ON, pressing them sequentially
+    at one-second intervals.
 11. **F/O automatic:** Set seatbelt signs to AUTO.
 12. **F/O automatic:** Set no-smoking signs to AUTO.
 13. **F/O automatic:** Set emergency exit lights to ARM.

@@ -8,6 +8,9 @@ lighting, landing configuration, and existing voice callouts.
 
 The only items still awaiting live verification are:
 
+- Revised Flow 1 timing: 20-second display/warning-system initialization gate
+  before fire tests.
+- Revised automatic-action pacing and one-second fuel-pump intervals.
 - Flow 10 voice callout: `Cabin crew, prepare for landing`.
 - Complete Flow 11: After Landing & Taxi.
 - Complete Flow 12: Parking & Shutdown, including optional cold-and-dark
@@ -47,7 +50,7 @@ zero exit-position data.
 ## 2026-06-21 - Fuel-pump sequencing refinement
 
 The verified six-pump Mouserect commands remain unchanged. Group ON/OFF
-actions now press L1, L2, C1, C2, R1, and R2 sequentially at 500 ms intervals
+actions now press L1, L2, C1, C2, R1, and R2 sequentially at one-second intervals
 instead of transmitting all six commands in one burst. Pumps already in the
 requested state are skipped. Final completion still requires independent
 readback from all six pump-on LVars.
@@ -89,6 +92,15 @@ Each test:
 5. Verifies the independent response clears.
 
 APU, Engine 1, and Engine 2 all passed the complete cycle independently.
+
+After later testing showed the first two fire tests could begin while the
+aircraft display self-tests were still running, Flow 1 gained a 20-second
+continuous electrical-power stabilization gate before the APU fire test.
+This revised timing awaits live verification.
+
+Separate automatic cockpit actions now also observe a one-second minimum
+cadence after the preceding automatic action completes. This pacing change
+awaits live verification.
 
 ## 2026-06-20 - STROBE selector
 

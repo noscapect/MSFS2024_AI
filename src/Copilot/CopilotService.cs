@@ -140,6 +140,7 @@ internal sealed class CopilotService : Form
     private System.Windows.Forms.Timer? _reconnectTimer;
     private bool _initialStateReceived;
     private bool _oneShotCommandExecuted;
+    private DateTime? _electricalPowerStableSinceUtc;
     private bool _cruiseSeatbeltMonitoring;
     private DateTime? _smoothCruiseSinceUtc;
     private DateTime _nextCruiseSeatbeltCommandUtc;
@@ -1141,6 +1142,7 @@ internal sealed class CopilotService : Form
         _state.ApuFireTestCompleted = _apuFireTestCompleted;
         _state.Engine1FireTestCompleted = _engine1FireTestCompleted;
         _state.Engine2FireTestCompleted = _engine2FireTestCompleted;
+        UpdateCockpitDisplayReadiness(_state);
 
         VerifyPendingBatteryProcedure();
         VerifyPendingFireTest();
@@ -1282,6 +1284,7 @@ internal sealed class CopilotService : Form
             Engine1FireTestCompleted = _engine1FireTestCompleted,
             Engine2FireTestCompleted = _engine2FireTestCompleted
         };
+        UpdateCockpitDisplayReadiness(_state);
 
         VerifyPendingProcedure();
         VerifyPendingFireTest();
@@ -2100,7 +2103,7 @@ internal sealed class CopilotService : Form
 
         _pendingFuelPumpSequence = new PendingFuelPumpSequence(toggles, desiredOn);
         _fuelPumpSequenceTimer?.Dispose();
-        _fuelPumpSequenceTimer = new System.Windows.Forms.Timer { Interval = 500 };
+        _fuelPumpSequenceTimer = new System.Windows.Forms.Timer { Interval = 1000 };
         _fuelPumpSequenceTimer.Tick += (_, _) => ExecuteNextFuelPumpToggle();
         ExecuteNextFuelPumpToggle();
     }
@@ -2130,7 +2133,7 @@ internal sealed class CopilotService : Form
 
         var toggle = _pendingFuelPumpSequence.Toggles.Dequeue();
         // Exact Behavior Viewer Mouserect code: toggle one pump selector and
-        // its press-animation state. Buttons are spaced 500 ms apart.
+        // its press-animation state. Buttons are spaced one second apart.
         SendMobiFlightCommand(
             $"MF.SimVars.Set.(L:{toggle.SelectorLVar}) ! (>L:{toggle.SelectorLVar}) " +
             $"(L:{toggle.PressLVar}) ! (>L:{toggle.PressLVar})");
@@ -2146,6 +2149,25 @@ internal sealed class CopilotService : Form
         _fuelPumpSequenceTimer?.Stop();
         _fuelPumpSequenceTimer?.Dispose();
         _fuelPumpSequenceTimer = null;
+    }
+
+    private void UpdateCockpitDisplayReadiness(AircraftState state)
+    {
+        var electricalPowerEstablished =
+            state.Battery1On
+            && state.Battery2On
+            && state.ExternalPowerOn;
+        if (!electricalPowerEstablished)
+        {
+            _electricalPowerStableSinceUtc = null;
+            state.CockpitDisplaysReady = false;
+            return;
+        }
+
+        _electricalPowerStableSinceUtc ??= DateTime.UtcNow;
+        state.CockpitDisplaysReady =
+            DateTime.UtcNow - _electricalPowerStableSinceUtc.Value
+            >= TimeSpan.FromSeconds(20);
     }
 
     private void CancelFuelPumpSequence()

@@ -2,12 +2,15 @@ namespace Msfs2024Ai.Copilot.Procedures;
 
 internal sealed class ProcedureRunner
 {
+    private static readonly TimeSpan AutomaticActionCadence =
+        TimeSpan.FromSeconds(1);
     private readonly Action<string> _executeCommand;
     private readonly Func<Domain.AutomationPolicy> _automationPolicy;
     private ProcedureDefinition? _definition;
     private int _stepIndex;
     private bool _manualConfirmationReceived;
     private string? _lastAutomaticStepId;
+    private DateTime _nextAutomaticActionUtc;
 
     public ProcedureRunner(
         Action<string> executeCommand,
@@ -35,6 +38,7 @@ internal sealed class ProcedureRunner
         _stepIndex = 0;
         _manualConfirmationReceived = false;
         _lastAutomaticStepId = null;
+        _nextAutomaticActionUtc = DateTime.MinValue;
         Status = ProcedureStatus.Running;
         Message = $"Started {definition.Name}.";
         Advance(state);
@@ -95,6 +99,7 @@ internal sealed class ProcedureRunner
         _stepIndex = 0;
         _manualConfirmationReceived = false;
         _lastAutomaticStepId = null;
+        _nextAutomaticActionUtc = DateTime.MinValue;
         Status = ProcedureStatus.Idle;
         Message = "Procedure cancelled.";
         Changed?.Invoke();
@@ -134,6 +139,11 @@ internal sealed class ProcedureRunner
                 _stepIndex++;
                 _manualConfirmationReceived = false;
                 _lastAutomaticStepId = null;
+                if (automaticActionWasIssued)
+                {
+                    _nextAutomaticActionUtc =
+                        DateTime.UtcNow.Add(AutomaticActionCadence);
+                }
                 Message =
                     step.Kind == ProcedureStepKind.AutomaticAction
                     && !automaticActionWasIssued
@@ -171,6 +181,14 @@ internal sealed class ProcedureRunner
                     return;
 
                 case ProcedureStepKind.AutomaticAction:
+                    if (DateTime.UtcNow < _nextAutomaticActionUtc)
+                    {
+                        SetWaitingState(
+                            ProcedureStatus.WaitingForVerification,
+                            "First Officer pausing before the next cockpit action.");
+                        return;
+                    }
+
                     if (_automationPolicy() == Domain.AutomationPolicy.MonitorOnly)
                     {
                         if (_manualConfirmationReceived)

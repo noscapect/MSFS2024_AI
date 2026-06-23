@@ -12,7 +12,8 @@ internal sealed class ProcedureStep
         CrewRole assignedRole = CrewRole.FirstOfficer,
         string? command = null,
         string? manualInstruction = null,
-        Func<AircraftState, bool>? isCompleteWhenRecovering = null)
+        Func<AircraftState, bool>? isCompleteWhenRecovering = null,
+        bool requireCommandExecution = false)
     {
         Id = id;
         Label = label;
@@ -22,6 +23,7 @@ internal sealed class ProcedureStep
         Command = command;
         ManualInstruction = manualInstruction;
         IsCompleteWhenRecovering = isCompleteWhenRecovering;
+        RequireCommandExecution = requireCommandExecution;
     }
 
     public string Id { get; }
@@ -32,4 +34,5 @@ internal sealed class ProcedureStep
     public string? Command { get; }
     public string? ManualInstruction { get; }
     public Func<AircraftState, bool>? IsCompleteWhenRecovering { get; }
+    public bool RequireCommandExecution { get; }
 }

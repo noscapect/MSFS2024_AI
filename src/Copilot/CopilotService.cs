@@ -1830,13 +1830,26 @@ internal sealed class CopilotService : Form
 
     private void OnProcedureChanged()
     {
+        var completedDefinition = _procedureRunner.Status == ProcedureStatus.Completed
+            ? _procedureRunner.Definition
+            : null;
         if (_procedureRunner.Status == ProcedureStatus.Completed
-            && _procedureRunner.Definition != null)
+            && completedDefinition != null)
         {
-            _completedProcedureIds.Add(_procedureRunner.Definition.Id);
+            _completedProcedureIds.Add(completedDefinition.Id);
         }
         SaveProcedureSession();
         PrintProcedureUpdate();
+
+        if (string.Equals(
+                completedDefinition?.Id,
+                "approach-landing",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            AppendDashboardLog(
+                "Flow 10 complete; Flow 11 will start automatically.");
+            _commands.Enqueue("procedure start after-landing-taxi");
+        }
     }
 
     private void SaveProcedureSession()
@@ -2424,7 +2437,10 @@ internal sealed class CopilotService : Form
 
     private void SetStrobeSelector(int desiredPosition)
     {
-        if (!ValidateNativeInputAction("Strobe selector"))
+        if (!ValidateNativeInputAction(
+                "Strobe selector",
+                requireCompleteNativeState: true,
+                requireStationary: false))
         {
             return;
         }
@@ -2907,19 +2923,16 @@ internal sealed class CopilotService : Form
 
     private void SetWeatherRadarPwsSelector(int desiredPosition)
     {
-        if (!ValidateNativeInputAction("WXR/PWS selector"))
+        if (!ValidateNativeInputAction(
+                "WXR/PWS selector",
+                requireCompleteNativeState: true,
+                requireStationary: false))
         {
-            return;
-        }
-        if (_state!.WeatherRadarPwsSelectorPosition.HasValue
-            && Math.Abs(
-                _state.WeatherRadarPwsSelectorPosition.Value - desiredPosition) < 0.1)
-        {
-            AppendDashboardLog("WXR/PWS selector already at 1.");
-            FinishOneShot();
             return;
         }
 
+        // Always transmit the actual selector event. INI_WX_SYS_SWITCH can
+        // retain a stale value of 1 while the physical selector is still OFF.
         SendMobiFlightCommand(
             "MF.SimVars.Set.(>B:AIRLINER_WER_SWITCH_PWS_State2)");
         SendMobiFlightCommand("MF.DummyCmd");
@@ -4263,7 +4276,8 @@ internal sealed class CopilotService : Form
         {
             "fo-v1" => $"{flight} | target V1 {state.TakeoffV1SpeedKnots} kt",
             "fo-rotate" => $"{flight} | target VR {state.TakeoffRotateSpeedKnots} kt",
-            "approach-config-start" => $"{flight} | trigger ≤5000 ft AGL and ≤230 kt",
+            "approach-config-start" =>
+                $"{flight} | trigger below 10,000 ft and ≤220 kt",
             "gear-down-point" => $"{flight} | trigger ≤2000 ft AGL and ≤210 kt",
             "landing-config-point" => $"{flight} | trigger ≤1200 ft AGL and ≤185 kt",
             "fo-approaching-minimums" or "fo-minimums" =>

@@ -15,7 +15,10 @@ The only items still awaiting live verification are:
 - Revised Flow 1 timing: 45-second display/warning-system initialization gate
   before fire tests.
 - Revised automatic-action pacing and one-second fuel-pump intervals.
-- Revised Flow 10 exact flap-detent verification and 230-knot CONFIG 1 trigger.
+- Revised Flow 10 exact flap-handle verification and earlier 220-knot
+  CONFIG 1 trigger below 10,000 feet.
+- Forced WXR/PWS selector actuation even when its LVar already reports 1.
+- Automatic handoff from Flow 10 to Flow 11.
 - Flow 10 voice callout: `Cabin crew, prepare for landing`.
 - Complete Flow 11: After Landing & Taxi.
 - Complete Flow 12: Parking & Shutdown, including optional cold-and-dark
@@ -548,7 +551,7 @@ automatically performs the First Officer workload using gated aircraft state:
 - On passing or starting below 10,000 feet, the First Officer calls
   `Cabin crew, prepare for landing`.
 - Below 10,000 feet: seatbelts ON, landing lights ON, nose light TAXI.
-- At or below 5,000 feet AGL and 230 knots: flaps CONFIG 1.
+- Below 10,000 feet indicated and at or below 220 knots: flaps CONFIG 1.
 - At or below 2,000 feet AGL and 210 knots: gear DOWN, spoilers ARMED, flaps 2.
 - At or below 1,200 feet AGL and 185 knots: flaps 3 then FULL.
 
@@ -579,8 +582,13 @@ During a later Flow 10 test, all four flap steps were incorrectly skipped as
 `Already set`. The completion conditions used permissive `>=` comparisons, so
 an unexpected higher handle-index value satisfied every detent. CONFIG 1, 2,
 3, and FULL now require exact handle-index readback values 1, 2, 3, and 4.
-CONFIG 1 also begins at 230 knots instead of 220 knots to provide more time for
-the landing sequence. This correction awaits live verification.
+Flap completion now uses the exact physical handle detent. Surface-position
+sanity remains visible as a warning but no longer blocks the sequence while
+the surfaces are moving. CONFIG 1 begins below 10,000 feet indicated at
+220 knots or less, rather than waiting until 5,000 feet AGL. This correction
+awaits live verification.
+
+Flow 10 now starts Flow 11 automatically after the landing callouts complete.
 
 ## Flow 11 after landing and taxi — pending live verification
 

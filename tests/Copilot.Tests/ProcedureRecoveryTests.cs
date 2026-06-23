@@ -61,4 +61,41 @@ public sealed class ProcedureRecoveryTests
             new[] { "flaps config-1" },
             commands);
     }
+
+    [TestMethod]
+    public void WxrPwsCommandIsIssuedEvenWhenReadbackAlreadyReportsOne()
+    {
+        var commands = new List<string>();
+        var runner = new ProcedureRunner(
+            commands.Add,
+            () => AutomationPolicy.AutomaticWhenSupported);
+        var definition = A320ProcedureLibrary.AfterStartAndTaxi;
+        var wxrIndex = definition.Steps
+            .Select((step, index) => new { step.Id, index })
+            .Single(item => item.Id == "fo-wxr-pws")
+            .index;
+        var state = new AircraftState
+        {
+            Title = "A320neo V2",
+            WeatherRadarPwsSelectorPosition = 1
+        };
+
+        runner.Restore(definition, wxrIndex, state);
+
+        CollectionAssert.AreEqual(new[] { "wxr-pws 1" }, commands);
+    }
+
+    [TestMethod]
+    public void ExactFlapHandleDetentCompletesWhileSurfacesAreStillMoving()
+    {
+        var state = new AircraftState
+        {
+            FlapsHandleIndex = 1,
+            FlapReadbackSane = false,
+            LeftFlapPositionPercent = 0,
+            RightFlapPositionPercent = 0
+        };
+
+        Assert.IsTrue(state.FlapsAtDetent(1));
+    }
 }

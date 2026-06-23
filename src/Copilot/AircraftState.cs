@@ -146,8 +146,7 @@ internal sealed class AircraftState
         && Math.Abs(Adirs3SelectorState - 1) < 0.1;
 
     public bool FlapsAtDetent(int detent) =>
-        FlapReadbackSane
-        && Math.Abs(FlapsHandleIndex - detent) < 0.1;
+        Math.Abs(FlapsHandleIndex - detent) < 0.1;
 }
 
 internal sealed class AircraftExitState

@@ -152,6 +152,15 @@ internal sealed class ProcedureRunner
                 step.IsComplete(state)
                 || (_recovering
                     && step.IsCompleteWhenRecovering?.Invoke(state) == true);
+            if (step.Kind == ProcedureStepKind.AutomaticAction
+                && step.RequireCommandExecution
+                && !string.Equals(
+                    _lastAutomaticStepId,
+                    step.Id,
+                    StringComparison.Ordinal))
+            {
+                complete = false;
+            }
             if (complete)
             {
                 var automaticActionWasIssued =

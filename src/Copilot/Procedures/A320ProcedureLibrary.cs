@@ -77,7 +77,8 @@ internal static class A320ProcedureLibrary
         Func<AircraftState, bool> complete,
         string command,
         CrewRole role = CrewRole.FirstOfficer,
-        Func<AircraftState, bool>? recoveryComplete = null) =>
+        Func<AircraftState, bool>? recoveryComplete = null,
+        bool requireCommandExecution = false) =>
         new(
             id,
             label,
@@ -85,7 +86,8 @@ internal static class A320ProcedureLibrary
             complete,
             role,
             command,
-            isCompleteWhenRecovering: recoveryComplete);
+            isCompleteWhenRecovering: recoveryComplete,
+            requireCommandExecution: requireCommandExecution);
 
     public static ProcedureDefinition PowerUpAndInitialSetup { get; } =
         new(
@@ -253,7 +255,8 @@ internal static class A320ProcedureLibrary
                     state => state.WeatherRadarPwsSelectorPosition.HasValue
                              && Math.Abs(
                                  state.WeatherRadarPwsSelectorPosition.Value - 1) < 0.1,
-                    "wxr-pws 1"),
+                    "wxr-pws 1",
+                    requireCommandExecution: true),
                 Automatic(
                     "fo-nose-light-taxi",
                     "Nose light TAXI",
@@ -503,8 +506,8 @@ internal static class A320ProcedureLibrary
                 Observe(
                     "approach-config-start",
                     "Approach configuration point",
-                    state => state.AltitudeAboveGroundFeet <= 5000
-                             && state.IndicatedAirspeedKnots <= 230,
+                    state => state.IndicatedAltitudeFeet <= 10000
+                             && state.IndicatedAirspeedKnots <= 220,
                     CrewRole.FirstOfficer),
                 Automatic(
                     "fo-flaps-one",

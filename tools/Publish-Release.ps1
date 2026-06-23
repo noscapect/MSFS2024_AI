@@ -125,10 +125,8 @@ $headers = @{
     "User-Agent" = "MSFS2024-AI-release-publisher"
 }
 
-$previousTag = git describe --tags --abbrev=0 2>$null
-if ($LASTEXITCODE -ne 0) {
-    $previousTag = $null
-}
+$previousTag = git tag --sort=-creatordate |
+    Select-Object -First 1
 $logRange = if ($previousTag) { "$previousTag..HEAD" } else { "HEAD" }
 $changes = git log $logRange --pretty=format:"- %s"
 $releaseNotes = @"

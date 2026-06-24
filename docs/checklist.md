@@ -228,17 +228,18 @@ settings`.
 
 1. **Monitor:** Aircraft on the ground.
 2. **Monitor:** Reverse thrust stowed at or below 70 knots.
-3. **Monitor:** Wait until after-landing taxi speed at or below 30 knots.
-4. **F/O automatic:** Set both landing-light selectors to OFF.
-5. **F/O automatic:** Set strobes OFF.
-6. **F/O automatic:** Set nose light to TAXI.
-7. **F/O automatic:** Disarm ground spoilers.
-8. **F/O automatic:** Retract flaps fully to zero.
-9. **F/O automatic:** Turn APU MASTER ON.
-10. **Monitor:** Wait for APU intake flap to open.
-11. **F/O automatic:** Select APU START.
-12. **Monitor:** Wait for APU AVAIL.
-13. **F/O automatic:** Set transponder mode to STBY.
+3. **F/O automatic:** Set autobrake OFF.
+4. **F/O automatic:** Turn APU MASTER ON while taxiing after landing.
+5. **Monitor:** Wait for APU intake flap to open.
+6. **F/O automatic:** Select APU START.
+7. **Monitor:** Wait for APU AVAIL.
+8. **Monitor:** Wait until after-landing taxi speed at or below 30 knots.
+9. **F/O automatic:** Set both landing-light selectors to RETRACT.
+10. **F/O automatic:** Set strobes OFF.
+11. **F/O automatic:** Set nose light to TAXI.
+12. **F/O automatic:** Disarm ground spoilers.
+13. **F/O automatic:** Retract flaps fully to zero.
+14. **F/O automatic:** Set transponder mode to STBY.
 
 The WXR/PWS selector remains at position 1. The unsupported Captain and F/O
 radar display selectors and engine anti-ice are not operated by this flow.

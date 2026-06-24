@@ -1821,6 +1821,9 @@ internal sealed class CopilotService : Form
             case "autobrake low":
                 SetAutobrake(1, "LOW");
                 break;
+            case "autobrake off":
+                SetAutobrake(0, "OFF");
+                break;
             case "help":
                 PrintHelp();
                 FinishOneShot();
@@ -2280,18 +2283,46 @@ internal sealed class CopilotService : Form
     }
 
     private void SetApuMaster(bool desiredOn) =>
-        PulseNativeCommand(
+        PulseApuGroundCommand(
             "APU master",
             "INI_APU_MASTER_SWITCH_CMD",
             desiredOn,
             state => state.ApuMasterSwitchOn == desiredOn);
 
     private void SetApuStart(bool desiredOn) =>
-        PulseNativeCommand(
+        PulseApuGroundCommand(
             "APU start",
             "INI_APU_START_BUTTON_CMD",
             desiredOn,
             state => state.ApuStartButtonOn == desiredOn);
+
+    private void PulseApuGroundCommand(
+        string name,
+        string commandLVar,
+        bool desiredOn,
+        Func<AircraftState, bool> verify,
+        TimeSpan? timeout = null)
+    {
+        if (!ValidateNativeInputAction(name, requireStationary: false))
+        {
+            return;
+        }
+        if (!_state!.OnGround)
+        {
+            AppendDashboardLog($"{name} blocked: aircraft must be on the ground.");
+            FinishOneShot(3);
+            return;
+        }
+        if (verify(_state))
+        {
+            AppendDashboardLog($"{name} already {desiredOn.ToOnOff()}.");
+            FinishOneShot();
+            return;
+        }
+
+        SendNativePulse(commandLVar);
+        BeginNativeAction(name, verify, desiredOn, timeout);
+    }
 
     private void SetApuBleed(bool desiredOn) =>
         ToggleNativeMouserect(

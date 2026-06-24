@@ -34,6 +34,12 @@ The only items still awaiting live verification are:
   fallback gates. Standard gates are Flaps 1 at 15 NM/220 kt, Flaps 2 at
   10 NM/200 kt, gear down at 7 NM/210 kt, and landing configuration at
   5 NM/185 kt. Live validation pending.
+- Landing test telemetry showed the current reverse-thrust SimVars did not
+  report reverse engagement even when reverse was used. Flow 10 therefore
+  still skips the Reverse Green callout when no positive readback is seen.
+- Flow 11 now turns autobrake OFF at 70 kt after reverse is stowed, starts the
+  APU while taxiing after landing, and retracts landing lights instead of
+  setting them to OFF.
 - Automatic handoff from Flow 10 to Flow 11.
 - Flow 10 voice callout: `Cabin crew, prepare for landing`.
 - Complete Flow 11: After Landing & Taxi.

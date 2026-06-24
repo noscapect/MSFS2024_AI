@@ -1,6 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Msfs2024Ai.Copilot.Domain;
 using Msfs2024Ai.Copilot.Procedures;
+using System.Threading;
 
 namespace Msfs2024Ai.Copilot.Tests;
 
@@ -190,5 +191,44 @@ public sealed class ProcedureRecoveryTests
         runner.Restore(definition, gateIndex, state);
 
         CollectionAssert.AreEqual(new[] { "gear down" }, commands);
+    }
+
+    [TestMethod]
+    public void AfterLandingStartsApuBeforeTaxiSpeedCleanup()
+    {
+        var commands = new List<string>();
+        var runner = new ProcedureRunner(
+            commands.Add,
+            () => AutomationPolicy.AutomaticWhenSupported);
+        var definition = A320ProcedureLibrary.AfterLandingAndTaxi;
+        var reverseStowedIndex = definition.Steps
+            .Select((step, index) => new { step.Id, index })
+            .Single(item => item.Id == "captain-deceleration")
+            .index;
+        var state = new AircraftState
+        {
+            Title = "A320neo V2",
+            OnGround = true,
+            GroundSpeedKnots = 65,
+            Engine1ReverseEngaged = false,
+            Engine2ReverseEngaged = false,
+            AutobrakeLevel = 1,
+            ApuMasterSwitchOn = false
+        };
+
+        runner.Restore(definition, reverseStowedIndex, state);
+
+        CollectionAssert.AreEqual(new[] { "autobrake off" }, commands);
+
+        state.AutobrakeLevel = 0;
+        runner.Update(state);
+        Assert.AreEqual("fo-apu-master-on", runner.CurrentStep?.Id);
+        Thread.Sleep(1100);
+        runner.Update(state);
+
+        CollectionAssert.AreEqual(
+            new[] { "autobrake off", "apu-master on" },
+            commands);
+        Assert.AreNotEqual("captain-runway-exit", runner.CurrentStep?.Id);
     }
 }

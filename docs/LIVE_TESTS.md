@@ -23,7 +23,17 @@ The only items still awaiting live verification are:
 - Revised automatic-action pacing and one-second fuel-pump intervals.
 - Revised Flow 10 exact flap-handle verification and earlier 220-knot
   CONFIG 1 trigger below 10,000 feet.
-- Forced WXR/PWS selector actuation even when its LVar already reports 1.
+- Captured WXR/PWS selector InputEvent polarity: physical OFF=1, mode 1=0,
+  mode 2=2. Flow 5 now commands mode 1 with `SetInputEvent(..., 0)`.
+- Adjusted approach/landing sequencing after live-test observations: Flow 6
+  leaves strobes in AUTO; Flow 10 calls cabin crew at the approach
+  configuration point, selects flaps CONFIG 2 before gear down, and treats
+  "Reverse green" as optional when reverse thrust is not used.
+- Added distance-aware Flow 10 approach gates. The app now prefers MSFS ATC
+  runway distance, falls back to GPS distance, and then uses altitude/speed
+  fallback gates. Standard gates are Flaps 1 at 15 NM/220 kt, Flaps 2 at
+  10 NM/200 kt, gear down at 7 NM/210 kt, and landing configuration at
+  5 NM/185 kt. Live validation pending.
 - Automatic handoff from Flow 10 to Flow 11.
 - Flow 10 voice callout: `Cabin crew, prepare for landing`.
 - Complete Flow 11: After Landing & Taxi.
@@ -480,9 +490,10 @@ direct Input Event, and indexed SDK K-event paths, altimeter STD has been
 removed from Flow 7 and its checklist verification. The pilot manages STD
 manually; the app neither operates nor monitors it.
 
-Flow 5 now includes WXR/PWS as a First Officer after-start action. It always
-selects center position 1 using `AIRLINER_WER_SWITCH_PWS_State2` and verifies
-`INI_WX_SYS_SWITCH = 1`.
+Flow 5 now includes WXR/PWS as a First Officer after-start action. A dedicated
+InputEvent capture showed `AIRLINER_WER_SWITCH_PWS` uses physical OFF=1,
+mode 1=0, and mode 2=2. The flow therefore selects physical mode 1 with
+`SetInputEvent(14794713865952973521, 0)` and verifies `INI_WX_SYS_SWITCH = 0`.
 
 Result: **Passed.** The complete Flow 7 takeoff/climb sequence and callouts,
 including gear UP, spoiler disarm, flap cleanup, nose light OFF, and landing

@@ -20,6 +20,7 @@ namespace Msfs2024Ai.Copilot;
 internal sealed class CopilotService : Form
 {
     private const int WmUserSimConnect = 0x0402;
+    private const double MetersPerNauticalMile = 1852.0;
     // Change the schema suffix whenever the ordered runtime LVar list changes.
     // MobiFlight client-data layouts persist for the simulator session.
     private const string MobiFlightRuntimeClientName = "MSFS2024_AI_Copilot_v21";
@@ -424,6 +425,10 @@ internal sealed class CopilotService : Form
         public double FirstOfficerBaroStandard;
         public double LeftFlapPosition;
         public double RightFlapPosition;
+        public double AtcRunwaySelected;
+        public double AtcRunwayStartDistanceMeters;
+        public double GpsTargetDistanceMeters;
+        public double GpsWaypointDistanceMeters;
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -645,6 +650,10 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "KOHLSMAN SETTING STD:2", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "TRAILING EDGE FLAPS LEFT PERCENT", "Percent", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "TRAILING EDGE FLAPS RIGHT PERCENT", "Percent", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "ATC RUNWAY SELECTED", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "ATC RUNWAY START DISTANCE", "Meters", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "GPS TARGET DISTANCE", "Meters", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "GPS WP DISTANCE", "Meters", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.RegisterDataDefineStruct<AircraftData>(Definition.AircraftState);
         sender.MapClientEventToSimEvent(CopilotEvent.SetExternalPower, "SET_EXTERNAL_POWER");
         sender.MapClientEventToSimEvent(CopilotEvent.SetBeacon, "BEACON_LIGHTS_SET");
@@ -1200,6 +1209,7 @@ internal sealed class CopilotService : Form
         }
 
         var raw = (AircraftData)data.dwData[0];
+        var approachDistance = ResolveApproachDistance(raw);
         _state = new AircraftState
         {
             Title = raw.Title,
@@ -1258,10 +1268,18 @@ internal sealed class CopilotService : Form
             IndicatedAirspeedKnots = raw.IndicatedAirspeed,
             TakeoffV1SpeedKnots = _settings.TakeoffV1SpeedKnots,
             TakeoffRotateSpeedKnots = _settings.TakeoffRotateSpeedKnots,
+            ApproachDistanceToTouchdownNm = approachDistance.DistanceNm,
+            ApproachDistanceSource = approachDistance.Source,
+            ApproachFlaps1DistanceNm = _settings.ApproachFlaps1DistanceNm,
             ApproachFlaps1AltitudeFeet = _settings.ApproachFlaps1AltitudeFeet,
             ApproachFlaps1SpeedKnots = _settings.ApproachFlaps1SpeedKnots,
+            ApproachFlaps2DistanceNm = _settings.ApproachFlaps2DistanceNm,
+            ApproachFlaps2AltitudeAglFeet = _settings.ApproachFlaps2AltitudeAglFeet,
+            ApproachFlaps2SpeedKnots = _settings.ApproachFlaps2SpeedKnots,
+            ApproachGearDistanceNm = _settings.ApproachGearDistanceNm,
             ApproachGearAltitudeAglFeet = _settings.ApproachGearAltitudeAglFeet,
             ApproachGearSpeedKnots = _settings.ApproachGearSpeedKnots,
+            ApproachLandingConfigDistanceNm = _settings.ApproachLandingConfigDistanceNm,
             ApproachLandingConfigAltitudeAglFeet =
                 _settings.ApproachLandingConfigAltitudeAglFeet,
             ApproachLandingConfigSpeedKnots =
@@ -1372,6 +1390,44 @@ internal sealed class CopilotService : Form
             Console.Write("> ");
         }
         TryExecuteOneShotCommand();
+    }
+
+    private static (double? DistanceNm, string Source) ResolveApproachDistance(
+        AircraftData raw)
+    {
+        if (raw.AtcRunwaySelected != 0)
+        {
+            var runwayDistance = MetersToNauticalMiles(
+                raw.AtcRunwayStartDistanceMeters);
+            if (runwayDistance.HasValue)
+            {
+                return (runwayDistance, "ATC runway");
+            }
+        }
+
+        var targetDistance = MetersToNauticalMiles(raw.GpsTargetDistanceMeters);
+        if (targetDistance.HasValue)
+        {
+            return (targetDistance, "GPS target");
+        }
+
+        var waypointDistance = MetersToNauticalMiles(raw.GpsWaypointDistanceMeters);
+        return waypointDistance.HasValue
+            ? (waypointDistance, "GPS waypoint")
+            : (null, "");
+    }
+
+    private static double? MetersToNauticalMiles(double meters)
+    {
+        if (double.IsNaN(meters)
+            || double.IsInfinity(meters)
+            || meters <= 0
+            || meters > 100 * MetersPerNauticalMile)
+        {
+            return null;
+        }
+
+        return meters / MetersPerNauticalMile;
     }
 
     private void TryExecuteOneShotCommand()
@@ -1983,6 +2039,11 @@ internal sealed class CopilotService : Form
     private void SpeakProcedureCallout(ProcedureStep step)
     {
         if (!_settings.EnableStandardCallouts || _voiceCalloutQueue == null)
+        {
+            return;
+        }
+        if (step.Id == "fo-reverse-callout"
+            && _state?.ReverseThrustEngaged != true)
         {
             return;
         }
@@ -3034,18 +3095,26 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        // Always transmit the actual selector event. INI_WX_SYS_SWITCH can
-        // retain a stale value of 1 while the physical selector is still OFF.
-        SendMobiFlightCommand(
-            "MF.SimVars.Set.(>B:AIRLINER_WER_SWITCH_PWS_State2)");
-        SendMobiFlightCommand("MF.DummyCmd");
+        var nativePosition = desiredPosition switch
+        {
+            0 => 1, // physical OFF
+            1 => 0, // physical mode 1
+            2 => 2, // physical mode 2
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(desiredPosition),
+                desiredPosition,
+                "WXR/PWS selector position must be OFF, 1, or 2.")
+        };
+
+        _simConnect!.SetInputEvent(14794713865952973521UL, (double)nativePosition);
         BeginNativeAction(
             "WXR/PWS selector",
             state => state.WeatherRadarPwsSelectorPosition.HasValue
                      && Math.Abs(
                          state.WeatherRadarPwsSelectorPosition.Value
-                         - desiredPosition) < 0.1,
-            true);
+                         - nativePosition) < 0.1,
+            desiredPosition != 0,
+            TimeSpan.FromSeconds(10));
     }
 
     private void SetNoseLightSelector(int desiredPosition)
@@ -4303,7 +4372,7 @@ internal sealed class CopilotService : Form
         {
             Text = "Approach schedule and flow chaining",
             Width = 540,
-            Height = 470,
+            Height = 650,
             StartPosition = FormStartPosition.CenterParent,
             FormBorderStyle = FormBorderStyle.FixedDialog,
             MaximizeBox = false,
@@ -4349,18 +4418,36 @@ internal sealed class CopilotService : Form
             return box;
         }
 
+        var flapDistance = AddNumber(
+            "Flaps 1 target distance",
+            _settings.ApproachFlaps1DistanceNm, 3, 30, "NM");
         var flapAltitude = AddNumber(
             "Flaps 1 maximum indicated altitude",
             _settings.ApproachFlaps1AltitudeFeet, 1000, 20000, "ft");
         var flapSpeed = AddNumber(
             "Flaps 1 target speed",
             _settings.ApproachFlaps1SpeedKnots, 100, 250, "kt");
+        var flap2Distance = AddNumber(
+            "Flaps 2 target distance",
+            _settings.ApproachFlaps2DistanceNm, 2, 25, "NM");
+        var flap2Altitude = AddNumber(
+            "Flaps 2 maximum radio altitude",
+            _settings.ApproachFlaps2AltitudeAglFeet, 1000, 8000, "ft");
+        var flap2Speed = AddNumber(
+            "Flaps 2 target speed",
+            _settings.ApproachFlaps2SpeedKnots, 100, 230, "kt");
+        var gearDistance = AddNumber(
+            "Gear-down target distance",
+            _settings.ApproachGearDistanceNm, 2, 20, "NM");
         var gearAltitude = AddNumber(
             "Gear-down maximum radio altitude",
             _settings.ApproachGearAltitudeAglFeet, 500, 5000, "ft");
         var gearSpeed = AddNumber(
             "Gear-down target speed",
             _settings.ApproachGearSpeedKnots, 100, 250, "kt");
+        var landingDistance = AddNumber(
+            "Landing configuration target distance",
+            _settings.ApproachLandingConfigDistanceNm, 1, 15, "NM");
         var landingAltitude = AddNumber(
             "Landing configuration maximum radio altitude",
             _settings.ApproachLandingConfigAltitudeAglFeet, 300, 3000, "ft");
@@ -4404,11 +4491,17 @@ internal sealed class CopilotService : Form
         var defaults = new Button { Text = "Restore standard" };
         defaults.Click += (_, _) =>
         {
+            flapDistance.Value = 15;
             flapAltitude.Value = 10000;
             flapSpeed.Value = 220;
-            gearAltitude.Value = 2000;
+            flap2Distance.Value = 10;
+            flap2Altitude.Value = 4000;
+            flap2Speed.Value = 200;
+            gearDistance.Value = 7;
+            gearAltitude.Value = 2500;
             gearSpeed.Value = 210;
-            landingAltitude.Value = 1200;
+            landingDistance.Value = 5;
+            landingAltitude.Value = 1800;
             landingSpeed.Value = 185;
             earlierChains.Checked = false;
             flow10Chain.Checked = true;
@@ -4426,10 +4519,16 @@ internal sealed class CopilotService : Form
             return;
         }
 
+        _settings.ApproachFlaps1DistanceNm = (int)flapDistance.Value;
         _settings.ApproachFlaps1AltitudeFeet = (int)flapAltitude.Value;
         _settings.ApproachFlaps1SpeedKnots = (int)flapSpeed.Value;
+        _settings.ApproachFlaps2DistanceNm = (int)flap2Distance.Value;
+        _settings.ApproachFlaps2AltitudeAglFeet = (int)flap2Altitude.Value;
+        _settings.ApproachFlaps2SpeedKnots = (int)flap2Speed.Value;
+        _settings.ApproachGearDistanceNm = (int)gearDistance.Value;
         _settings.ApproachGearAltitudeAglFeet = (int)gearAltitude.Value;
         _settings.ApproachGearSpeedKnots = (int)gearSpeed.Value;
+        _settings.ApproachLandingConfigDistanceNm = (int)landingDistance.Value;
         _settings.ApproachLandingConfigAltitudeAglFeet = (int)landingAltitude.Value;
         _settings.ApproachLandingConfigSpeedKnots = (int)landingSpeed.Value;
         _settings.AutoChainEarlierFlows = earlierChains.Checked;
@@ -4446,10 +4545,17 @@ internal sealed class CopilotService : Form
         {
             return;
         }
+        _state.ApproachFlaps1DistanceNm = _settings.ApproachFlaps1DistanceNm;
         _state.ApproachFlaps1AltitudeFeet = _settings.ApproachFlaps1AltitudeFeet;
         _state.ApproachFlaps1SpeedKnots = _settings.ApproachFlaps1SpeedKnots;
+        _state.ApproachFlaps2DistanceNm = _settings.ApproachFlaps2DistanceNm;
+        _state.ApproachFlaps2AltitudeAglFeet = _settings.ApproachFlaps2AltitudeAglFeet;
+        _state.ApproachFlaps2SpeedKnots = _settings.ApproachFlaps2SpeedKnots;
+        _state.ApproachGearDistanceNm = _settings.ApproachGearDistanceNm;
         _state.ApproachGearAltitudeAglFeet = _settings.ApproachGearAltitudeAglFeet;
         _state.ApproachGearSpeedKnots = _settings.ApproachGearSpeedKnots;
+        _state.ApproachLandingConfigDistanceNm =
+            _settings.ApproachLandingConfigDistanceNm;
         _state.ApproachLandingConfigAltitudeAglFeet =
             _settings.ApproachLandingConfigAltitudeAglFeet;
         _state.ApproachLandingConfigSpeedKnots =
@@ -4657,6 +4763,9 @@ internal sealed class CopilotService : Form
             $"ALT {state.IndicatedAltitudeFeet:F0} ft | " +
             $"IAS {state.IndicatedAirspeedKnots:F0} kt | " +
             $"VS {state.VerticalSpeedFeetPerMinute:F0} fpm";
+        var distance = state.ApproachDistanceToTouchdownNm.HasValue
+            ? $" | DIST {state.ApproachDistanceToTouchdownNm.Value:F1} NM {state.ApproachDistanceSource}"
+            : " | DIST n/a";
         return stepId switch
         {
             "fo-v1" => $"{flight} | target V1 {state.TakeoffV1SpeedKnots} kt",

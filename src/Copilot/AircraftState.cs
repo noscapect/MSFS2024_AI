@@ -50,11 +50,19 @@ internal sealed class AircraftState
     public double IndicatedAirspeedKnots { get; set; }
     public int TakeoffV1SpeedKnots { get; set; }
     public int TakeoffRotateSpeedKnots { get; set; }
+    public double? ApproachDistanceToTouchdownNm { get; set; }
+    public string ApproachDistanceSource { get; set; } = "";
+    public int ApproachFlaps1DistanceNm { get; set; } = 15;
     public int ApproachFlaps1AltitudeFeet { get; set; } = 10000;
     public int ApproachFlaps1SpeedKnots { get; set; } = 220;
-    public int ApproachGearAltitudeAglFeet { get; set; } = 2000;
+    public int ApproachFlaps2DistanceNm { get; set; } = 10;
+    public int ApproachFlaps2AltitudeAglFeet { get; set; } = 4000;
+    public int ApproachFlaps2SpeedKnots { get; set; } = 200;
+    public int ApproachGearDistanceNm { get; set; } = 7;
+    public int ApproachGearAltitudeAglFeet { get; set; } = 2500;
     public int ApproachGearSpeedKnots { get; set; } = 210;
-    public int ApproachLandingConfigAltitudeAglFeet { get; set; } = 1200;
+    public int ApproachLandingConfigDistanceNm { get; set; } = 5;
+    public int ApproachLandingConfigAltitudeAglFeet { get; set; } = 1800;
     public int ApproachLandingConfigSpeedKnots { get; set; } = 185;
     public double VerticalSpeedFeetPerMinute { get; set; }
     public double GForce { get; set; }

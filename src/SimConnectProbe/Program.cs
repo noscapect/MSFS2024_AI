@@ -59,6 +59,23 @@ internal static class Program
             .SkipWhile(arg => !string.Equals(arg, "execute-action", StringComparison.OrdinalIgnoreCase))
             .Skip(1)
             .FirstOrDefault();
+        var inputEventFilter = args
+            .SkipWhile(arg => !string.Equals(arg, "input-filter", StringComparison.OrdinalIgnoreCase))
+            .Skip(1)
+            .FirstOrDefault();
+        var monitorInputHashText = args
+            .SkipWhile(arg => !string.Equals(arg, "monitor-input", StringComparison.OrdinalIgnoreCase))
+            .Skip(1)
+            .FirstOrDefault();
+        ulong? monitorInputHash = null;
+        if (ulong.TryParse(monitorInputHashText, out var parsedMonitorInputHash))
+        {
+            monitorInputHash = parsedMonitorInputHash;
+        }
+        var monitorInputName = args
+            .SkipWhile(arg => !string.Equals(arg, "monitor-input-name", StringComparison.OrdinalIgnoreCase))
+            .Skip(1)
+            .FirstOrDefault();
         using var window = new SimConnectWindow(
             powerUp,
             monitor,
@@ -66,11 +83,14 @@ internal static class Program
             monitorBeforeStart,
             listLVars,
             bridgeCommand,
-            actionName);
+            actionName,
+            inputEventFilter,
+            monitorInputHash,
+            monitorInputName);
 
         var timeout = new System.Windows.Forms.Timer
         {
-            Interval = monitor || monitorBeforeStart ? 300_000 : 15_000
+            Interval = monitor || monitorBeforeStart || monitorInputHash.HasValue ? 300_000 : 15_000
         };
         timeout.Tick += (_, _) =>
         {
@@ -106,10 +126,16 @@ internal sealed class SimConnectWindow : Form
     private readonly bool _listLVarsRequested;
     private readonly string? _bridgeCommand;
     private readonly string? _actionName;
+    private readonly string? _inputEventFilter;
+    private readonly ulong? _monitorInputHash;
+    private readonly string? _monitorInputName;
     private bool _powerUpIssued;
     private bool _bridgeResponseReceived;
     private readonly List<string> _bridgeResponseChunks = new List<string>();
     private System.Windows.Forms.Timer? _verificationTimer;
+    private StreamWriter? _genericInputMonitorWriter;
+    private System.Windows.Forms.Timer? _genericInputPollingTimer;
+    private string? _lastGenericInputValue;
 
     [DllImport("SimConnect.dll", CallingConvention = CallingConvention.StdCall)]
     private static extern int SimConnect_SetInputEvent(
@@ -234,6 +260,7 @@ internal sealed class SimConnectWindow : Form
         ExternalPower,
         QnhCaptain,
         QnhFirstOfficer,
+        GenericInputMonitor = 800,
         MobiFlightResponse = 900
     }
 
@@ -276,7 +303,10 @@ internal sealed class SimConnectWindow : Form
         bool monitorBeforeStartRequested,
         bool listLVarsRequested,
         string? bridgeCommand,
-        string? actionName)
+        string? actionName,
+        string? inputEventFilter,
+        ulong? monitorInputHash,
+        string? monitorInputName)
     {
         _powerUpRequested = powerUpRequested;
         _monitorRequested = monitorRequested;
@@ -285,6 +315,9 @@ internal sealed class SimConnectWindow : Form
         _listLVarsRequested = listLVarsRequested;
         _bridgeCommand = bridgeCommand;
         _actionName = actionName;
+        _inputEventFilter = inputEventFilter;
+        _monitorInputHash = monitorInputHash;
+        _monitorInputName = monitorInputName;
         Text = "MSFS 2024 AI SimConnect Probe";
         ShowInTaskbar = false;
         WindowState = FormWindowState.Minimized;
@@ -454,6 +487,35 @@ internal sealed class SimConnectWindow : Form
             Console.WriteLine("Subscriptions active; 250 ms read-only polling fallback active.");
             Console.WriteLine($"Monitor capture: {outputPath}");
         }
+        if (_monitorInputHash.HasValue)
+        {
+            var outputDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "artifacts");
+            Directory.CreateDirectory(outputDirectory);
+            var safeName = string.IsNullOrWhiteSpace(_monitorInputName)
+                ? _monitorInputHash.Value.ToString()
+                : new string(_monitorInputName
+                    .Where(ch => char.IsLetterOrDigit(ch) || ch == '_' || ch == '-')
+                    .ToArray());
+            var outputPath = Path.Combine(outputDirectory, $"input-monitor-{safeName}.tsv");
+            _genericInputMonitorWriter = new StreamWriter(outputPath, false, Encoding.UTF8)
+            {
+                AutoFlush = true
+            };
+            _genericInputMonitorWriter.WriteLine("TimestampUtc\tSource\tName\tHash\tType\tValue");
+            sender.SubscribeInputEvent(_monitorInputHash.Value);
+            sender.GetInputEvent(Request.GenericInputMonitor, _monitorInputHash.Value);
+            _genericInputPollingTimer = new System.Windows.Forms.Timer { Interval = 250 };
+            _genericInputPollingTimer.Tick += (_, _) =>
+            {
+                sender.GetInputEvent(Request.GenericInputMonitor, _monitorInputHash.Value);
+            };
+            _genericInputPollingTimer.Start();
+            Console.WriteLine(
+                $"INPUT MONITOR READY: {FindInputEventName(_monitorInputHash.Value)} " +
+                $"({_monitorInputHash.Value}).");
+            Console.WriteLine("Subscription active; 250 ms read-only polling fallback active.");
+            Console.WriteLine($"Monitor capture: {outputPath}");
+        }
         if (_listLVarsRequested)
         {
             InitializeMobiFlight(sender);
@@ -555,6 +617,20 @@ internal sealed class SimConnectWindow : Form
 
             Console.WriteLine($"Input Events discovered: {_inputEventLines.Count}");
             Console.WriteLine($"Input Event catalog: {outputPath}");
+            if (!string.IsNullOrWhiteSpace(_inputEventFilter))
+            {
+                var matches = _inputEventLines
+                    .Where(item => item.IndexOf(
+                        _inputEventFilter,
+                        StringComparison.OrdinalIgnoreCase) >= 0)
+                    .ToList();
+                Console.WriteLine(
+                    $"Input Event filter '{_inputEventFilter}' matched {matches.Count} event(s):");
+                foreach (var line in matches.Take(100))
+                {
+                    Console.WriteLine($"  {line}");
+                }
+            }
             foreach (var line in _inputEventLines
                          .Where(item => item.IndexOf("BAT", StringComparison.OrdinalIgnoreCase) >= 0
                                         || item.IndexOf("EXT", StringComparison.OrdinalIgnoreCase) >= 0
@@ -615,6 +691,24 @@ internal sealed class SimConnectWindow : Form
             ExitWhenComplete();
             return;
         }
+        if (request == Request.GenericInputMonitor && _monitorInputHash.HasValue)
+        {
+            var name = FindInputEventName(_monitorInputHash.Value);
+            var value = FormatValue(data.Value);
+            var isChangedPoll = !string.Equals(
+                _lastGenericInputValue,
+                value,
+                StringComparison.Ordinal);
+            _lastGenericInputValue = value;
+            if (isChangedPoll)
+            {
+                Console.WriteLine($"POLL EVENT: {name} ({data.eType}) => {value}");
+                _genericInputMonitorWriter?.WriteLine(
+                    $"{DateTime.UtcNow:O}\tpoll\t{EscapeTsv(name)}\t" +
+                    $"{_monitorInputHash.Value}\t{data.eType}\t{EscapeTsv(value)}");
+            }
+            return;
+        }
 
         Console.WriteLine(
             $"Input Event value: {request} ({data.eType}) => {FormatValue(data.Value)}");
@@ -634,6 +728,12 @@ internal sealed class SimConnectWindow : Form
         var name = FindInputEventName(data.Hash);
         var value = FormatValue(data.Value);
         Console.WriteLine($"MONITOR EVENT: {name} ({data.eType}) => {value}");
+        if (_monitorInputHash.HasValue && data.Hash == _monitorInputHash.Value)
+        {
+            _genericInputMonitorWriter?.WriteLine(
+                $"{DateTime.UtcNow:O}\tsubscription\t{EscapeTsv(name)}\t" +
+                $"{data.Hash}\t{data.eType}\t{EscapeTsv(value)}");
+        }
         if (_beforeStartMonitorWriter != null && BeforeStartInputEvents.ContainsKey(data.Hash))
         {
             _beforeStartMonitorWriter.WriteLine(
@@ -647,6 +747,12 @@ internal sealed class SimConnectWindow : Form
         if (KeyInputEvents.TryGetValue(hash, out var keyName))
         {
             return keyName;
+        }
+        if (_monitorInputHash.HasValue && hash == _monitorInputHash.Value)
+        {
+            return string.IsNullOrWhiteSpace(_monitorInputName)
+                ? hash.ToString()
+                : _monitorInputName!;
         }
 
         return BeforeStartInputEvents.TryGetValue(hash, out var beforeStartName)
@@ -870,7 +976,9 @@ internal sealed class SimConnectWindow : Form
 
     private void ExitWhenComplete()
     {
-        if (_monitorRequested || _monitorBeforeStartRequested)
+        if (_monitorRequested
+            || _monitorBeforeStartRequested
+            || _monitorInputHash.HasValue)
         {
             return;
         }
@@ -932,6 +1040,8 @@ internal sealed class SimConnectWindow : Form
             _verificationTimer?.Dispose();
             _beforeStartPollingTimer?.Dispose();
             _beforeStartMonitorWriter?.Dispose();
+            _genericInputPollingTimer?.Dispose();
+            _genericInputMonitorWriter?.Dispose();
             _simConnect?.Dispose();
         }
 

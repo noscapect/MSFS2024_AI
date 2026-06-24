@@ -122,9 +122,9 @@ Master ON steps complete.
 4. **F/O automatic:** Set TCAS altitude reporting ON.
 5. **F/O automatic:** Set TCAS traffic mode to TA/RA.
 6. **F/O confirmation:** Configure engine anti-ice as required.
-7. **F/O automatic:** Set strobes ON.
-8. **F/O automatic:** Set nose light to T.O.
-9. **F/O automatic:** Set both landing lights ON.
+7. **F/O automatic:** Set nose light to T.O. Strobes remain in AUTO from
+   Flow 1; the aircraft manages takeoff strobe behavior.
+8. **F/O automatic:** Set both landing lights ON.
 
 ## 7. Takeoff & Climb
 
@@ -188,36 +188,41 @@ after the aircraft is already below 10,000 feet.
 2. **Monitor:** Accept an airborne descent below −300 feet per minute or an
    airborne aircraft already at or below 10,000 feet.
 3. **Monitor:** Wait until indicated altitude is at or below 10,000 feet.
-4. **F/O callout:** “Cabin crew, prepare for landing.”
-5. **F/O automatic:** Turn seatbelt signs ON.
-6. **F/O automatic:** Turn both landing lights ON.
-7. **F/O automatic:** Set nose light to TAXI.
-8. **Monitor:** Approach configuration point below 10,000 feet indicated and
-   at or below 220 knots by default.
+4. **F/O automatic:** Turn seatbelt signs ON.
+5. **F/O automatic:** Turn both landing lights ON.
+6. **F/O automatic:** Set nose light to TAXI.
+7. **Monitor:** Approach configuration point at or inside 15 NM to touchdown
+   or below 10,000 feet indicated, and at or below 220 knots by default.
+8. **F/O callout:** “Cabin crew, prepare for landing.”
 9. **F/O automatic:** Set flaps CONFIG 1.
-10. **Monitor:** Gear-down point at or below 2,000 feet AGL and 210 knots by
-    default.
-11. **F/O automatic/callout:** Lower landing gear and say “Landing gear down”
+10. **Monitor:** Flaps 2 point at or inside 10 NM to touchdown or below
+    4,000 feet AGL, and at or below 200 knots by default.
+11. **F/O automatic:** Set flaps CONFIG 2.
+12. **Monitor:** Gear-down point at or inside 7 NM to touchdown or below
+    2,500 feet AGL, and at or below 210 knots by default.
+13. **F/O automatic/callout:** Lower landing gear and say “Landing gear down”
     after verified DOWN readback.
-12. **F/O automatic:** Arm ground spoilers.
-13. **F/O automatic:** Set flaps CONFIG 2.
-14. **Monitor:** Landing-configuration point at or below 1,200 feet AGL and
-    185 knots by default.
-15. **F/O automatic:** Set flaps CONFIG 3.
-16. **F/O automatic:** Set flaps FULL.
-17. **F/O callout:** “Approaching minimums” at decision height plus 100 feet.
-18. **F/O callout:** “Minimums” at decision height.
-19. **Monitor:** Touchdown.
-20. **F/O callout:** “Spoilers” after actual left and right spoiler deployment.
-21. **F/O callout:** “Reverse green” after reverse thrust engages.
-22. **F/O callout:** “Decel” when autobrakes are active or groundspeed falls
+14. **F/O automatic:** Arm ground spoilers.
+15. **Monitor:** Landing-configuration point at or inside 5 NM to touchdown
+    or below 1,800 feet AGL, and at or below 185 knots by default.
+16. **F/O automatic:** Set flaps CONFIG 3.
+17. **F/O automatic:** Set flaps FULL.
+18. **F/O callout:** “Approaching minimums” at decision height plus 100 feet.
+19. **F/O callout:** “Minimums” at decision height.
+20. **Monitor:** Touchdown.
+21. **F/O callout:** “Spoilers” after actual left and right spoiler deployment.
+22. **F/O callout:** “Reverse green” only if reverse thrust engages; if no
+    reverse is used, the flow continues once rollout slows below 40 knots.
+23. **F/O callout:** “Decel” when autobrakes are active or groundspeed falls
     below 80 knots.
-23. **Automatic handoff:** Start Flow 11 after Flow 10 completes when the
+24. **Automatic handoff:** Start Flow 11 after Flow 10 completes when the
     standard Flow 10-to-11 chaining option is enabled.
 
 Destination QNH remains pilot-managed and is not operated or monitored.
-The three approach gates above use the included standard configuration and
-can be overridden in `Approach & chaining settings`.
+The approach gates use distance to the selected runway when MSFS exposes it,
+then GPS distance as a backup, and finally altitude/speed fallback gates. The
+included standard configuration can be overridden in `Approach & chaining
+settings`.
 
 ## 11. After Landing & Taxi
 

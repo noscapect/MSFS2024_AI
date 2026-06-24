@@ -77,7 +77,7 @@ public sealed class ProcedureRecoveryTests
         var state = new AircraftState
         {
             Title = "A320neo V2",
-            WeatherRadarPwsSelectorPosition = 1
+            WeatherRadarPwsSelectorPosition = 0
         };
 
         runner.Restore(definition, wxrIndex, state);
@@ -125,5 +125,70 @@ public sealed class ProcedureRecoveryTests
         runner.Restore(definition, gateIndex, state);
 
         CollectionAssert.AreEqual(new[] { "flaps config-1" }, commands);
+    }
+
+    [TestMethod]
+    public void ApproachFlapsTwoWaitsForDistanceOrFallbackGate()
+    {
+        var commands = new List<string>();
+        var runner = new ProcedureRunner(
+            commands.Add,
+            () => AutomationPolicy.AutomaticWhenSupported);
+        var definition = A320ProcedureLibrary.ApproachAndLanding;
+        var gateIndex = definition.Steps
+            .Select((step, index) => new { step.Id, index })
+            .Single(item => item.Id == "flaps-two-point")
+            .index;
+        var state = new AircraftState
+        {
+            Title = "A320neo V2",
+            OnGround = false,
+            ApproachDistanceToTouchdownNm = 12,
+            ApproachFlaps2DistanceNm = 10,
+            ApproachFlaps2AltitudeAglFeet = 4000,
+            ApproachFlaps2SpeedKnots = 200,
+            AltitudeAboveGroundFeet = 5000,
+            IndicatedAirspeedKnots = 195,
+            FlapsHandleIndex = 1
+        };
+
+        runner.Restore(definition, gateIndex, state);
+        Assert.AreEqual("Waiting for condition: Flaps 2 point.", runner.Message);
+        CollectionAssert.AreEqual(Array.Empty<string>(), commands);
+
+        state.ApproachDistanceToTouchdownNm = 9.8;
+        runner.Update(state);
+
+        CollectionAssert.AreEqual(new[] { "flaps config-2" }, commands);
+    }
+
+    [TestMethod]
+    public void ApproachGearGateCanUseDistanceBeforeRadioAltitudeFallback()
+    {
+        var commands = new List<string>();
+        var runner = new ProcedureRunner(
+            commands.Add,
+            () => AutomationPolicy.AutomaticWhenSupported);
+        var definition = A320ProcedureLibrary.ApproachAndLanding;
+        var gateIndex = definition.Steps
+            .Select((step, index) => new { step.Id, index })
+            .Single(item => item.Id == "gear-down-point")
+            .index;
+        var state = new AircraftState
+        {
+            Title = "A320neo V2",
+            OnGround = false,
+            ApproachDistanceToTouchdownNm = 6.5,
+            ApproachGearDistanceNm = 7,
+            ApproachGearAltitudeAglFeet = 2500,
+            ApproachGearSpeedKnots = 210,
+            AltitudeAboveGroundFeet = 3200,
+            IndicatedAirspeedKnots = 205,
+            GearHandleDown = false
+        };
+
+        runner.Restore(definition, gateIndex, state);
+
+        CollectionAssert.AreEqual(new[] { "gear down" }, commands);
     }
 }

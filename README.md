@@ -26,8 +26,8 @@ important callouts.
 - Verification after every automatic aircraft action
 - Optional Windows offline voice callouts
 - Persistent preflight settings for V1, VR, and transition altitude
-- A standard approach schedule that can be overridden for flap, gear, and
-  landing-configuration gates
+- A distance-aware standard approach schedule that can be overridden for flap,
+  gear, and landing-configuration gates
 - Configurable automatic chaining between earlier flows, Flow 10 to 11, and
   Flow 11 to 12
 - One-second flight telemetry recording with 10x replay for procedure testing;

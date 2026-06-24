@@ -89,6 +89,22 @@ internal static class A320ProcedureLibrary
             isCompleteWhenRecovering: recoveryComplete,
             requireCommandExecution: requireCommandExecution);
 
+    private static bool ApproachDistanceReached(
+        AircraftState state,
+        int maximumDistanceNm) =>
+        state.ApproachDistanceToTouchdownNm.HasValue
+        && state.ApproachDistanceToTouchdownNm.Value > 0
+        && state.ApproachDistanceToTouchdownNm.Value <= maximumDistanceNm;
+
+    private static bool ApproachGateReached(
+        AircraftState state,
+        int maximumDistanceNm,
+        bool fallbackReached,
+        int maximumSpeedKnots) =>
+        state.IndicatedAirspeedKnots <= maximumSpeedKnots
+        && (ApproachDistanceReached(state, maximumDistanceNm)
+            || fallbackReached);
+
     public static ProcedureDefinition PowerUpAndInitialSetup { get; } =
         new(
             "power-up-initial-setup",
@@ -254,7 +270,7 @@ internal static class A320ProcedureLibrary
                     "WXR/PWS selector 1",
                     state => state.WeatherRadarPwsSelectorPosition.HasValue
                              && Math.Abs(
-                                 state.WeatherRadarPwsSelectorPosition.Value - 1) < 0.1,
+                                 state.WeatherRadarPwsSelectorPosition.Value - 0) < 0.1,
                     "wxr-pws 1",
                     requireCommandExecution: true),
                 Automatic(
@@ -298,12 +314,6 @@ internal static class A320ProcedureLibrary
                              && Math.Abs(state.TcasMode.Value - 2) < 0.1,
                     "tcas traffic tara"),
                 Manual("fo-engine-anti-ice", "Engine anti-ice set as required", "First Officer: configure engine anti-ice for conditions, then confirm.", CrewRole.FirstOfficer),
-                Automatic(
-                    "fo-strobes-on",
-                    "Strobes ON",
-                    state => state.StrobeSelectorPosition.HasValue
-                             && Math.Abs(state.StrobeSelectorPosition.Value) < 0.1,
-                    "strobe on"),
                 Automatic(
                     "fo-nose-light-takeoff",
                     "Nose light T.O.",
@@ -478,11 +488,6 @@ internal static class A320ProcedureLibrary
                     "Below 10,000 feet",
                     state => state.IndicatedAltitudeFeet <= 10000,
                     CrewRole.FirstOfficer),
-                Observe(
-                    "fo-cabin-landing-call",
-                    "Cabin crew, prepare for landing",
-                    _ => true,
-                    CrewRole.FirstOfficer),
                 Automatic(
                     "fo-seatbelts-on",
                     "Seatbelt signs ON",
@@ -506,10 +511,17 @@ internal static class A320ProcedureLibrary
                 Observe(
                     "approach-config-start",
                     "Approach configuration point",
-                    state => state.IndicatedAltitudeFeet
-                                 <= state.ApproachFlaps1AltitudeFeet
-                             && state.IndicatedAirspeedKnots
-                                 <= state.ApproachFlaps1SpeedKnots,
+                    state => ApproachGateReached(
+                        state,
+                        state.ApproachFlaps1DistanceNm,
+                        state.IndicatedAltitudeFeet
+                            <= state.ApproachFlaps1AltitudeFeet,
+                        state.ApproachFlaps1SpeedKnots),
+                    CrewRole.FirstOfficer),
+                Observe(
+                    "fo-cabin-landing-call",
+                    "Cabin crew, prepare for landing",
+                    _ => true,
                     CrewRole.FirstOfficer),
                 Automatic(
                     "fo-flaps-one",
@@ -517,12 +529,29 @@ internal static class A320ProcedureLibrary
                     state => state.FlapsAtDetent(1),
                     "flaps config-1"),
                 Observe(
+                    "flaps-two-point",
+                    "Flaps 2 point",
+                    state => ApproachGateReached(
+                        state,
+                        state.ApproachFlaps2DistanceNm,
+                        state.AltitudeAboveGroundFeet
+                            <= state.ApproachFlaps2AltitudeAglFeet,
+                        state.ApproachFlaps2SpeedKnots),
+                    CrewRole.FirstOfficer),
+                Automatic(
+                    "fo-flaps-two",
+                    "Flaps CONFIG 2",
+                    state => state.FlapsAtDetent(2),
+                    "flaps config-2"),
+                Observe(
                     "gear-down-point",
                     "Gear-down point",
-                    state => state.AltitudeAboveGroundFeet
-                                 <= state.ApproachGearAltitudeAglFeet
-                             && state.IndicatedAirspeedKnots
-                                 <= state.ApproachGearSpeedKnots,
+                    state => ApproachGateReached(
+                        state,
+                        state.ApproachGearDistanceNm,
+                        state.AltitudeAboveGroundFeet
+                            <= state.ApproachGearAltitudeAglFeet,
+                        state.ApproachGearSpeedKnots),
                     CrewRole.FirstOfficer),
                 Automatic(
                     "fo-gear-down",
@@ -534,18 +563,15 @@ internal static class A320ProcedureLibrary
                     "Ground spoilers ARMED",
                     state => state.GroundSpoilersArmed,
                     "ground-spoilers arm"),
-                Automatic(
-                    "fo-flaps-two",
-                    "Flaps CONFIG 2",
-                    state => state.FlapsAtDetent(2),
-                    "flaps config-2"),
                 Observe(
                     "landing-config-point",
                     "Landing configuration point",
-                    state => state.AltitudeAboveGroundFeet
-                                 <= state.ApproachLandingConfigAltitudeAglFeet
-                             && state.IndicatedAirspeedKnots
-                                 <= state.ApproachLandingConfigSpeedKnots,
+                    state => ApproachGateReached(
+                        state,
+                        state.ApproachLandingConfigDistanceNm,
+                        state.AltitudeAboveGroundFeet
+                            <= state.ApproachLandingConfigAltitudeAglFeet,
+                        state.ApproachLandingConfigSpeedKnots),
                     CrewRole.FirstOfficer),
                 Automatic(
                     "fo-flaps-three",
@@ -585,7 +611,9 @@ internal static class A320ProcedureLibrary
                 Observe(
                     "fo-reverse-callout",
                     "Reverse green",
-                    state => state.OnGround && state.ReverseThrustEngaged,
+                    state => state.OnGround
+                             && (state.ReverseThrustEngaged
+                                 || state.GroundSpeedKnots < 40),
                     CrewRole.FirstOfficer),
                 Observe(
                     "fo-decel-callout",

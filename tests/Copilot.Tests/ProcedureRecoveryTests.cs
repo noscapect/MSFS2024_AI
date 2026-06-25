@@ -194,6 +194,30 @@ public sealed class ProcedureRecoveryTests
     }
 
     [TestMethod]
+    public void ApproachFlowUsesTakeoffNoseLightBeforeLanding()
+    {
+        var commands = new List<string>();
+        var runner = new ProcedureRunner(
+            commands.Add,
+            () => AutomationPolicy.AutomaticWhenSupported);
+        var definition = A320ProcedureLibrary.ApproachAndLanding;
+        var noseLightIndex = definition.Steps
+            .Select((step, index) => new { step.Id, index })
+            .Single(item => item.Id == "fo-nose-light-takeoff")
+            .index;
+        var state = new AircraftState
+        {
+            Title = "A320neo V2",
+            OnGround = false,
+            NoseLightSelectorPosition = 2
+        };
+
+        runner.Restore(definition, noseLightIndex, state);
+
+        CollectionAssert.AreEqual(new[] { "nose-light takeoff" }, commands);
+    }
+
+    [TestMethod]
     public void AfterLandingStartsApuBeforeTaxiSpeedCleanup()
     {
         var commands = new List<string>();
@@ -230,5 +254,44 @@ public sealed class ProcedureRecoveryTests
             new[] { "autobrake off", "apu-master on" },
             commands);
         Assert.AreNotEqual("captain-runway-exit", runner.CurrentStep?.Id);
+    }
+
+    [TestMethod]
+    public void AfterLandingCleanupDoesNotWaitForApuAvailable()
+    {
+        var commands = new List<string>();
+        var runner = new ProcedureRunner(
+            commands.Add,
+            () => AutomationPolicy.AutomaticWhenSupported);
+        var definition = A320ProcedureLibrary.AfterLandingAndTaxi;
+        var apuStartIndex = definition.Steps
+            .Select((step, index) => new { step.Id, index })
+            .Single(item => item.Id == "fo-apu-start-on")
+            .index;
+        var state = new AircraftState
+        {
+            Title = "A320neo V2",
+            OnGround = true,
+            GroundSpeedKnots = 25,
+            ApuStartButtonOn = true,
+            ApuAvailable = false,
+            LeftLandingLightSelectorPosition = 1,
+            RightLandingLightSelectorPosition = 1,
+            StrobeSelectorPosition = 1,
+            NoseLightSelectorPosition = 1,
+            GroundSpoilersArmed = true,
+            FlapsHandleIndex = 4,
+            LeftFlapPositionPercent = 100,
+            RightFlapPositionPercent = 100,
+            TransponderModeSelectorPosition = 1
+        };
+
+        runner.Restore(definition, apuStartIndex, state);
+
+        Assert.AreEqual("fo-landing-lights-retract", runner.CurrentStep?.Id);
+        Thread.Sleep(1100);
+        runner.Update(state);
+
+        CollectionAssert.AreEqual(new[] { "landing-lights retract" }, commands);
     }
 }

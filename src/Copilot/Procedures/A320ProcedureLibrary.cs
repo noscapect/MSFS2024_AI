@@ -503,11 +503,11 @@ internal static class A320ProcedureLibrary
                              && Math.Abs(state.RightLandingLightSelectorPosition.Value) < 0.1,
                     "landing-lights on"),
                 Automatic(
-                    "fo-nose-light-taxi",
-                    "Nose light TAXI",
+                    "fo-nose-light-takeoff",
+                    "Nose light T.O.",
                     state => state.NoseLightSelectorPosition.HasValue
-                             && Math.Abs(state.NoseLightSelectorPosition.Value - 1) < 0.1,
-                    "nose-light taxi"),
+                             && Math.Abs(state.NoseLightSelectorPosition.Value) < 0.1,
+                    "nose-light takeoff"),
                 Observe(
                     "approach-config-start",
                     "Approach configuration point",
@@ -651,7 +651,6 @@ internal static class A320ProcedureLibrary
                     "apu-master on"),
                 Observe("fo-apu-flap-open", "APU intake flap open", state => state.ApuFlapPercent >= 0.95),
                 Automatic("fo-apu-start-on", "APU START selected", state => state.ApuStartButtonOn, "apu-start on"),
-                Observe("apu-available", "APU AVAIL", state => state.ApuAvailable),
                 Observe(
                     "captain-runway-exit",
                     "After-landing taxi speed reached",
@@ -693,7 +692,8 @@ internal static class A320ProcedureLibrary
                     "Transponder STBY",
                     state => state.TransponderModeSelectorPosition.HasValue
                              && Math.Abs(state.TransponderModeSelectorPosition.Value) < 0.1,
-                    "transponder stby")
+                    "transponder stby"),
+                Observe("apu-available", "APU AVAIL", state => state.ApuAvailable)
             });
 
     public static ProcedureDefinition ParkingAndShutdown { get; } =

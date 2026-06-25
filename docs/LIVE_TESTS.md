@@ -40,6 +40,13 @@ The only items still awaiting live verification are:
 - Flow 11 now turns autobrake OFF at 70 kt after reverse is stowed, starts the
   APU while taxiing after landing, and retracts landing lights instead of
   setting them to OFF.
+- Follow-up landing test showed Flow 11 waited for APU AVAIL before runway
+  cleanup, delaying landing lights, spoilers, flaps, and transponder until
+  taxi. Flow 11 now starts the APU early, performs after-landing cleanup at
+  taxi speed, then waits for APU AVAIL before chaining to parking/shutdown.
+- Follow-up recording showed Flow 10 selected nose light TAXI during approach.
+  Flow 10 now selects the T.O. / landing nose-light position; Flow 11 sets TAXI
+  only after landing during runway cleanup.
 - Automatic handoff from Flow 10 to Flow 11.
 - Flow 10 voice callout: `Cabin crew, prepare for landing`.
 - Complete Flow 11: After Landing & Taxi.

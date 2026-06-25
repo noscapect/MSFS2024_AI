@@ -190,7 +190,7 @@ after the aircraft is already below 10,000 feet.
 3. **Monitor:** Wait until indicated altitude is at or below 10,000 feet.
 4. **F/O automatic:** Turn seatbelt signs ON.
 5. **F/O automatic:** Turn both landing lights ON.
-6. **F/O automatic:** Set nose light to TAXI.
+6. **F/O automatic:** Set nose light to T.O. / landing position.
 7. **Monitor:** Approach configuration point at or inside 15 NM to touchdown
    or below 10,000 feet indicated, and at or below 220 knots by default.
 8. **F/O callout:** “Cabin crew, prepare for landing.”
@@ -232,14 +232,14 @@ settings`.
 4. **F/O automatic:** Turn APU MASTER ON while taxiing after landing.
 5. **Monitor:** Wait for APU intake flap to open.
 6. **F/O automatic:** Select APU START.
-7. **Monitor:** Wait for APU AVAIL.
-8. **Monitor:** Wait until after-landing taxi speed at or below 30 knots.
-9. **F/O automatic:** Set both landing-light selectors to RETRACT.
-10. **F/O automatic:** Set strobes OFF.
-11. **F/O automatic:** Set nose light to TAXI.
-12. **F/O automatic:** Disarm ground spoilers.
-13. **F/O automatic:** Retract flaps fully to zero.
-14. **F/O automatic:** Set transponder mode to STBY.
+7. **Monitor:** Wait until after-landing taxi speed at or below 30 knots.
+8. **F/O automatic:** Set both landing-light selectors to RETRACT.
+9. **F/O automatic:** Set strobes OFF.
+10. **F/O automatic:** Set nose light to TAXI.
+11. **F/O automatic:** Disarm ground spoilers.
+12. **F/O automatic:** Retract flaps fully to zero.
+13. **F/O automatic:** Set transponder mode to STBY.
+14. **Monitor:** Wait for APU AVAIL before handing off to parking/shutdown.
 
 The WXR/PWS selector remains at position 1. The unsupported Captain and F/O
 radar display selectors and engine anti-ice are not operated by this flow.

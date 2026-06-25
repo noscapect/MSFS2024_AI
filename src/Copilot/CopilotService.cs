@@ -2870,7 +2870,7 @@ internal sealed class CopilotService : Form
 
     private void SetTransponderModeSelector(int desiredPosition)
     {
-        if (!ValidateNativeInputAction("Transponder mode selector"))
+        if (!ValidateNativeInputAction("Transponder mode selector", requireStationary: false))
         {
             return;
         }
@@ -2898,7 +2898,8 @@ internal sealed class CopilotService : Form
             state => state.TransponderModeSelectorPosition.HasValue
                      && Math.Abs(state.TransponderModeSelectorPosition.Value - desiredPosition) < 0.1,
             desiredPosition != 0,
-            TimeSpan.FromSeconds(10));
+            TimeSpan.FromSeconds(10),
+            FormatTransponderModePosition(desiredPosition));
     }
 
     private static string FormatTransponderModePosition(int position) =>
@@ -3208,8 +3209,18 @@ internal sealed class CopilotService : Form
         BeginNativeAction(
             "Landing lights",
             Verify,
-            desiredPosition == 2);
+            desiredPosition == 2,
+            desiredLabel: FormatLandingLightPosition(desiredPosition));
     }
+
+    private static string FormatLandingLightPosition(int position) =>
+        position switch
+        {
+            0 => "OFF",
+            1 => "ON",
+            2 => "RETRACTED",
+            _ => position.ToString()
+        };
 
     private void UpdateCruiseSeatbeltMonitoring()
     {
@@ -3593,15 +3604,17 @@ internal sealed class CopilotService : Form
         string name,
         Func<AircraftState, bool> verify,
         bool desiredOn,
-        TimeSpan? timeout = null)
+        TimeSpan? timeout = null,
+        string? desiredLabel = null)
     {
         _pendingNativeAction = new PendingNativeAction(
             name,
             verify,
             desiredOn,
+            desiredLabel ?? desiredOn.ToOnOff(),
             DateTime.UtcNow.Add(timeout ?? TimeSpan.FromSeconds(8)));
         AppendDashboardLog(
-            $"{name} command sent: {desiredOn.ToOnOff()}; awaiting native readback.");
+            $"{name} command sent: {_pendingNativeAction.DesiredLabel}; awaiting native readback.");
     }
 
     private void SetExternalPower(bool desiredOn)
@@ -3807,7 +3820,7 @@ internal sealed class CopilotService : Form
         if (_pendingNativeAction.Verify(_state))
         {
             AppendDashboardLog(
-                $"{_pendingNativeAction.Name} verified {_pendingNativeAction.DesiredOn.ToOnOff()}.");
+                $"{_pendingNativeAction.Name} verified {_pendingNativeAction.DesiredLabel}.");
             _pendingNativeAction = null;
             FinishOneShot();
             return;
@@ -5115,17 +5128,20 @@ internal sealed class CopilotService : Form
             string name,
             Func<AircraftState, bool> verify,
             bool desiredOn,
+            string desiredLabel,
             DateTime deadlineUtc)
         {
             Name = name;
             Verify = verify;
             DesiredOn = desiredOn;
+            DesiredLabel = desiredLabel;
             DeadlineUtc = deadlineUtc;
         }
 
         public string Name { get; }
         public Func<AircraftState, bool> Verify { get; }
         public bool DesiredOn { get; }
+        public string DesiredLabel { get; }
         public DateTime DeadlineUtc { get; }
     }
 

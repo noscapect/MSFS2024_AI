@@ -164,9 +164,17 @@ internal sealed class CopilotService : Form
     private Label? _telemetryLabel;
     private Label? _versionLabel;
     private Label? _adapterLabel;
+    private Label? _simBadgeLabel;
+    private Label? _aircraftBadgeLabel;
+    private Label? _adapterBadgeLabel;
+    private Label? _flowBadgeLabel;
+    private Label? _versionBadgeLabel;
     private Label? _procedureLabel;
     private Label? _stepLabel;
     private Label? _messageLabel;
+    private Label? _statusBadgeLabel;
+    private Label? _nextActionLabel;
+    private Label? _waitingForLabel;
     private ProgressBar? _procedureProgress;
     private ComboBox? _automationPolicyBox;
     private ComboBox? _pilotFlyingBox;
@@ -4075,8 +4083,9 @@ internal sealed class CopilotService : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(16),
             ColumnCount = 1,
-            RowCount = 7
+            RowCount = 8
         };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -4094,6 +4103,26 @@ internal sealed class CopilotService : Form
             Margin = new Padding(0, 0, 0, 10)
         };
         root.Controls.Add(title);
+
+        var topStatusBar = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
+            Margin = new Padding(0, 0, 0, 12)
+        };
+        _simBadgeLabel = NewStatusBadge("MSFS CONNECTING", System.Drawing.Color.DimGray);
+        _aircraftBadgeLabel = NewStatusBadge("AIRCRAFT WAITING", System.Drawing.Color.DimGray);
+        _adapterBadgeLabel = NewStatusBadge("ADAPTER WAITING", System.Drawing.Color.DimGray);
+        _flowBadgeLabel = NewStatusBadge("FLOW IDLE", System.Drawing.Color.DimGray);
+        _versionBadgeLabel = NewStatusBadge($"v{GetApplicationVersion()}", System.Drawing.Color.FromArgb(40, 68, 106));
+        topStatusBar.Controls.Add(_simBadgeLabel);
+        topStatusBar.Controls.Add(_aircraftBadgeLabel);
+        topStatusBar.Controls.Add(_adapterBadgeLabel);
+        topStatusBar.Controls.Add(_flowBadgeLabel);
+        topStatusBar.Controls.Add(_versionBadgeLabel);
+        root.Controls.Add(topStatusBar);
 
         var statusPanel = new TableLayoutPanel
         {
@@ -4324,7 +4353,8 @@ internal sealed class CopilotService : Form
         _flowList = new ListBox
         {
             Dock = DockStyle.Fill,
-            IntegralHeight = false
+            IntegralHeight = false,
+            DisplayMember = nameof(ProcedureListItem.DisplayName)
         };
         foreach (var procedure in A320ProcedureLibrary.GateToGate)
         {
@@ -4362,8 +4392,11 @@ internal sealed class CopilotService : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 6
+            RowCount = 9
         };
+        procedureLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        procedureLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        procedureLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         procedureLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         procedureLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         procedureLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -4376,9 +4409,19 @@ internal sealed class CopilotService : Form
         _stepLabel = NewDashboardLabel("No active step");
         _messageLabel = NewDashboardLabel("");
         _messageLabel.MaximumSize = new System.Drawing.Size(680, 0);
+        _statusBadgeLabel = NewDashboardLabel("Idle");
+        _statusBadgeLabel.Font = new System.Drawing.Font(
+            SystemFonts.DefaultFont,
+            System.Drawing.FontStyle.Bold);
+        _nextActionLabel = NewDashboardLabel("Next action: none");
+        _waitingForLabel = NewDashboardLabel("Waiting for: none");
+        _waitingForLabel.MaximumSize = new System.Drawing.Size(680, 0);
         _procedureProgress = new ProgressBar { Dock = DockStyle.Top, Height = 22 };
+        procedureLayout.Controls.Add(_statusBadgeLabel);
         procedureLayout.Controls.Add(_procedureLabel);
         procedureLayout.Controls.Add(_stepLabel);
+        procedureLayout.Controls.Add(_nextActionLabel);
+        procedureLayout.Controls.Add(_waitingForLabel);
         procedureLayout.Controls.Add(_messageLabel);
         procedureLayout.Controls.Add(_procedureProgress);
         _checklistList = new ListBox
@@ -4437,12 +4480,35 @@ internal sealed class CopilotService : Form
         logGroup.Controls.Add(_eventLog);
         root.Controls.Add(logGroup);
 
+        var toolsShell = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Bottom,
+            AutoSize = true,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            Margin = new Padding(0, 14, 0, 0)
+        };
+        var toggleToolsButton = new Button
+        {
+            Text = "Show tools & diagnostics",
+            AutoSize = true
+        };
+        toolsShell.Controls.Add(toggleToolsButton);
+
         var actions = new FlowLayoutPanel
         {
             Dock = DockStyle.Bottom,
             AutoSize = true,
             FlowDirection = FlowDirection.LeftToRight,
-            Margin = new Padding(0, 14, 0, 0)
+            Margin = new Padding(0, 6, 0, 0),
+            Visible = false
+        };
+        toggleToolsButton.Click += (_, _) =>
+        {
+            actions.Visible = !actions.Visible;
+            toggleToolsButton.Text = actions.Visible
+                ? "Hide tools & diagnostics"
+                : "Show tools & diagnostics";
         };
         actions.Controls.Add(NewCommandButton("External power ON", "external-power on"));
         actions.Controls.Add(NewCommandButton("External power OFF", "external-power off"));
@@ -4489,7 +4555,8 @@ internal sealed class CopilotService : Form
         };
         copyDiagnosticsButton.Click += (_, _) => CopyLastDiagnostic();
         actions.Controls.Add(copyDiagnosticsButton);
-        root.Controls.Add(actions);
+        toolsShell.Controls.Add(actions);
+        root.Controls.Add(toolsShell);
     }
 
     private void ShowFeatureSettingsDialog()
@@ -4855,6 +4922,35 @@ internal sealed class CopilotService : Form
             Margin = new Padding(0, 3, 0, 3)
         };
 
+    private static Label NewStatusBadge(string text, System.Drawing.Color backColor) =>
+        new()
+        {
+            Text = text,
+            AutoSize = true,
+            BackColor = backColor,
+            ForeColor = System.Drawing.Color.White,
+            Font = new System.Drawing.Font(
+                SystemFonts.DefaultFont,
+                System.Drawing.FontStyle.Bold),
+            Padding = new Padding(8, 4, 8, 4),
+            Margin = new Padding(0, 0, 8, 4)
+        };
+
+    private static void SetStatusBadge(
+        Label? label,
+        string text,
+        System.Drawing.Color backColor)
+    {
+        if (label == null)
+        {
+            return;
+        }
+
+        label.Text = text;
+        label.BackColor = backColor;
+        label.ForeColor = System.Drawing.Color.White;
+    }
+
     private Button NewCommandButton(string label, string command)
     {
         var button = new Button
@@ -4876,6 +4972,24 @@ internal sealed class CopilotService : Form
 
         _aircraftLabel!.Text = _state.Title;
         _phaseLabel!.Text = OperationalPhaseDetector.Detect(_state).ToString();
+        SetStatusBadge(
+            _simBadgeLabel,
+            _simConnect != null ? "MSFS CONNECTED" : "MSFS DISCONNECTED",
+            _simConnect != null
+                ? System.Drawing.Color.FromArgb(39, 130, 87)
+                : System.Drawing.Color.FromArgb(150, 48, 48));
+        SetStatusBadge(
+            _aircraftBadgeLabel,
+            _state.IsA320NeoV2 ? "A320neo V2" : "AIRCRAFT UNSUPPORTED",
+            _state.IsA320NeoV2
+                ? System.Drawing.Color.FromArgb(39, 130, 87)
+                : System.Drawing.Color.FromArgb(172, 113, 37));
+        SetStatusBadge(
+            _adapterBadgeLabel,
+            _mobiFlightReady ? "MOBIFLIGHT OK" : "ADAPTER OFFLINE",
+            _mobiFlightReady
+                ? System.Drawing.Color.FromArgb(39, 130, 87)
+                : System.Drawing.Color.FromArgb(150, 48, 48));
         _electricalLabel!.Text =
             $"BAT 1 {_state.Battery1On.ToOnOff()} | BAT 2 {_state.Battery2On.ToOnOff()} | " +
             $"EXT PWR {_state.ExternalPowerOn.ToOnOff()} ({_state.ExternalPowerAvailable.ToYesNo()} available) | " +
@@ -4894,15 +5008,44 @@ internal sealed class CopilotService : Form
             : System.Drawing.Color.DarkRed;
 
         var definition = _procedureRunner.Definition;
+        var currentStep = _procedureRunner.CurrentStep;
+        SetStatusBadge(
+            _flowBadgeLabel,
+            definition == null
+                ? "FLOW IDLE"
+                : $"{FormatProcedureStatus(_procedureRunner.Status).ToUpperInvariant()} - {definition.Name.Split('.')[0]}",
+            _procedureRunner.Status switch
+            {
+                ProcedureStatus.Running => System.Drawing.Color.FromArgb(39, 130, 87),
+                ProcedureStatus.WaitingForVerification => System.Drawing.Color.FromArgb(40, 95, 150),
+                ProcedureStatus.WaitingForManualAction => System.Drawing.Color.FromArgb(190, 126, 37),
+                ProcedureStatus.Paused => System.Drawing.Color.FromArgb(151, 110, 35),
+                ProcedureStatus.Completed => System.Drawing.Color.FromArgb(39, 130, 87),
+                ProcedureStatus.Failed => System.Drawing.Color.FromArgb(150, 48, 48),
+                _ => System.Drawing.Color.DimGray
+            });
+        SetStatusBadge(
+            _versionBadgeLabel,
+            $"v{GetApplicationVersion()}",
+            System.Drawing.Color.FromArgb(40, 68, 106));
+        UpdateProcedureStatusBadge();
         _procedureLabel!.Text =
             definition == null
                 ? "None"
                 : $"{definition.Name} — {_procedureRunner.Status} — {definition.AutomationSummary}";
         _stepLabel!.Text =
-            _procedureRunner.CurrentStep == null
+            currentStep == null
                 ? "No active step"
-                : $"Current step: {_procedureRunner.CurrentStep.Label} " +
-                  $"({_procedureRunner.CurrentStep.AssignedRole})";
+                : $"Current step: {currentStep.Label} " +
+                  $"({FormatCrewRole(currentStep.AssignedRole)})";
+        _nextActionLabel!.Text = FormatNextAction(currentStep);
+        _waitingForLabel!.Text = FormatWaitingReason(
+            currentStep,
+            _state,
+            _procedureRunner.Status);
+        _waitingForLabel.ForeColor = _procedureRunner.Status == ProcedureStatus.Failed
+            ? System.Drawing.Color.DarkRed
+            : System.Drawing.Color.DimGray;
         _messageLabel!.Text = _procedureRunner.Message ?? "";
         _procedureProgress!.Maximum = Math.Max(1, definition?.Steps.Count ?? 1);
         _procedureProgress.Value = Math.Min(
@@ -4919,6 +5062,136 @@ internal sealed class CopilotService : Form
             ? System.Drawing.Color.DarkRed
             : System.Drawing.Color.DarkBlue;
         RefreshFlowList(recommendation.Procedure.Id, definition?.Id);
+    }
+
+    private void UpdateProcedureStatusBadge()
+    {
+        if (_statusBadgeLabel == null)
+        {
+            return;
+        }
+
+        var status = _procedureRunner.Status;
+        _statusBadgeLabel.Text = $"Status: {FormatProcedureStatus(status)}";
+        _statusBadgeLabel.ForeColor = status switch
+        {
+            ProcedureStatus.Running => System.Drawing.Color.DarkGreen,
+            ProcedureStatus.WaitingForVerification => System.Drawing.Color.DarkBlue,
+            ProcedureStatus.WaitingForManualAction => System.Drawing.Color.DarkOrange,
+            ProcedureStatus.Paused => System.Drawing.Color.DarkGoldenrod,
+            ProcedureStatus.Completed => System.Drawing.Color.DarkGreen,
+            ProcedureStatus.Failed => System.Drawing.Color.DarkRed,
+            _ => System.Drawing.Color.DimGray
+        };
+    }
+
+    private static string FormatProcedureStatus(ProcedureStatus status) =>
+        status switch
+        {
+            ProcedureStatus.Idle => "Idle",
+            ProcedureStatus.Running => "Running",
+            ProcedureStatus.WaitingForManualAction => "Waiting for pilot",
+            ProcedureStatus.WaitingForVerification => "Monitoring",
+            ProcedureStatus.Paused => "Paused",
+            ProcedureStatus.Completed => "Complete",
+            ProcedureStatus.Failed => "Failed",
+            _ => status.ToString()
+        };
+
+    private static string FormatCrewRole(CrewRole role) =>
+        role switch
+        {
+            CrewRole.Captain => "Captain",
+            CrewRole.FirstOfficer => "First Officer",
+            CrewRole.Either => "Either pilot",
+            _ => role.ToString()
+        };
+
+    private static string FormatNextAction(ProcedureStep? step)
+    {
+        if (step == null)
+        {
+            return "Next action: none";
+        }
+
+        var actor = FormatCrewRole(step.AssignedRole);
+        return step.Kind switch
+        {
+            ProcedureStepKind.AutomaticAction =>
+                $"Next action: {actor} automatic - {step.Label}",
+            ProcedureStepKind.ManualAction =>
+                $"Next action: {actor} manual - {step.Label}",
+            ProcedureStepKind.Observe =>
+                $"Next action: monitor - {step.Label}",
+            _ => $"Next action: {step.Label}"
+        };
+    }
+
+    private static string FormatWaitingReason(
+        ProcedureStep? step,
+        AircraftState state,
+        ProcedureStatus status)
+    {
+        if (step == null)
+        {
+            return "Waiting for: none";
+        }
+        if (status == ProcedureStatus.WaitingForManualAction)
+        {
+            return step.ManualInstruction != null
+                ? $"Waiting for: {step.ManualInstruction}"
+                : $"Waiting for: pilot confirmation of {step.Label}.";
+        }
+        if (status == ProcedureStatus.WaitingForVerification
+            || status == ProcedureStatus.Running)
+        {
+            return $"Waiting for: {DescribeStepCondition(step, state)}";
+        }
+        if (status == ProcedureStatus.Failed)
+        {
+            return "Waiting for: resolve the failed item, then resume or restart the flow.";
+        }
+
+        return "Waiting for: none";
+    }
+
+    private static string DescribeStepCondition(ProcedureStep step, AircraftState state)
+    {
+        if (step.Kind == ProcedureStepKind.AutomaticAction)
+        {
+            return step.Command == null
+                ? $"{step.Label} readback."
+                : $"command '{step.Command}' to verify as {step.Label}.";
+        }
+
+        return step.Id switch
+        {
+            "captain-park" =>
+                $"gate parking: stopped, parking brake ON, engines OFF. Current GS {state.GroundSpeedKnots:F1} kt, parking brake {state.ParkingBrakeSet.ToOnOff()}, engines {(state.EnginesOff ? "OFF" : "running")}.",
+            "captain-taxi" =>
+                $"taxi movement. Current GS {state.GroundSpeedKnots:F1} kt, parking brake {state.ParkingBrakeSet.ToOnOff()}.",
+            "apu-available" or "shutdown-power" =>
+                $"APU AVAIL or external power. APU {state.ApuRpmPercent:F0}%, external power {state.ExternalPowerOn.ToOnOff()}.",
+            "captain-engine-shutdown" =>
+                $"engine masters OFF. Engines {(state.EnginesOff ? "OFF" : "running")}.",
+            "approach-config-start" =>
+                $"Flaps 1 gate: distance <= {state.ApproachFlaps1DistanceNm} NM or altitude <= {state.ApproachFlaps1AltitudeFeet:N0} ft, speed <= {state.ApproachFlaps1SpeedKnots} kt.",
+            "flaps-two-point" =>
+                $"Flaps 2 gate: distance <= {state.ApproachFlaps2DistanceNm} NM or radio altitude <= {state.ApproachFlaps2AltitudeAglFeet:N0} ft, speed <= {state.ApproachFlaps2SpeedKnots} kt.",
+            "gear-down-point" =>
+                $"gear gate: distance <= {state.ApproachGearDistanceNm} NM or radio altitude <= {state.ApproachGearAltitudeAglFeet:N0} ft, speed <= {state.ApproachGearSpeedKnots} kt.",
+            "landing-config-point" =>
+                $"landing-config gate: distance <= {state.ApproachLandingConfigDistanceNm} NM or radio altitude <= {state.ApproachLandingConfigAltitudeAglFeet:N0} ft, speed <= {state.ApproachLandingConfigSpeedKnots} kt.",
+            "fo-approaching-minimums" =>
+                $"radio altitude at DH + 100 ft. RA {state.RadioHeightFeet:F0} ft, DH {state.DecisionHeightFeet:F0} ft.",
+            "fo-minimums" =>
+                $"radio altitude at DH. RA {state.RadioHeightFeet:F0} ft, DH {state.DecisionHeightFeet:F0} ft.",
+            "touchdown" =>
+                $"touchdown. On ground {state.OnGround.ToYesNo()}, radio height {state.RadioHeightFeet:F0} ft.",
+            "captain-runway-exit" =>
+                $"taxi speed after landing. Current GS {state.GroundSpeedKnots:F1} kt.",
+            _ => step.Label
+        };
     }
 
     private string FormatCurrentStepTelemetry(AircraftState state)
@@ -5342,6 +5615,20 @@ internal sealed class CopilotService : Form
         public bool Completed { get; }
         public bool Recommended { get; }
         public bool Active { get; }
+        public string DisplayName
+        {
+            get
+            {
+                var status = Completed
+                    ? "[DONE]"
+                    : Active
+                        ? "[ACTIVE]"
+                        : Recommended
+                            ? "[NEXT]"
+                            : "[    ]";
+                return $"{status} {Definition.Name} - {Definition.AutomationSummary}";
+            }
+        }
 
         public override string ToString() =>
             $"{(Completed ? "✓" : Active ? "▶" : Recommended ? "→" : " ")} " +

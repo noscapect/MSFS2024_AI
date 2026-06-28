@@ -705,7 +705,10 @@ internal static class A320ProcedureLibrary
                 Observe(
                     "captain-park",
                     "Aircraft parked at the gate",
-                    state => state.OnGround && state.GroundSpeedKnots <= 0.5,
+                    state => state.OnGround
+                             && state.GroundSpeedKnots <= 0.5
+                             && state.ParkingBrakeSet
+                             && state.EnginesOff,
                     CrewRole.FirstOfficer),
                 Observe(
                     "captain-parking-brake",
@@ -718,6 +721,7 @@ internal static class A320ProcedureLibrary
                     "Engine masters OFF",
                     state => state.EnginesOff,
                     CrewRole.FirstOfficer),
+                Automatic("fo-apu-bleed-on", "APU BLEED ON", state => state.ApuBleedOn, "apu-bleed on"),
                 Automatic(
                     "fo-nose-light-off",
                     "Nose taxi light OFF",
@@ -731,7 +735,6 @@ internal static class A320ProcedureLibrary
                     "beacon off"),
                 Automatic("fo-fuel-pumps-off", "All six fuel pumps OFF", state => state.AllFuelPumpsOff, "fuel-pumps off"),
                 Automatic("fo-seatbelts-off", "Seatbelt signs OFF", state => state.SeatbeltSelectorPosition.HasValue && Math.Abs(state.SeatbeltSelectorPosition.Value - 2) < 0.1, "seatbelts off"),
-                Automatic("fo-apu-bleed-on", "APU BLEED ON", state => state.ApuBleedOn, "apu-bleed on"),
                 Observe(
                     "fo-doors",
                     "A required cabin or cargo door opened",

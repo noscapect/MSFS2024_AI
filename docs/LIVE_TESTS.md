@@ -47,6 +47,10 @@ The only items still awaiting live verification are:
 - Follow-up recording showed Flow 10 selected nose light TAXI during approach.
   Flow 10 now selects the T.O. / landing nose-light position; Flow 11 sets TAXI
   only after landing during runway cleanup.
+- Added quiet diagnostic capture for verification failures. The activity log
+  remains player-friendly, while detailed expected/actual context and aircraft
+  state snapshots are written to `%LOCALAPPDATA%\MSFS2024_AI\diagnostics` and
+  can be exported with the new diagnostics buttons.
 - Automatic handoff from Flow 10 to Flow 11.
 - Flow 10 voice callout: `Cabin crew, prepare for landing`.
 - Complete Flow 11: After Landing & Taxi.

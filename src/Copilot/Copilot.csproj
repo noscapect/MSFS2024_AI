@@ -7,9 +7,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <LangVersion>latest</LangVersion>
-    <Version>0.4.4</Version>
-    <AssemblyVersion>0.4.4.0</AssemblyVersion>
-    <FileVersion>0.4.4.0</FileVersion>
+    <Version>0.4.5</Version>
+    <AssemblyVersion>0.4.5.0</AssemblyVersion>
+    <FileVersion>0.4.5.0</FileVersion>
     <ApplicationIcon>Assets\app-icon.ico</ApplicationIcon>
   </PropertyGroup>
 
@@ -21,6 +21,8 @@
     </Reference>
     <Reference Include="System.Speech" />
     <Reference Include="System.Net.Http" />
+    <Reference Include="System.IO.Compression" />
+    <Reference Include="System.IO.Compression.FileSystem" />
     <Content Include="C:\MSFS 2024 SDK\SimConnect SDK\lib\SimConnect.dll">
       <Link>SimConnect.dll</Link>
       <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>

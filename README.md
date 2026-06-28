@@ -44,6 +44,8 @@ important callouts.
 - Visible application version and GitHub release update status
 - Monitor-only and confirmation-based automation modes
 - Runtime activity log and diagnostic status display
+- Quiet diagnostic capture and export for verification failures without
+  cluttering the normal player-facing activity log
 
 Voice callouts include engine-start monitoring, takeoff calls, landing gear up
 and down, minimums, spoilers, reverse green, and deceleration.
@@ -116,6 +118,15 @@ Runtime logs are stored in:
 ```text
 %LOCALAPPDATA%\MSFS2024_AI\logs\copilot.log
 ```
+
+Detailed verification-failure diagnostics are stored quietly in:
+
+```text
+%LOCALAPPDATA%\MSFS2024_AI\diagnostics
+```
+
+Use **Export diagnostics** or **Copy last diagnostic** in the app when
+reporting a test issue. Normal users can ignore these files.
 
 The latest three flight telemetry recordings are stored in:
 

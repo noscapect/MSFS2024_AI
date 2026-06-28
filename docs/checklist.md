@@ -19,6 +19,11 @@ Step types:
   and confirms it in the app.
 - **Callout** — logged and spoken when voice callouts are enabled.
 
+The normal activity log intentionally stays concise for regular players. When
+an action fails verification, the app quietly records a detailed diagnostic
+snapshot under `%LOCALAPPDATA%\MSFS2024_AI\diagnostics`. Use **Export
+diagnostics** or **Copy last diagnostic** when reporting a test issue.
+
 ## 1. Power Up & Initial Setup
 
 1. **Monitor:** A320neo V2 loaded.
@@ -248,15 +253,16 @@ radar display selectors and engine anti-ice are not operated by this flow.
 
 ### Normal turnaround shutdown
 
-1. **Monitor:** Aircraft parked on the ground at 0.5 knots or less.
+1. **Monitor:** Aircraft parked at the gate: stopped on the ground, parking
+   brake ON, and both engines shut down.
 2. **Monitor:** Parking brake ON.
 3. **Monitor:** APU available or external power connected.
 4. **Monitor:** Captain switches both engine masters OFF.
-5. **F/O automatic:** Set nose taxi light OFF.
-6. **F/O automatic:** Turn beacon OFF after engine shutdown.
-7. **F/O automatic:** Turn all six fuel pumps OFF.
-8. **F/O automatic:** Turn seatbelt signs OFF.
-9. **F/O automatic:** Turn APU BLEED ON.
+5. **F/O automatic:** Turn APU BLEED ON.
+6. **F/O automatic:** Set nose taxi light OFF.
+7. **F/O automatic:** Turn beacon OFF after engine shutdown.
+8. **F/O automatic:** Turn all six fuel pumps OFF.
+9. **F/O automatic:** Turn seatbelt signs OFF.
 10. **Monitor:** Wait until a configured required cabin or cargo door opens.
 
 ### Optional cold-and-dark secure

@@ -294,4 +294,63 @@ public sealed class ProcedureRecoveryTests
 
         CollectionAssert.AreEqual(new[] { "landing-lights retract" }, commands);
     }
+
+    [TestMethod]
+    public void ParkingFlowDoesNotTreatTrafficHoldAsGateParking()
+    {
+        var commands = new List<string>();
+        var runner = new ProcedureRunner(
+            commands.Add,
+            () => AutomationPolicy.AutomaticWhenSupported);
+        var state = new AircraftState
+        {
+            Title = "A320neo V2",
+            OnGround = true,
+            GroundSpeedKnots = 0,
+            ParkingBrakeSet = true,
+            Engine1Running = true,
+            Engine2Running = true,
+            ApuAvailable = true
+        };
+
+        runner.Start(A320ProcedureLibrary.ParkingAndShutdown, state);
+
+        Assert.AreEqual("captain-park", runner.CurrentStep?.Id);
+        Assert.AreEqual(ProcedureStatus.WaitingForVerification, runner.Status);
+        CollectionAssert.AreEqual(Array.Empty<string>(), commands);
+    }
+
+    [TestMethod]
+    public void ParkingFlowTurnsApuBleedOnBeforeShutdownCleanup()
+    {
+        var commands = new List<string>();
+        var runner = new ProcedureRunner(
+            commands.Add,
+            () => AutomationPolicy.AutomaticWhenSupported);
+        var state = new AircraftState
+        {
+            Title = "A320neo V2",
+            OnGround = true,
+            GroundSpeedKnots = 0,
+            ParkingBrakeSet = true,
+            Engine1Running = false,
+            Engine2Running = false,
+            ApuAvailable = true,
+            ApuBleedOn = false,
+            NoseLightSelectorPosition = 1,
+            BeaconOn = true,
+            FuelPump1State = 1,
+            FuelPump2State = 1,
+            FuelPump3State = 1,
+            FuelPump4State = 1,
+            FuelPump5State = 1,
+            FuelPump6State = 1,
+            SeatbeltSelectorPosition = 0
+        };
+
+        runner.Start(A320ProcedureLibrary.ParkingAndShutdown, state);
+
+        Assert.AreEqual("fo-apu-bleed-on", runner.CurrentStep?.Id);
+        CollectionAssert.AreEqual(new[] { "apu-bleed on" }, commands);
+    }
 }

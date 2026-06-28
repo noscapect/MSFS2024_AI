@@ -2732,6 +2732,14 @@ internal sealed class CopilotService : Form
                 SetFireTestPressed(test.System, test.InputEventHash, false);
                 _pendingFireTest = null;
                 var message = $"{name} failed to activate.";
+                RecordDiagnosticFailure(
+                    message,
+                    new[]
+                    {
+                        $"Fire test system: {test.System}",
+                        $"InputEvent hash: {test.InputEventHash}",
+                        $"Active readback observed: {active}"
+                    });
                 AppendDashboardLog(message);
                 _procedureRunner.Fail(message);
                 FinishOneShot(4);
@@ -2769,6 +2777,14 @@ internal sealed class CopilotService : Form
         {
             _pendingFireTest = null;
             var message = $"{name} did not clear after release.";
+            RecordDiagnosticFailure(
+                message,
+                new[]
+                {
+                    $"Fire test system: {test.System}",
+                    $"InputEvent hash: {test.InputEventHash}",
+                    $"Active readback observed: {active}"
+                });
             AppendDashboardLog(message);
             _procedureRunner.Fail(message);
             FinishOneShot(4);
@@ -3711,8 +3727,16 @@ internal sealed class CopilotService : Form
 
         if (DateTime.UtcNow >= _pendingProcedure.DeadlineUtc)
         {
-            Console.Error.WriteLine(
-                $"External power verification failed; aircraft still reports {_state.ExternalPowerOn.ToOnOff()}.");
+            var message =
+                $"External power verification failed; aircraft still reports {_state.ExternalPowerOn.ToOnOff()}.";
+            Console.Error.WriteLine(message);
+            RecordDiagnosticFailure(
+                "External power verification failed",
+                new[]
+                {
+                    $"Expected: {_pendingProcedure.DesiredOn.ToOnOff()}",
+                    $"Actual: {_state.ExternalPowerOn.ToOnOff()}"
+                });
             _pendingProcedure = null;
             FinishOneShot(4);
         }
@@ -3740,7 +3764,16 @@ internal sealed class CopilotService : Form
 
         if (DateTime.UtcNow >= _pendingBeaconProcedure.DeadlineUtc)
         {
-            Console.Error.WriteLine($"Beacon verification failed; aircraft still reports {_state.BeaconOn.ToOnOff()}.");
+            var message =
+                $"Beacon verification failed; aircraft still reports {_state.BeaconOn.ToOnOff()}.";
+            Console.Error.WriteLine(message);
+            RecordDiagnosticFailure(
+                "Beacon verification failed",
+                new[]
+                {
+                    $"Expected: {_pendingBeaconProcedure.DesiredOn.ToOnOff()}",
+                    $"Actual: {_state.BeaconOn.ToOnOff()}"
+                });
             _pendingBeaconProcedure = null;
             FinishOneShot(4);
         }
@@ -3768,6 +3801,13 @@ internal sealed class CopilotService : Form
 
         if (DateTime.UtcNow >= _pendingNavLogoSelectorProcedure.DeadlineUtc)
         {
+            RecordDiagnosticFailure(
+                "NAV & LOGO verification failed",
+                new[]
+                {
+                    $"Expected selector: {_pendingNavLogoSelectorProcedure.DesiredPosition}",
+                    $"Actual selector: {(_state.NavLogoSelectorPosition.HasValue ? _state.NavLogoSelectorPosition.Value.ToString("F0") : "unknown")}"
+                });
             AppendDashboardLog(
                 "NAV & LOGO verification failed; native selector reports " +
                 $"{(_state.NavLogoSelectorPosition.HasValue ? _state.NavLogoSelectorPosition.Value.ToString("F0") : "unknown")}.");
@@ -3804,6 +3844,13 @@ internal sealed class CopilotService : Form
             Console.Error.WriteLine(
                 $"BAT {_pendingBatteryProcedure.BatteryNumber} verification failed; " +
                 $"aircraft still reports {actual.ToOnOff()}.");
+            RecordDiagnosticFailure(
+                $"BAT {_pendingBatteryProcedure.BatteryNumber} verification failed",
+                new[]
+                {
+                    $"Expected: {_pendingBatteryProcedure.DesiredOn.ToOnOff()}",
+                    $"Actual: {actual.ToOnOff()}"
+                });
             AppendDashboardLog(
                 $"BAT {_pendingBatteryProcedure.BatteryNumber} verification failed");
             _pendingBatteryProcedure = null;
@@ -3828,6 +3875,14 @@ internal sealed class CopilotService : Form
         if (DateTime.UtcNow >= _pendingNativeAction.DeadlineUtc)
         {
             var message = $"{_pendingNativeAction.Name} native verification failed.";
+            RecordDiagnosticFailure(
+                message,
+                new[]
+                {
+                    $"Pending action: {_pendingNativeAction.Name}",
+                    $"Expected: {_pendingNativeAction.DesiredLabel}",
+                    $"Deadline UTC: {_pendingNativeAction.DeadlineUtc:O}"
+                });
             AppendDashboardLog(message);
             _pendingNativeAction = null;
             if (_procedureRunner.Status == ProcedureStatus.WaitingForVerification)
@@ -3836,6 +3891,18 @@ internal sealed class CopilotService : Form
             }
             FinishOneShot(4);
         }
+    }
+
+    private void RecordDiagnosticFailure(string summary, IEnumerable<string>? details = null)
+    {
+        var step = _procedureRunner.CurrentStep;
+        DiagnosticLog.RecordFailure(
+            summary,
+            _state,
+            _procedureRunner.Definition?.Name,
+            step?.Id,
+            step?.Label,
+            details);
     }
 
     private void PrintStatus()
@@ -4407,6 +4474,21 @@ internal sealed class CopilotService : Form
         };
         stopReplayButton.Click += (_, _) => StopReplay();
         actions.Controls.Add(stopReplayButton);
+        var exportDiagnosticsButton = new Button
+        {
+            Text = "Export diagnostics",
+            AutoSize = true,
+            Margin = new Padding(18, 3, 0, 0)
+        };
+        exportDiagnosticsButton.Click += (_, _) => ExportDiagnostics();
+        actions.Controls.Add(exportDiagnosticsButton);
+        var copyDiagnosticsButton = new Button
+        {
+            Text = "Copy last diagnostic",
+            AutoSize = true
+        };
+        copyDiagnosticsButton.Click += (_, _) => CopyLastDiagnostic();
+        actions.Controls.Add(copyDiagnosticsButton);
         root.Controls.Add(actions);
     }
 
@@ -4676,6 +4758,52 @@ internal sealed class CopilotService : Form
             AppendDashboardLog("Replay stopped; live simulator telemetry resumed.");
         }
         RefreshReplayFlightList();
+    }
+
+    private void ExportDiagnostics()
+    {
+        try
+        {
+            var path = DiagnosticLog.ExportLatest(_flightTelemetryStore);
+            AppendDashboardLog($"Diagnostic package exported: {path}");
+            MessageBox.Show(
+                this,
+                $"Diagnostic package exported:\n\n{path}",
+                "Diagnostics exported",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+        }
+        catch (Exception ex)
+        {
+            AppendDashboardLog("Diagnostic export failed.");
+            DiagnosticLog.RecordFailure(
+                "Diagnostic export failed",
+                _state,
+                details: new[] { ex.ToString() });
+            MessageBox.Show(
+                this,
+                $"Diagnostic export failed:\n\n{ex.Message}",
+                "Diagnostics export failed",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Error);
+        }
+    }
+
+    private void CopyLastDiagnostic()
+    {
+        try
+        {
+            Clipboard.SetText(DiagnosticLog.GetLastEntry());
+            AppendDashboardLog("Last diagnostic entry copied to clipboard.");
+        }
+        catch (Exception ex)
+        {
+            AppendDashboardLog("Copy diagnostic failed.");
+            DiagnosticLog.RecordFailure(
+                "Copy diagnostic failed",
+                _state,
+                details: new[] { ex.ToString() });
+        }
     }
 
     private void AppendDashboardLog(string message)

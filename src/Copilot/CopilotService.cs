@@ -105,6 +105,8 @@ internal sealed class CopilotService : Form
     private bool? _fbwBattery2Auto;
     private bool? _fbwBattery1AutoTyped;
     private bool? _fbwBattery2AutoTyped;
+    private bool? _fbwCommandedBattery1Auto;
+    private bool? _fbwCommandedBattery2Auto;
     private float? _fbwBattery1Potential;
     private float? _fbwBattery2Potential;
     private double? _lastLoggedBattery1Voltage;
@@ -1189,6 +1191,7 @@ internal sealed class CopilotService : Form
             && (_fbwBattery1AutoTyped.HasValue || _fbwBattery1Auto.HasValue))
         {
             _state.Battery1On = ResolveFbwBatteryState(
+                _fbwCommandedBattery1Auto,
                 _fbwBattery1AutoTyped,
                 _fbwBattery1Auto,
                 _state.Battery1On ? 1 : 0);
@@ -1197,6 +1200,7 @@ internal sealed class CopilotService : Form
             && (_fbwBattery2AutoTyped.HasValue || _fbwBattery2Auto.HasValue))
         {
             _state.Battery2On = ResolveFbwBatteryState(
+                _fbwCommandedBattery2Auto,
                 _fbwBattery2AutoTyped,
                 _fbwBattery2Auto,
                 _state.Battery2On ? 1 : 0);
@@ -1357,12 +1361,20 @@ internal sealed class CopilotService : Form
             Battery1On = isIniBuildsA320NeoV2
                 ? _nativeBattery1On ?? raw.Battery1 != 0
                 : isFlyByWireA320Neo
-                    ? ResolveFbwBatteryState(_fbwBattery1AutoTyped, _fbwBattery1Auto, raw.Battery1)
+                    ? ResolveFbwBatteryState(
+                        _fbwCommandedBattery1Auto,
+                        _fbwBattery1AutoTyped,
+                        _fbwBattery1Auto,
+                        raw.Battery1)
                 : raw.Battery1 != 0,
             Battery2On = isIniBuildsA320NeoV2
                 ? _nativeBattery2On ?? raw.Battery2 != 0
                 : isFlyByWireA320Neo
-                    ? ResolveFbwBatteryState(_fbwBattery2AutoTyped, _fbwBattery2Auto, raw.Battery2)
+                    ? ResolveFbwBatteryState(
+                        _fbwCommandedBattery2Auto,
+                        _fbwBattery2AutoTyped,
+                        _fbwBattery2Auto,
+                        raw.Battery2)
                 : raw.Battery2 != 0,
             Battery1Voltage = raw.Battery1Voltage,
             Battery2Voltage = raw.Battery2Voltage,
@@ -1532,10 +1544,16 @@ internal sealed class CopilotService : Form
     }
 
     private static bool ResolveFbwBatteryState(
+        bool? commandedPushbuttonAuto,
         bool? typedPushbuttonAuto,
         bool? untypedPushbuttonAuto,
         double genericMasterBattery)
     {
+        if (commandedPushbuttonAuto.HasValue)
+        {
+            return commandedPushbuttonAuto.Value;
+        }
+
         if (typedPushbuttonAuto.HasValue)
         {
             return typedPushbuttonAuto.Value;
@@ -2446,6 +2464,14 @@ internal sealed class CopilotService : Form
         var calculatorCode =
             $"{value} (>L:A32NX_OVHD_ELEC_BAT_{batteryNumber}_PB_IS_AUTO, Bool)";
         SendMobiFlightCommand($"MF.SimVars.Set.{calculatorCode}");
+        if (batteryNumber == 1)
+        {
+            _fbwCommandedBattery1Auto = desiredOn;
+        }
+        else
+        {
+            _fbwCommandedBattery2Auto = desiredOn;
+        }
         AppLog.Write(
             $"Executed FBW battery command: {calculatorCode}");
     }

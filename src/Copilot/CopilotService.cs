@@ -107,6 +107,10 @@ internal sealed class CopilotService : Form
     private bool? _fbwBattery2AutoTyped;
     private bool? _fbwCommandedBattery1Auto;
     private bool? _fbwCommandedBattery2Auto;
+    private bool? _fbwExternalPowerAvailable;
+    private bool? _fbwExternalPowerOn;
+    private bool? _fbwExternalPowerAvailableTyped;
+    private bool? _fbwExternalPowerOnTyped;
     private float? _fbwBattery1Potential;
     private float? _fbwBattery2Potential;
     private double? _lastLoggedBattery1Voltage;
@@ -258,7 +262,11 @@ internal sealed class CopilotService : Form
         FbwBattery1Potential = 159,
         FbwBattery2Potential = 160,
         FbwBattery1AutoTyped = 161,
-        FbwBattery2AutoTyped = 162
+        FbwBattery2AutoTyped = 162,
+        FbwExternalPowerAvailable = 163,
+        FbwExternalPowerOn = 164,
+        FbwExternalPowerAvailableTyped = 165,
+        FbwExternalPowerOnTyped = 166
     }
 
     private enum ClientDataArea
@@ -325,7 +333,11 @@ internal sealed class CopilotService : Form
         FbwBattery1Potential = 159,
         FbwBattery2Potential = 160,
         FbwBattery1AutoTyped = 161,
-        FbwBattery2AutoTyped = 162
+        FbwBattery2AutoTyped = 162,
+        FbwExternalPowerAvailable = 163,
+        FbwExternalPowerOn = 164,
+        FbwExternalPowerAvailableTyped = 165,
+        FbwExternalPowerOnTyped = 166
     }
 
     private enum CopilotEvent
@@ -781,7 +793,7 @@ internal sealed class CopilotService : Form
         }
 
         var request = (Request)data.dwRequestID;
-        if (request is >= Request.NativeBattery1 and <= Request.FbwBattery2AutoTyped)
+        if (request is >= Request.NativeBattery1 and <= Request.FbwExternalPowerOnTyped)
         {
             var value = ((MobiFlightFloat)data.dwData[0]).Value;
             if (request == Request.NativeBattery1)
@@ -845,6 +857,22 @@ internal sealed class CopilotService : Form
                     AppLog.Write($"FBW A32NX BAT 2 AUTO typed changed to {value:F0}.");
                 }
                 _fbwBattery2AutoTyped = batteryOn;
+            }
+            else if (request == Request.FbwExternalPowerAvailable)
+            {
+                SetLoggedBool(ref _fbwExternalPowerAvailable, value, "FBW A32NX EXT PWR available");
+            }
+            else if (request == Request.FbwExternalPowerOn)
+            {
+                SetLoggedBool(ref _fbwExternalPowerOn, value, "FBW A32NX EXT PWR ON");
+            }
+            else if (request == Request.FbwExternalPowerAvailableTyped)
+            {
+                SetLoggedBool(ref _fbwExternalPowerAvailableTyped, value, "FBW A32NX EXT PWR available typed");
+            }
+            else if (request == Request.FbwExternalPowerOnTyped)
+            {
+                SetLoggedBool(ref _fbwExternalPowerOnTyped, value, "FBW A32NX EXT PWR ON typed");
             }
             else
             {
@@ -1082,6 +1110,10 @@ internal sealed class CopilotService : Form
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwBattery2Potential, Request.FbwBattery2Potential, 49 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwBattery1AutoTyped, Request.FbwBattery1AutoTyped, 50 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwBattery2AutoTyped, Request.FbwBattery2AutoTyped, 51 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwExternalPowerAvailable, Request.FbwExternalPowerAvailable, 52 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwExternalPowerOn, Request.FbwExternalPowerOn, 53 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwExternalPowerAvailableTyped, Request.FbwExternalPowerAvailableTyped, 54 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwExternalPowerOnTyped, Request.FbwExternalPowerOnTyped, 55 * sizeof(float));
 
         _mobiFlightRuntimeReady = true;
         _mobiFlightRuntimeInitializedUtc = DateTime.UtcNow;
@@ -1145,6 +1177,14 @@ internal sealed class CopilotService : Form
             "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_BAT_1_PB_IS_AUTO, Bool)");
         SendMobiFlightRuntimeCommand(
             "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_BAT_2_PB_IS_AUTO, Bool)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_EXT_PWR_AVAIL:1)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_EXT_PWR_PB_IS_ON)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_EXT_PWR_AVAIL:1, Bool)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_EXT_PWR_PB_IS_ON, Bool)");
         SendMobiFlightRuntimeCommand("MF.DummyCmd");
         AppendDashboardLog("iniBuilds native state monitoring connected.");
     }
@@ -1378,8 +1418,18 @@ internal sealed class CopilotService : Form
                 : raw.Battery2 != 0,
             Battery1Voltage = raw.Battery1Voltage,
             Battery2Voltage = raw.Battery2Voltage,
-            ExternalPowerAvailable = raw.ExternalPowerAvailable != 0,
-            ExternalPowerOn = raw.ExternalPowerOn != 0,
+            ExternalPowerAvailable = isFlyByWireA320Neo
+                ? ResolveFbwBoolState(
+                    _fbwExternalPowerAvailableTyped,
+                    _fbwExternalPowerAvailable,
+                    raw.ExternalPowerAvailable)
+                : raw.ExternalPowerAvailable != 0,
+            ExternalPowerOn = isFlyByWireA320Neo
+                ? ResolveFbwBoolState(
+                    _fbwExternalPowerOnTyped,
+                    _fbwExternalPowerOn,
+                    raw.ExternalPowerOn)
+                : raw.ExternalPowerOn != 0,
             ParkingBrakeSet = raw.ParkingBrake != 0,
             BeaconOn = raw.Beacon != 0,
             NavigationLightsOn = raw.NavigationLights != 0,
@@ -1567,6 +1617,24 @@ internal sealed class CopilotService : Form
         return genericMasterBattery != 0;
     }
 
+    private static bool ResolveFbwBoolState(
+        bool? typedValue,
+        bool? untypedValue,
+        double genericValue)
+    {
+        if (typedValue.HasValue)
+        {
+            return typedValue.Value;
+        }
+
+        if (untypedValue.HasValue)
+        {
+            return untypedValue.Value;
+        }
+
+        return genericValue != 0;
+    }
+
     private static void LogChangedVoltage(string label, double value, ref double? previousValue)
     {
         if (!previousValue.HasValue || Math.Abs(previousValue.Value - value) >= 0.1)
@@ -1574,6 +1642,16 @@ internal sealed class CopilotService : Form
             AppLog.Write($"{label} changed to {value:F1} V.");
             previousValue = value;
         }
+    }
+
+    private static void SetLoggedBool(ref bool? target, float value, string label)
+    {
+        var boolValue = value != 0;
+        if (!target.HasValue || target.Value != boolValue)
+        {
+            AppLog.Write($"{label} changed to {value:F0}.");
+        }
+        target = boolValue;
     }
 
     private static (double? DistanceNm, string Source) ResolveApproachDistance(

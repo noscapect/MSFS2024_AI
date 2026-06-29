@@ -101,6 +101,8 @@ internal sealed class CopilotService : Form
         && _nativeTransponderStandby.HasValue;
     private bool? _nativeBattery1On;
     private bool? _nativeBattery2On;
+    private bool? _fbwBattery1Auto;
+    private bool? _fbwBattery2Auto;
     private float? _nativeFuelPump1;
     private float? _nativeFuelPump2;
     private float? _nativeFuelPump3;
@@ -242,7 +244,9 @@ internal sealed class CopilotService : Form
         NativeWeatherRadarPwsSelector = 153,
         NativeNoseLightSelector = 154,
         NativeLeftLandingLightSelector = 155,
-        NativeRightLandingLightSelector = 156
+        NativeRightLandingLightSelector = 156,
+        FbwBattery1Auto = 157,
+        FbwBattery2Auto = 158
     }
 
     private enum ClientDataArea
@@ -303,7 +307,9 @@ internal sealed class CopilotService : Form
         NativeWeatherRadarPwsSelector = 153,
         NativeNoseLightSelector = 154,
         NativeLeftLandingLightSelector = 155,
-        NativeRightLandingLightSelector = 156
+        NativeRightLandingLightSelector = 156,
+        FbwBattery1Auto = 157,
+        FbwBattery2Auto = 158
     }
 
     private enum CopilotEvent
@@ -755,7 +761,7 @@ internal sealed class CopilotService : Form
         }
 
         var request = (Request)data.dwRequestID;
-        if (request is >= Request.NativeBattery1 and <= Request.NativeRightLandingLightSelector)
+        if (request is >= Request.NativeBattery1 and <= Request.FbwBattery2Auto)
         {
             var value = ((MobiFlightFloat)data.dwData[0]).Value;
             if (request == Request.NativeBattery1)
@@ -765,6 +771,14 @@ internal sealed class CopilotService : Form
             else if (request == Request.NativeBattery2)
             {
                 _nativeBattery2On = value != 0;
+            }
+            else if (request == Request.FbwBattery1Auto)
+            {
+                _fbwBattery1Auto = value != 0;
+            }
+            else if (request == Request.FbwBattery2Auto)
+            {
+                _fbwBattery2Auto = value != 0;
             }
             else
             {
@@ -996,6 +1010,8 @@ internal sealed class CopilotService : Form
         RegisterMobiFlightFloat(sender, ClientDataDefinition.NativeNoseLightSelector, Request.NativeNoseLightSelector, 43 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.NativeLeftLandingLightSelector, Request.NativeLeftLandingLightSelector, 44 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.NativeRightLandingLightSelector, Request.NativeRightLandingLightSelector, 45 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwBattery1Auto, Request.FbwBattery1Auto, 46 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwBattery2Auto, Request.FbwBattery2Auto, 47 * sizeof(float));
 
         _mobiFlightRuntimeReady = true;
         _mobiFlightRuntimeInitializedUtc = DateTime.UtcNow;
@@ -1003,6 +1019,10 @@ internal sealed class CopilotService : Form
             "MF.SimVars.Add.(L:INI_OVHD_ELEC_BAT_1_PB_IS_AUTO_SWITCH)");
         SendMobiFlightRuntimeCommand(
             "MF.SimVars.Add.(L:INI_OVHD_ELEC_BAT_2_PB_IS_AUTO_SWITCH)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_BAT_1_PB_IS_AUTO)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_BAT_2_PB_IS_AUTO)");
         SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_OUTER_TANK_LEFT_PUMP_ON)");
         SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_INNER_TANK_LEFT_PUMP_ON)");
         SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_CENTER_TANK_LEFT_PUMP_ON)");
@@ -1088,6 +1108,14 @@ internal sealed class CopilotService : Form
         if (_state.IsA320NeoV2 && _nativeBattery2On.HasValue)
         {
             _state.Battery2On = _nativeBattery2On.Value;
+        }
+        if (_state.IsFlyByWireA320Neo && _fbwBattery1Auto.HasValue)
+        {
+            _state.Battery1On = _fbwBattery1Auto.Value;
+        }
+        if (_state.IsFlyByWireA320Neo && _fbwBattery2Auto.HasValue)
+        {
+            _state.Battery2On = _fbwBattery2Auto.Value;
         }
         if (_nativeFuelPump1.HasValue
             && _nativeFuelPump2.HasValue
@@ -1219,6 +1247,9 @@ internal sealed class CopilotService : Form
         var raw = (AircraftData)data.dwData[0];
         var approachDistance = ResolveApproachDistance(raw);
         var isIniBuildsA320NeoV2 = raw.Title.Equals("A320neo V2", StringComparison.OrdinalIgnoreCase);
+        var isFlyByWireA320Neo =
+            raw.Title.IndexOf("A32NX", StringComparison.OrdinalIgnoreCase) >= 0
+            || raw.Title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0;
         _state = new AircraftState
         {
             Title = raw.Title,
@@ -1236,9 +1267,13 @@ internal sealed class CopilotService : Form
             Engine2FuelFlowPph = raw.Engine2FuelFlow,
             Battery1On = isIniBuildsA320NeoV2
                 ? _nativeBattery1On ?? raw.Battery1 != 0
+                : isFlyByWireA320Neo
+                    ? _fbwBattery1Auto ?? raw.Battery1 != 0
                 : raw.Battery1 != 0,
             Battery2On = isIniBuildsA320NeoV2
                 ? _nativeBattery2On ?? raw.Battery2 != 0
+                : isFlyByWireA320Neo
+                    ? _fbwBattery2Auto ?? raw.Battery2 != 0
                 : raw.Battery2 != 0,
             ExternalPowerAvailable = raw.ExternalPowerAvailable != 0,
             ExternalPowerOn = raw.ExternalPowerOn != 0,

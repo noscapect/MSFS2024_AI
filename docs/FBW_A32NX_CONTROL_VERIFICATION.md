@@ -32,8 +32,8 @@ Each control must have a row with:
 |---|---|---|---|---|---|
 | BAT 1 | `L:A32NX_OVHD_ELEC_BAT_1_PB_IS_AUTO` | `1 (>L:A32NX_OVHD_ELEC_BAT_1_PB_IS_AUTO, Bool)` | Verified updating after restart | Verified moves switch | Passive readback when captain acts |
 | BAT 2 | `L:A32NX_OVHD_ELEC_BAT_2_PB_IS_AUTO` | `1 (>L:A32NX_OVHD_ELEC_BAT_2_PB_IS_AUTO, Bool)` | Verified updating after restart | Verified moves switch | Passive readback when captain acts |
-| EXT PWR available | `L:A32NX_EXT_PWR_AVAIL:1` | N/A | Not verified yet | N/A | Needs bridge snapshot |
-| EXT PWR ON | `L:A32NX_OVHD_ELEC_EXT_PWR_PB_IS_ON` | `1 (>L:A32NX_OVHD_ELEC_EXT_PWR_PB_IS_ON, Bool)` when available | Failed in first test | Not tested from app | Needs bridge snapshot |
+| EXT PWR available | `L:A32NX_EXT_PWR_AVAIL:1`; cross-check `EXTERNAL POWER AVAILABLE` | N/A | LVar stayed false in first test | N/A | Use any verified true source |
+| EXT PWR ON | `L:A32NX_OVHD_ELEC_EXT_PWR_PB_IS_ON`; FBW checklist verifies `EXTERNAL POWER ON` | `1 (>L:A32NX_OVHD_ELEC_EXT_PWR_PB_IS_ON, Bool)` when available; FBW checklist uses `TOGGLE_EXTERNAL_POWER` | LVar stayed false in first test | Not tested from app | Use any verified true source |
 
 ## Repeatable test flow
 
@@ -58,4 +58,3 @@ Only after this three-point check should code be changed.
 - EXT PWR remains a captain action.
 - If passive readback works, the app proceeds automatically.
 - If passive readback fails, the user may press Confirm during discovery builds, but the mapping must stay marked as incomplete until source-backed readback is verified.
-

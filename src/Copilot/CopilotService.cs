@@ -393,6 +393,8 @@ internal sealed class CopilotService : Form
         public double Battery2Voltage;
         public double ExternalPowerAvailable;
         public double ExternalPowerOn;
+        public double ExternalPowerAvailableUnindexed;
+        public double ExternalPowerOnUnindexed;
         public double ParkingBrake;
         public double Beacon;
         public double NavigationLights;
@@ -652,6 +654,8 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "ELECTRICAL BATTERY VOLTAGE:2", "Volts", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "EXTERNAL POWER AVAILABLE:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "EXTERNAL POWER ON:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "EXTERNAL POWER AVAILABLE", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "EXTERNAL POWER ON", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "BRAKE PARKING POSITION", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "LIGHT BEACON", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "LIGHT NAV", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
@@ -1419,17 +1423,21 @@ internal sealed class CopilotService : Form
             Battery1Voltage = raw.Battery1Voltage,
             Battery2Voltage = raw.Battery2Voltage,
             ExternalPowerAvailable = isFlyByWireA320Neo
-                ? ResolveFbwBoolState(
+                ? ResolveFbwAnyTrueState(
                     _fbwExternalPowerAvailableTyped,
                     _fbwExternalPowerAvailable,
+                    raw.ExternalPowerAvailableUnindexed,
                     raw.ExternalPowerAvailable)
                 : raw.ExternalPowerAvailable != 0,
             ExternalPowerOn = isFlyByWireA320Neo
-                ? ResolveFbwBoolState(
+                ? ResolveFbwAnyTrueState(
                     _fbwExternalPowerOnTyped,
                     _fbwExternalPowerOn,
+                    raw.ExternalPowerOnUnindexed,
                     raw.ExternalPowerOn)
                 : raw.ExternalPowerOn != 0,
+            ExternalPowerAvailableUnindexed = raw.ExternalPowerAvailableUnindexed != 0,
+            ExternalPowerOnUnindexed = raw.ExternalPowerOnUnindexed != 0,
             ParkingBrakeSet = raw.ParkingBrake != 0,
             BeaconOn = raw.Beacon != 0,
             NavigationLightsOn = raw.NavigationLights != 0,
@@ -1633,6 +1641,18 @@ internal sealed class CopilotService : Form
         }
 
         return genericValue != 0;
+    }
+
+    private static bool ResolveFbwAnyTrueState(
+        bool? typedValue,
+        bool? untypedValue,
+        double genericUnindexedValue,
+        double genericIndexedValue)
+    {
+        return typedValue == true
+               || untypedValue == true
+               || genericUnindexedValue != 0
+               || genericIndexedValue != 0;
     }
 
     private static void LogChangedVoltage(string label, double value, ref double? previousValue)
@@ -4338,6 +4358,7 @@ internal sealed class CopilotService : Form
             $"  App EXT PWR available/on: {_state.ExternalPowerAvailable.ToYesNo()}/{_state.ExternalPowerOn.ToOnOff()}",
             $"  FBW EXT PWR available untyped/typed: {FormatOptionalBool(_fbwExternalPowerAvailable)}/{FormatOptionalBool(_fbwExternalPowerAvailableTyped)}",
             $"  FBW EXT PWR ON untyped/typed: {FormatOptionalBool(_fbwExternalPowerOn)}/{FormatOptionalBool(_fbwExternalPowerOnTyped)}",
+            $"  Generic EXT PWR unindexed available/on: {_state.ExternalPowerAvailableUnindexed.ToYesNo()}/{_state.ExternalPowerOnUnindexed.ToOnOff()}",
             $"  Generic battery volts 1/2: {_state.Battery1Voltage:F1}/{_state.Battery2Voltage:F1} V"
         };
 

@@ -21,6 +21,8 @@ internal sealed class AircraftState
     public double Battery2Voltage { get; set; }
     public bool ExternalPowerAvailable { get; set; }
     public bool ExternalPowerOn { get; set; }
+    public bool ExternalPowerAvailableUnindexed { get; set; }
+    public bool ExternalPowerOnUnindexed { get; set; }
     public bool CockpitDisplaysReady { get; set; }
     public bool ParkingBrakeSet { get; set; }
     public bool BeaconOn { get; set; }

@@ -103,6 +103,8 @@ internal sealed class CopilotService : Form
     private bool? _nativeBattery2On;
     private bool? _fbwBattery1Auto;
     private bool? _fbwBattery2Auto;
+    private float? _fbwBattery1Potential;
+    private float? _fbwBattery2Potential;
     private float? _nativeFuelPump1;
     private float? _nativeFuelPump2;
     private float? _nativeFuelPump3;
@@ -246,7 +248,9 @@ internal sealed class CopilotService : Form
         NativeLeftLandingLightSelector = 155,
         NativeRightLandingLightSelector = 156,
         FbwBattery1Auto = 157,
-        FbwBattery2Auto = 158
+        FbwBattery2Auto = 158,
+        FbwBattery1Potential = 159,
+        FbwBattery2Potential = 160
     }
 
     private enum ClientDataArea
@@ -309,7 +313,9 @@ internal sealed class CopilotService : Form
         NativeLeftLandingLightSelector = 155,
         NativeRightLandingLightSelector = 156,
         FbwBattery1Auto = 157,
-        FbwBattery2Auto = 158
+        FbwBattery2Auto = 158,
+        FbwBattery1Potential = 159,
+        FbwBattery2Potential = 160
     }
 
     private enum CopilotEvent
@@ -761,7 +767,7 @@ internal sealed class CopilotService : Form
         }
 
         var request = (Request)data.dwRequestID;
-        if (request is >= Request.NativeBattery1 and <= Request.FbwBattery2Auto)
+        if (request is >= Request.NativeBattery1 and <= Request.FbwBattery2Potential)
         {
             var value = ((MobiFlightFloat)data.dwData[0]).Value;
             if (request == Request.NativeBattery1)
@@ -774,11 +780,39 @@ internal sealed class CopilotService : Form
             }
             else if (request == Request.FbwBattery1Auto)
             {
-                _fbwBattery1Auto = value != 0;
+                var batteryOn = value != 0;
+                if (!_fbwBattery1Auto.HasValue || _fbwBattery1Auto.Value != batteryOn)
+                {
+                    AppLog.Write($"FBW A32NX BAT 1 AUTO changed to {value:F0}.");
+                }
+                _fbwBattery1Auto = batteryOn;
             }
             else if (request == Request.FbwBattery2Auto)
             {
-                _fbwBattery2Auto = value != 0;
+                var batteryOn = value != 0;
+                if (!_fbwBattery2Auto.HasValue || _fbwBattery2Auto.Value != batteryOn)
+                {
+                    AppLog.Write($"FBW A32NX BAT 2 AUTO changed to {value:F0}.");
+                }
+                _fbwBattery2Auto = batteryOn;
+            }
+            else if (request == Request.FbwBattery1Potential)
+            {
+                if (!_fbwBattery1Potential.HasValue
+                    || Math.Abs(_fbwBattery1Potential.Value - value) >= 0.1f)
+                {
+                    AppLog.Write($"FBW A32NX BAT 1 potential changed to {value:F1} V.");
+                }
+                _fbwBattery1Potential = value;
+            }
+            else if (request == Request.FbwBattery2Potential)
+            {
+                if (!_fbwBattery2Potential.HasValue
+                    || Math.Abs(_fbwBattery2Potential.Value - value) >= 0.1f)
+                {
+                    AppLog.Write($"FBW A32NX BAT 2 potential changed to {value:F1} V.");
+                }
+                _fbwBattery2Potential = value;
             }
             else
             {
@@ -1012,6 +1046,8 @@ internal sealed class CopilotService : Form
         RegisterMobiFlightFloat(sender, ClientDataDefinition.NativeRightLandingLightSelector, Request.NativeRightLandingLightSelector, 45 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwBattery1Auto, Request.FbwBattery1Auto, 46 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwBattery2Auto, Request.FbwBattery2Auto, 47 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwBattery1Potential, Request.FbwBattery1Potential, 48 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwBattery2Potential, Request.FbwBattery2Potential, 49 * sizeof(float));
 
         _mobiFlightRuntimeReady = true;
         _mobiFlightRuntimeInitializedUtc = DateTime.UtcNow;
@@ -1019,10 +1055,6 @@ internal sealed class CopilotService : Form
             "MF.SimVars.Add.(L:INI_OVHD_ELEC_BAT_1_PB_IS_AUTO_SWITCH)");
         SendMobiFlightRuntimeCommand(
             "MF.SimVars.Add.(L:INI_OVHD_ELEC_BAT_2_PB_IS_AUTO_SWITCH)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_BAT_1_PB_IS_AUTO)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_BAT_2_PB_IS_AUTO)");
         SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_OUTER_TANK_LEFT_PUMP_ON)");
         SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_INNER_TANK_LEFT_PUMP_ON)");
         SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_CENTER_TANK_LEFT_PUMP_ON)");
@@ -1067,6 +1099,14 @@ internal sealed class CopilotService : Form
         SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_TAXI_LIGHT_SWITCH)");
         SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:A320_LANDING_LIGHT_SWITCH_LEFT)");
         SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:A320_LANDING_LIGHT_SWITCH_RIGHT)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_BAT_1_PB_IS_AUTO)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_BAT_2_PB_IS_AUTO)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_ELEC_BAT_1_POTENTIAL)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_ELEC_BAT_2_POTENTIAL)");
         SendMobiFlightRuntimeCommand("MF.DummyCmd");
         AppendDashboardLog("iniBuilds native state monitoring connected.");
     }

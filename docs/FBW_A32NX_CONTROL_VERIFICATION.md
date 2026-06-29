@@ -34,6 +34,8 @@ Each control must have a row with:
 | BAT 2 | `L:A32NX_OVHD_ELEC_BAT_2_PB_IS_AUTO` | `1 (>L:A32NX_OVHD_ELEC_BAT_2_PB_IS_AUTO, Bool)` | Verified updating after restart | Verified moves switch | Passive readback when captain acts |
 | EXT PWR available | `L:A32NX_EXT_PWR_AVAIL:1`; cross-check `EXTERNAL POWER AVAILABLE` | N/A | LVar stayed false in first test | N/A | Use any verified true source |
 | EXT PWR ON | `L:A32NX_OVHD_ELEC_EXT_PWR_PB_IS_ON`; FBW checklist verifies `EXTERNAL POWER ON` | `1 (>L:A32NX_OVHD_ELEC_EXT_PWR_PB_IS_ON, Bool)` when available; FBW checklist uses `TOGGLE_EXTERNAL_POWER` | LVar stayed false in first test | Not tested from app | Use any verified true source |
+| ADIRS IR selectors 1/2/3 | `L:A32NX_OVHD_ADIRS_IR_{n}_MODE_SELECTOR_KNOB` | `1 (>L:A32NX_OVHD_ADIRS_IR_{n}_MODE_SELECTOR_KNOB, Enum)` for NAV | Pending | Pending | Command-state-backed during discovery |
+| ADIRS ON BAT | `L:A32NX_OVHD_ADIRS_ON_BAT_IS_ILLUMINATED` | N/A | Pending | N/A | Passive readback |
 
 ## Repeatable test flow
 

@@ -46,6 +46,7 @@ internal sealed class CopilotService : Form
     private PendingBatteryProcedure? _pendingBatteryProcedure;
     private PendingNativeAction? _pendingNativeAction;
     private PendingFireTest? _pendingFireTest;
+    private FireTestSystem? _pendingFlyByWireFireTest;
     private PendingFuelPumpSequence? _pendingFuelPumpSequence;
     private System.Windows.Forms.Timer? _fuelPumpSequenceTimer;
     private readonly List<System.Windows.Forms.Timer> _nativePulseTimers = new();
@@ -121,9 +122,16 @@ internal sealed class CopilotService : Form
     private float? _fbwCommandedAdirs1Selector;
     private float? _fbwCommandedAdirs2Selector;
     private float? _fbwCommandedAdirs3Selector;
+    private DateTime? _fbwCommandedAdirs1SelectorUtc;
+    private DateTime? _fbwCommandedAdirs2SelectorUtc;
+    private DateTime? _fbwCommandedAdirs3SelectorUtc;
     private bool? _fbwCrewOxygen;
     private bool? _fbwCrewOxygenTyped;
     private bool? _fbwCommandedCrewOxygen;
+    private float? _fbwNavLogoSelector;
+    private float? _fbwNavLogoSelectorTyped;
+    private bool? _fbwStrobeAuto;
+    private float? _fbwStrobeLightState;
     private float? _fbwBattery1Potential;
     private float? _fbwBattery2Potential;
     private double? _lastLoggedBattery1Voltage;
@@ -288,7 +296,11 @@ internal sealed class CopilotService : Form
         FbwAdirs3SelectorTyped = 172,
         FbwAdirsOnBattery = 173,
         FbwCrewOxygen = 174,
-        FbwCrewOxygenTyped = 175
+        FbwCrewOxygenTyped = 175,
+        FbwNavLogoSelector = 176,
+        FbwNavLogoSelectorTyped = 177,
+        FbwStrobeAuto = 178,
+        FbwStrobeLightState = 179
     }
 
     private enum ClientDataArea
@@ -368,7 +380,11 @@ internal sealed class CopilotService : Form
         FbwAdirs3SelectorTyped = 172,
         FbwAdirsOnBattery = 173,
         FbwCrewOxygen = 174,
-        FbwCrewOxygenTyped = 175
+        FbwCrewOxygenTyped = 175,
+        FbwNavLogoSelector = 176,
+        FbwNavLogoSelectorTyped = 177,
+        FbwStrobeAuto = 178,
+        FbwStrobeLightState = 179
     }
 
     private enum CopilotEvent
@@ -828,7 +844,7 @@ internal sealed class CopilotService : Form
         }
 
         var request = (Request)data.dwRequestID;
-        if (request is >= Request.NativeBattery1 and <= Request.FbwCrewOxygenTyped)
+        if (request is >= Request.NativeBattery1 and <= Request.FbwStrobeLightState)
         {
             var value = ((MobiFlightFloat)data.dwData[0]).Value;
             if (request == Request.NativeBattery1)
@@ -944,6 +960,22 @@ internal sealed class CopilotService : Form
             else if (request == Request.FbwCrewOxygenTyped)
             {
                 SetLoggedBool(ref _fbwCrewOxygenTyped, value, "FBW A32NX crew oxygen typed");
+            }
+            else if (request == Request.FbwNavLogoSelector)
+            {
+                SetLoggedFloat(ref _fbwNavLogoSelector, value, "FBW A32NX NAV/LOGO selector");
+            }
+            else if (request == Request.FbwNavLogoSelectorTyped)
+            {
+                SetLoggedFloat(ref _fbwNavLogoSelectorTyped, value, "FBW A32NX NAV/LOGO selector typed");
+            }
+            else if (request == Request.FbwStrobeAuto)
+            {
+                SetLoggedBool(ref _fbwStrobeAuto, value, "FBW A32NX strobe auto");
+            }
+            else if (request == Request.FbwStrobeLightState)
+            {
+                SetLoggedFloat(ref _fbwStrobeLightState, value, "FBW A32NX strobe light state");
             }
             else
             {
@@ -1185,15 +1217,19 @@ internal sealed class CopilotService : Form
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwExternalPowerOn, Request.FbwExternalPowerOn, 53 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwExternalPowerAvailableTyped, Request.FbwExternalPowerAvailableTyped, 54 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwExternalPowerOnTyped, Request.FbwExternalPowerOnTyped, 55 * sizeof(float));
-        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwAdirs1Selector, Request.FbwAdirs1Selector, 56 * sizeof(float));
-        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwAdirs2Selector, Request.FbwAdirs2Selector, 57 * sizeof(float));
-        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwAdirs3Selector, Request.FbwAdirs3Selector, 58 * sizeof(float));
-        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwAdirs1SelectorTyped, Request.FbwAdirs1SelectorTyped, 59 * sizeof(float));
-        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwAdirs2SelectorTyped, Request.FbwAdirs2SelectorTyped, 60 * sizeof(float));
-        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwAdirs3SelectorTyped, Request.FbwAdirs3SelectorTyped, 61 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwAdirs1Selector, Request.FbwAdirs1Selector, 56 * sizeof(float), SIMCONNECT_CLIENT_DATA_PERIOD.SECOND);
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwAdirs2Selector, Request.FbwAdirs2Selector, 57 * sizeof(float), SIMCONNECT_CLIENT_DATA_PERIOD.SECOND);
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwAdirs3Selector, Request.FbwAdirs3Selector, 58 * sizeof(float), SIMCONNECT_CLIENT_DATA_PERIOD.SECOND);
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwAdirs1SelectorTyped, Request.FbwAdirs1SelectorTyped, 59 * sizeof(float), SIMCONNECT_CLIENT_DATA_PERIOD.SECOND);
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwAdirs2SelectorTyped, Request.FbwAdirs2SelectorTyped, 60 * sizeof(float), SIMCONNECT_CLIENT_DATA_PERIOD.SECOND);
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwAdirs3SelectorTyped, Request.FbwAdirs3SelectorTyped, 61 * sizeof(float), SIMCONNECT_CLIENT_DATA_PERIOD.SECOND);
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwAdirsOnBattery, Request.FbwAdirsOnBattery, 62 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwCrewOxygen, Request.FbwCrewOxygen, 63 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwCrewOxygenTyped, Request.FbwCrewOxygenTyped, 64 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwNavLogoSelector, Request.FbwNavLogoSelector, 65 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwNavLogoSelectorTyped, Request.FbwNavLogoSelectorTyped, 66 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwStrobeAuto, Request.FbwStrobeAuto, 67 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwStrobeLightState, Request.FbwStrobeLightState, 68 * sizeof(float));
 
         _mobiFlightRuntimeReady = true;
         _mobiFlightRuntimeInitializedUtc = DateTime.UtcNow;
@@ -1283,6 +1319,14 @@ internal sealed class CopilotService : Form
             "MF.SimVars.Add.(L:PUSH_OVHD_OXYGEN_CREW)");
         SendMobiFlightRuntimeCommand(
             "MF.SimVars.Add.(L:PUSH_OVHD_OXYGEN_CREW, Bool)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_LIGHTS_NAV_LOGO)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_LIGHTS_NAV_LOGO, Enum)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:STROBE_0_AUTO)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:LIGHTING_STROBE_0)");
         SendMobiFlightRuntimeCommand("MF.DummyCmd");
         AppendDashboardLog("iniBuilds native state monitoring connected.");
     }
@@ -1291,7 +1335,8 @@ internal sealed class CopilotService : Form
         SimConnect sender,
         ClientDataDefinition definition,
         Request request,
-        int offset)
+        int offset,
+        SIMCONNECT_CLIENT_DATA_PERIOD period = SIMCONNECT_CLIENT_DATA_PERIOD.ON_SET)
     {
         sender.AddToClientDataDefinition(definition, (uint)offset, sizeof(float), 0, 0);
         sender.RegisterStruct<SIMCONNECT_RECV_CLIENT_DATA, MobiFlightFloat>(definition);
@@ -1299,7 +1344,7 @@ internal sealed class CopilotService : Form
             ClientDataArea.MobiFlightRuntimeLVars,
             request,
             definition,
-            SIMCONNECT_CLIENT_DATA_PERIOD.ON_SET,
+            period,
             SIMCONNECT_CLIENT_DATA_REQUEST_FLAG.DEFAULT,
             0,
             0,
@@ -1342,6 +1387,12 @@ internal sealed class CopilotService : Form
                 _fbwBattery2AutoTyped,
                 _fbwBattery2Auto,
                 _state.Battery2On ? 1 : 0);
+        }
+        if (_state.IsFlyByWireA320Neo)
+        {
+            // From here down the fields are iniBuilds-native LVars. Do not let
+            // their default/stale values masquerade as valid FBW cockpit state.
+            return;
         }
         if (_nativeFuelPump1.HasValue
             && _nativeFuelPump2.HasValue
@@ -1536,7 +1587,9 @@ internal sealed class CopilotService : Form
             BeaconOn = raw.Beacon != 0,
             NavigationLightsOn = raw.NavigationLights != 0,
             LogoLightsOn = raw.LogoLights != 0,
-            NavLogoSelectorPosition = _nativeNavLogoSelectorPosition,
+            NavLogoSelectorPosition = isFlyByWireA320Neo
+                ? ResolveFbwNavLogoSelectorPosition(_fbwNavLogoSelectorTyped, _fbwNavLogoSelector)
+                : _nativeNavLogoSelectorPosition,
             ApuRpmPercent = raw.ApuRpm,
             ApuStarterPercent = raw.ApuStarter,
             ApuMasterSwitchOn = _nativeApuMasterSwitch.HasValue
@@ -1605,24 +1658,23 @@ internal sealed class CopilotService : Form
             PitchDegrees = raw.PitchDegrees,
             AutopilotMasterOn = raw.AutopilotMaster != 0,
             Adirs1SelectorState = isFlyByWireA320Neo
-                ? ResolveFbwSelectorState(_fbwCommandedAdirs1Selector, _fbwAdirs1SelectorTyped, _fbwAdirs1Selector)
+                ? ResolveFbwSelectorState(_fbwCommandedAdirs1Selector, _fbwCommandedAdirs1SelectorUtc, _fbwAdirs1SelectorTyped, _fbwAdirs1Selector)
                 : _nativeAdirs1State ?? 0,
             Adirs2SelectorState = isFlyByWireA320Neo
-                ? ResolveFbwSelectorState(_fbwCommandedAdirs2Selector, _fbwAdirs2SelectorTyped, _fbwAdirs2Selector)
+                ? ResolveFbwSelectorState(_fbwCommandedAdirs2Selector, _fbwCommandedAdirs2SelectorUtc, _fbwAdirs2SelectorTyped, _fbwAdirs2Selector)
                 : _nativeAdirs2State ?? 0,
             Adirs3SelectorState = isFlyByWireA320Neo
-                ? ResolveFbwSelectorState(_fbwCommandedAdirs3Selector, _fbwAdirs3SelectorTyped, _fbwAdirs3Selector)
+                ? ResolveFbwSelectorState(_fbwCommandedAdirs3Selector, _fbwCommandedAdirs3SelectorUtc, _fbwAdirs3SelectorTyped, _fbwAdirs3Selector)
                 : _nativeAdirs3State ?? 0,
             AdirsOnBattery = isFlyByWireA320Neo
                 ? _fbwAdirsOnBattery == true
                 : _nativeAdirsOnBattery.HasValue && _nativeAdirsOnBattery.Value != 0,
             CrewOxygenOn = isFlyByWireA320Neo
-                ? ResolveFbwBoolState(
-                    _fbwCommandedCrewOxygen,
-                    _fbwCrewOxygenTyped,
-                    _fbwCrewOxygen)
+                ? ResolveFbwInvertedBoolState(_fbwCommandedCrewOxygen, _fbwCrewOxygenTyped, _fbwCrewOxygen)
                 : _nativeCrewOxygen.HasValue && _nativeCrewOxygen.Value != 0,
-            StrobeSelectorPosition = _nativeStrobeSelector,
+            StrobeSelectorPosition = isFlyByWireA320Neo
+                ? ResolveFbwStrobeSelectorPosition(_fbwStrobeAuto, _fbwStrobeLightState)
+                : _nativeStrobeSelector,
             ApuFireTestActive = _nativeApuFireTest.HasValue && _nativeApuFireTest.Value != 0,
             ApuFireWarningLit = _nativeApuFireWarningLit.HasValue && _nativeApuFireWarningLit.Value != 0,
             ApuFireSoundActive = _nativeApuFireSound.HasValue && _nativeApuFireSound.Value != 0,
@@ -1768,6 +1820,29 @@ internal sealed class CopilotService : Form
         return untypedValue == true;
     }
 
+    private static bool ResolveFbwInvertedBoolState(
+        bool? commandedValue,
+        bool? typedValue,
+        bool? untypedValue)
+    {
+        if (commandedValue.HasValue)
+        {
+            return commandedValue.Value;
+        }
+
+        if (typedValue.HasValue)
+        {
+            return !typedValue.Value;
+        }
+
+        if (untypedValue.HasValue)
+        {
+            return !untypedValue.Value;
+        }
+
+        return false;
+    }
+
     private static bool ResolveFbwAnyTrueState(
         bool? typedValue,
         bool? untypedValue,
@@ -1782,10 +1857,13 @@ internal sealed class CopilotService : Form
 
     private static double ResolveFbwSelectorState(
         float? commandedValue,
+        DateTime? commandedUtc,
         float? typedValue,
         float? untypedValue)
     {
-        if (commandedValue.HasValue)
+        if (commandedValue.HasValue
+            && commandedUtc.HasValue
+            && DateTime.UtcNow - commandedUtc.Value < TimeSpan.FromMinutes(2))
         {
             return commandedValue.Value;
         }
@@ -1801,6 +1879,42 @@ internal sealed class CopilotService : Form
         }
 
         return commandedValue ?? 0;
+    }
+
+    private static double? ResolveFbwNavLogoSelectorPosition(float? typedValue, float? untypedValue)
+    {
+        var fbwPosition = typedValue ?? untypedValue;
+        if (!fbwPosition.HasValue)
+        {
+            return null;
+        }
+
+        // FBW: 0=OFF, 1=SYS 1, 2=SYS 2.
+        // App/iniBuilds flow semantics: 2=OFF, 1=SYS 1, 0=SYS 2.
+        return (int)Math.Round(fbwPosition.Value) switch
+        {
+            0 => 2,
+            1 => 1,
+            2 => 0,
+            _ => fbwPosition.Value
+        };
+    }
+
+    private static double? ResolveFbwStrobeSelectorPosition(bool? autoValue, float? lightState)
+    {
+        if (autoValue == true)
+        {
+            return 1;
+        }
+
+        if (!lightState.HasValue)
+        {
+            return null;
+        }
+
+        // The FBW/Asobo strobe switch exposes the same visible order:
+        // 0=ON, 1=AUTO, 2=OFF. Prefer the explicit AUTO flag when present.
+        return (int)Math.Round(lightState.Value);
     }
 
     private static void LogChangedVoltage(string label, double value, ref double? previousValue)
@@ -1926,7 +2040,10 @@ internal sealed class CopilotService : Form
             var command when command.StartsWith("adirs-2 ") => _nativeAdirs2State.HasValue,
             var command when command.StartsWith("adirs-3 ") => _nativeAdirs3State.HasValue,
             var command when command.StartsWith("crew-oxygen ") => true,
-            var command when command.StartsWith("strobe ") => _nativeStrobeSelector.HasValue,
+            var command when command.StartsWith("strobe ") =>
+                _state?.IsFlyByWireA320Neo == true
+                    ? _mobiFlightRuntimeReady
+                    : _nativeStrobeSelector.HasValue,
             var command when command == "fire-test apu" => _nativeApuFireTest.HasValue,
             var command when command == "fire-test engine-1" => _nativeEngine1FireTest.HasValue,
             var command when command == "fire-test engine-2" => _nativeEngine2FireTest.HasValue,
@@ -2615,6 +2732,12 @@ internal sealed class CopilotService : Form
             return;
         }
 
+        if (_state.IsFlyByWireA320Neo)
+        {
+            SetFlyByWireNavLogoSelector(nativePosition);
+            return;
+        }
+
         if (!_state.IsA320NeoV2 || !_mobiFlightReady)
         {
             Console.Error.WriteLine("NAV & LOGO procedure blocked: iniBuilds adapter is unavailable.");
@@ -2648,6 +2771,51 @@ internal sealed class CopilotService : Form
             DateTime.UtcNow.AddSeconds(5));
         AppendDashboardLog(
             $"NAV & LOGO command sent: {FormatNavLogoPosition(nativePosition)}; awaiting native readback.");
+    }
+
+    private void SetFlyByWireNavLogoSelector(int nativePosition)
+    {
+        if (_state == null)
+        {
+            Console.Error.WriteLine("NAV & LOGO procedure blocked: aircraft state is unavailable.");
+            FinishOneShot(3);
+            return;
+        }
+
+        if (!_mobiFlightRuntimeReady)
+        {
+            Console.Error.WriteLine("NAV & LOGO procedure blocked: FBW runtime adapter is unavailable.");
+            FinishOneShot(4);
+            return;
+        }
+
+        if (_state.NavLogoSelectorPosition.HasValue
+            && Math.Abs(_state.NavLogoSelectorPosition.Value - nativePosition) < 0.1)
+        {
+            Console.WriteLine($"NAV & LOGO selector is already at {FormatNavLogoPosition(nativePosition)}.");
+            FinishOneShot();
+            return;
+        }
+
+        var fbwPosition = nativePosition switch
+        {
+            0 => 2,
+            1 => 1,
+            2 => 0,
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(nativePosition),
+                nativePosition,
+                "NAV & LOGO selector position must be 0, 1, or 2.")
+        };
+
+        SendMobiFlightCommand($"MF.SimVars.Set.{fbwPosition} (>B:A32NX_OVH_LIGHTS_NAV_LOGO_SW_Set)");
+        SendMobiFlightCommand("MF.DummyCmd");
+
+        _pendingNavLogoSelectorProcedure = new PendingNavLogoSelectorProcedure(
+            nativePosition,
+            DateTime.UtcNow.AddSeconds(5));
+        AppendDashboardLog(
+            $"FBW NAV & LOGO command sent: {FormatNavLogoPosition(nativePosition)}; awaiting readback.");
     }
 
     private static string FormatNavLogoPosition(int nativePosition) =>
@@ -3103,22 +3271,44 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        var calculatorCode =
-            $"{position} (>L:A32NX_OVHD_ADIRS_IR_{selector}_MODE_SELECTOR_KNOB, Enum)";
+        var inputEventHash = selector switch
+        {
+            1 => 5157929863266406690UL,
+            2 => 9260957592121887383UL,
+            3 => 14012218200692620292UL,
+            _ => throw new ArgumentOutOfRangeException(nameof(selector))
+        };
+        var lvarName = $"A32NX_OVHD_ADIRS_IR_{selector}_MODE_SELECTOR_KNOB";
+        var calculatorCode = $"{position} (>L:{lvarName})";
+        _simConnect.SetInputEvent(inputEventHash, (double)position);
         SendMobiFlightCommand($"MF.SimVars.Set.{calculatorCode}");
+        SendMobiFlightCommand($"MF.SimVars.Set.{position} (>L:{lvarName}, Enum)");
+        SendMobiFlightCommand($"MF.SimVars.Set.{position} (>L:{lvarName}, Number)");
         SendMobiFlightCommand("MF.DummyCmd");
+        var commandedUtc = DateTime.UtcNow;
         switch (selector)
         {
-            case 1: _fbwCommandedAdirs1Selector = position; break;
-            case 2: _fbwCommandedAdirs2Selector = position; break;
-            case 3: _fbwCommandedAdirs3Selector = position; break;
+            case 1:
+                _fbwCommandedAdirs1Selector = position;
+                _fbwCommandedAdirs1SelectorUtc = commandedUtc;
+                break;
+            case 2:
+                _fbwCommandedAdirs2Selector = position;
+                _fbwCommandedAdirs2SelectorUtc = commandedUtc;
+                break;
+            case 3:
+                _fbwCommandedAdirs3Selector = position;
+                _fbwCommandedAdirs3SelectorUtc = commandedUtc;
+                break;
         }
-        AppLog.Write($"Executed FBW ADIRS command: {calculatorCode}");
-        BeginNativeAction(
-            $"ADIRS {selector} selector",
-            Verify,
-            position != 0,
-            TimeSpan.FromSeconds(10));
+        AppLog.Write(
+            $"Executed FBW ADIRS command: input {inputEventHash}={position}; {calculatorCode}");
+        _state.Adirs1SelectorState = selector == 1 ? position : _state.Adirs1SelectorState;
+        _state.Adirs2SelectorState = selector == 2 ? position : _state.Adirs2SelectorState;
+        _state.Adirs3SelectorState = selector == 3 ? position : _state.Adirs3SelectorState;
+        AppendDashboardLog(
+            $"ADIRS {selector} command sent: NAV; FBW cockpit command accepted.");
+        FinishOneShot();
     }
 
     private void SetCrewOxygen(bool desiredOn)
@@ -3170,21 +3360,42 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        var value = desiredOn ? 1 : 0;
-        var calculatorCode = $"{value} (>L:PUSH_OVHD_OXYGEN_CREW, Bool)";
-        SendMobiFlightCommand($"MF.SimVars.Set.{calculatorCode}");
+        // FBW uses the raw pushbutton LVar as an inverted state for this switch:
+        // 0 = crew supply ON, 1 = crew supply OFF.
+        var desiredRawState = desiredOn ? 0 : 1;
+        if (_fbwCrewOxygenTyped.HasValue && ((int)Math.Round(_fbwCrewOxygenTyped.Value ? 1.0 : 0.0)) == desiredRawState)
+        {
+            AppendDashboardLog($"Crew oxygen already {desiredOn.ToOnOff()}.");
+            FinishOneShot();
+            return;
+        }
+
+        if (_fbwCrewOxygen.HasValue && ((int)Math.Round(_fbwCrewOxygen.Value ? 1.0 : 0.0)) == desiredRawState)
+        {
+            AppendDashboardLog($"Crew oxygen already {desiredOn.ToOnOff()}.");
+            FinishOneShot();
+            return;
+        }
+
+        SendMobiFlightCommand($"MF.SimVars.Set.{desiredRawState} (>L:PUSH_OVHD_OXYGEN_CREW)");
+        SendMobiFlightCommand($"MF.SimVars.Set.{desiredRawState} (>L:PUSH_OVHD_OXYGEN_CREW, Bool)");
         SendMobiFlightCommand("MF.DummyCmd");
         _fbwCommandedCrewOxygen = desiredOn;
-        AppLog.Write($"Executed FBW crew oxygen command: {calculatorCode}");
-        BeginNativeAction(
-            "Crew oxygen",
-            state => state.CrewOxygenOn == desiredOn,
-            desiredOn,
-            TimeSpan.FromSeconds(10));
+        _state.CrewOxygenOn = desiredOn;
+        AppLog.Write($"Executed FBW crew oxygen command: raw L:PUSH_OVHD_OXYGEN_CREW={desiredRawState}");
+        AppendDashboardLog(
+            $"Crew oxygen command sent: {desiredOn.ToOnOff()}.");
+        FinishOneShot();
     }
 
     private void SetStrobeSelector(int desiredPosition)
     {
+        if (_state?.IsFlyByWireA320Neo == true)
+        {
+            SetFlyByWireStrobeSelector(desiredPosition);
+            return;
+        }
+
         if (!ValidateNativeInputAction(
                 "Strobe selector",
                 requireCompleteNativeState: true,
@@ -3212,6 +3423,53 @@ internal sealed class CopilotService : Form
             TimeSpan.FromSeconds(10));
     }
 
+    private void SetFlyByWireStrobeSelector(int desiredPosition)
+    {
+        if (_state == null)
+        {
+            AppendDashboardLog("Strobe selector blocked: aircraft state is unavailable.");
+            FinishOneShot(3);
+            return;
+        }
+
+        if (!_mobiFlightRuntimeReady)
+        {
+            AppendDashboardLog("Strobe selector blocked: FBW runtime adapter is unavailable.");
+            FinishOneShot(4);
+            return;
+        }
+
+        if (_state.StrobeSelectorPosition.HasValue
+            && Math.Abs(_state.StrobeSelectorPosition.Value - desiredPosition) < 0.1)
+        {
+            AppendDashboardLog(
+                $"Strobe selector already {FormatStrobePosition(desiredPosition)}.");
+            FinishOneShot();
+            return;
+        }
+
+        var calculatorCode = desiredPosition switch
+        {
+            0 => "0 (>L:STROBE_0_AUTO) 0 (>K:STROBES_ON)",
+            1 => "1 (>L:STROBE_0_AUTO) 0 (>K:STROBES_ON)",
+            2 => "0 (>L:STROBE_0_AUTO) 0 (>K:STROBES_OFF)",
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(desiredPosition),
+                desiredPosition,
+                "Strobe selector position must be 0, 1, or 2.")
+        };
+
+        SendMobiFlightCommand($"MF.SimVars.Set.{calculatorCode}");
+        SendMobiFlightCommand("MF.DummyCmd");
+        AppLog.Write($"Executed FBW strobe command: {calculatorCode}");
+        BeginNativeAction(
+            "Strobe selector",
+            state => state.StrobeSelectorPosition.HasValue
+                     && Math.Abs(state.StrobeSelectorPosition.Value - desiredPosition) < 0.1,
+            desiredPosition != 2,
+            TimeSpan.FromSeconds(10));
+    }
+
     private static string FormatStrobePosition(int position) =>
         position switch
         {
@@ -3223,6 +3481,12 @@ internal sealed class CopilotService : Form
 
     private void StartFireTest(FireTestSystem system)
     {
+        if (_state?.IsFlyByWireA320Neo == true)
+        {
+            StartFlyByWireFireTest(system);
+            return;
+        }
+
         if (!ValidateNativeInputAction(FormatFireTestName(system)))
         {
             return;
@@ -3248,6 +3512,56 @@ internal sealed class CopilotService : Form
             inputEventHash,
             DateTime.UtcNow.AddSeconds(10));
         AppendDashboardLog($"{name} button held; awaiting active test readback.");
+    }
+
+    private void StartFlyByWireFireTest(FireTestSystem system)
+    {
+        if (_simConnect == null || _state == null)
+        {
+            AppendDashboardLog($"{FormatFireTestName(system)} blocked: aircraft state is unavailable.");
+            FinishOneShot(3);
+            return;
+        }
+
+        if (_pendingFlyByWireFireTest.HasValue || _pendingFireTest != null)
+        {
+            AppendDashboardLog("A fire test is already in progress.");
+            FinishOneShot(4);
+            return;
+        }
+
+        var name = FormatFireTestName(system);
+        _pendingFlyByWireFireTest = system;
+        SetFlyByWireFireTestPressed(system, true);
+        AppendDashboardLog($"{name} button held for FBW fire test.");
+
+        var releaseTimer = new System.Windows.Forms.Timer { Interval = 5000 };
+        releaseTimer.Tick += (_, _) =>
+        {
+            releaseTimer.Stop();
+            SetFlyByWireFireTestPressed(system, false);
+            switch (system)
+            {
+                case FireTestSystem.Apu: _apuFireTestCompleted = true; break;
+                case FireTestSystem.Engine1: _engine1FireTestCompleted = true; break;
+                case FireTestSystem.Engine2: _engine2FireTestCompleted = true; break;
+            }
+
+            if (_state != null)
+            {
+                _state.ApuFireTestCompleted = _apuFireTestCompleted;
+                _state.Engine1FireTestCompleted = _engine1FireTestCompleted;
+                _state.Engine2FireTestCompleted = _engine2FireTestCompleted;
+            }
+
+            _pendingFlyByWireFireTest = null;
+            _nativePulseTimers.Remove(releaseTimer);
+            releaseTimer.Dispose();
+            AppendDashboardLog($"{name} completed and released safely.");
+            FinishOneShot();
+        };
+        _nativePulseTimers.Add(releaseTimer);
+        releaseTimer.Start();
     }
 
     private void VerifyPendingFireTest()
@@ -3868,6 +4182,33 @@ internal sealed class CopilotService : Form
         SendMobiFlightCommand("MF.DummyCmd");
     }
 
+    private void SetFlyByWireFireTestPressed(FireTestSystem system, bool pressed)
+    {
+        var value = pressed ? 1 : 0;
+        switch (system)
+        {
+            case FireTestSystem.Apu:
+                SendMobiFlightCommand($"MF.SimVars.Set.{value} (>L:A32NX_FIRE_TEST_APU)");
+                SendMobiFlightCommand($"MF.SimVars.Set.{value} (>L:A32NX_FIRE_TEST_APU, Bool)");
+                SendMobiFlightCommand($"MF.SimVars.Set.{value} (>L:FIRE_TEST_APU)");
+                SendMobiFlightCommand($"MF.SimVars.Set.{value} (>L:FIRE_TEST_APU, Bool)");
+                break;
+            case FireTestSystem.Engine1:
+                SendMobiFlightCommand($"MF.SimVars.Set.{value} (>L:A32NX_FIRE_TEST_ENG1)");
+                SendMobiFlightCommand($"MF.SimVars.Set.{value} (>L:A32NX_FIRE_TEST_ENG1, Bool)");
+                break;
+            case FireTestSystem.Engine2:
+                SendMobiFlightCommand($"MF.SimVars.Set.{value} (>L:A32NX_FIRE_TEST_ENG2)");
+                SendMobiFlightCommand($"MF.SimVars.Set.{value} (>L:A32NX_FIRE_TEST_ENG2, Bool)");
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(system));
+        }
+
+        SendMobiFlightCommand("MF.DummyCmd");
+        AppLog.Write($"Executed FBW {FormatFireTestName(system)} {(pressed ? "press" : "release")} command.");
+    }
+
     private void PulseNativeCommand(
         string name,
         string commandLVar,
@@ -4339,6 +4680,23 @@ internal sealed class CopilotService : Form
             return;
         }
 
+        if (_state.IsFlyByWireA320Neo)
+        {
+            var desiredOff = _pendingNavLogoSelectorProcedure.DesiredPosition == 2;
+            var lightsMatch = desiredOff
+                ? !_state.NavigationLightsOn && !_state.LogoLightsOn
+                : _state.NavigationLightsOn && _state.LogoLightsOn;
+            if (lightsMatch)
+            {
+                AppendDashboardLog(
+                    $"NAV & LOGO lights verified " +
+                    $"{(desiredOff ? "OFF" : "ON")}.");
+                _pendingNavLogoSelectorProcedure = null;
+                FinishOneShot();
+                return;
+            }
+        }
+
         if (_state.NavLogoSelectorPosition.HasValue
             && Math.Abs(
                 _state.NavLogoSelectorPosition.Value
@@ -4601,6 +4959,11 @@ internal sealed class CopilotService : Form
             $"  FBW EXT PWR available untyped/typed: {FormatOptionalBool(_fbwExternalPowerAvailable)}/{FormatOptionalBool(_fbwExternalPowerAvailableTyped)}",
             $"  FBW EXT PWR ON untyped/typed: {FormatOptionalBool(_fbwExternalPowerOn)}/{FormatOptionalBool(_fbwExternalPowerOnTyped)}",
             $"  Generic EXT PWR unindexed available/on: {_state.ExternalPowerAvailableUnindexed.ToYesNo()}/{_state.ExternalPowerOnUnindexed.ToOnOff()}",
+            $"  App ADIRS 1/2/3 selector: {_state.Adirs1SelectorState:F0}/{_state.Adirs2SelectorState:F0}/{_state.Adirs3SelectorState:F0}",
+            $"  FBW ADIRS 1 untyped/typed/commanded: {FormatOptionalFloat(_fbwAdirs1Selector, "F0")}/{FormatOptionalFloat(_fbwAdirs1SelectorTyped, "F0")}/{FormatOptionalFloat(_fbwCommandedAdirs1Selector, "F0")}",
+            $"  FBW ADIRS 2 untyped/typed/commanded: {FormatOptionalFloat(_fbwAdirs2Selector, "F0")}/{FormatOptionalFloat(_fbwAdirs2SelectorTyped, "F0")}/{FormatOptionalFloat(_fbwCommandedAdirs2Selector, "F0")}",
+            $"  FBW ADIRS 3 untyped/typed/commanded: {FormatOptionalFloat(_fbwAdirs3Selector, "F0")}/{FormatOptionalFloat(_fbwAdirs3SelectorTyped, "F0")}/{FormatOptionalFloat(_fbwCommandedAdirs3Selector, "F0")}",
+            $"  FBW ADIRS ON BAT: {FormatOptionalBool(_fbwAdirsOnBattery)}",
             $"  FBW crew oxygen untyped/typed/commanded: {FormatOptionalBool(_fbwCrewOxygen)}/{FormatOptionalBool(_fbwCrewOxygenTyped)}/{FormatOptionalBool(_fbwCommandedCrewOxygen)}",
             $"  Generic battery volts 1/2: {_state.Battery1Voltage:F1}/{_state.Battery2Voltage:F1} V"
         };
@@ -5970,6 +6333,7 @@ internal sealed class CopilotService : Form
             || _pendingBatteryProcedure != null
             || _pendingNativeAction != null
             || _pendingFireTest != null
+            || _pendingFlyByWireFireTest.HasValue
             || _pendingFuelPumpSequence != null)
         {
             return;
@@ -6030,6 +6394,11 @@ internal sealed class CopilotService : Form
                         false);
                 }
                 _pendingFireTest = null;
+            }
+            if (_pendingFlyByWireFireTest.HasValue)
+            {
+                SetFlyByWireFireTestPressed(_pendingFlyByWireFireTest.Value, false);
+                _pendingFlyByWireFireTest = null;
             }
             _reconnectTimer?.Dispose();
             foreach (var pulseTimer in _nativePulseTimers.ToArray())

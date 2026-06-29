@@ -9,6 +9,29 @@ namespace Msfs2024Ai.Copilot.Tests;
 public sealed class ProcedureRecoveryTests
 {
     [TestMethod]
+    public void PowerUpFlowAcceptsFlyByWireA32NxForDiscovery()
+    {
+        var commands = new List<string>();
+        var runner = new ProcedureRunner(
+            commands.Add,
+            () => AutomationPolicy.AutomaticWhenSupported);
+        var state = new AircraftState
+        {
+            Title = "FlyByWire A32NX",
+            OnGround = true,
+            GroundSpeedKnots = 0,
+            Engine1Running = false,
+            Engine2Running = false
+        };
+
+        runner.Start(A320ProcedureLibrary.PowerUpAndInitialSetup, state);
+
+        Assert.AreEqual("captain-batteries", runner.CurrentStep?.Id);
+        Assert.IsTrue(state.IsFlyByWireA320Neo);
+        Assert.IsTrue(state.IsSupportedA320);
+    }
+
+    [TestMethod]
     public void TakeoffFlowStartedAirborneSkipsHistoricalRunwayMilestones()
     {
         var commands = new List<string>();

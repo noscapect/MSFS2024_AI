@@ -1387,9 +1387,9 @@ internal sealed class CopilotService : Form
         _initialStateReceived = true;
         Console.WriteLine($"Aircraft: {_state.Title}");
         AppendDashboardLog($"Aircraft detected: {_state.Title}");
-        if (!_state.IsA320NeoV2)
+        if (!_state.IsSupportedA320)
         {
-            Console.Error.WriteLine("Warning: this build currently supports only the iniBuilds A320neo V2.");
+            Console.Error.WriteLine("Warning: this build currently supports only iniBuilds A320neo V2 and experimental FBW A32NX discovery mode.");
         }
 
         if (_oneShotCommand == null)
@@ -4980,8 +4980,12 @@ internal sealed class CopilotService : Form
                 : System.Drawing.Color.FromArgb(150, 48, 48));
         SetStatusBadge(
             _aircraftBadgeLabel,
-            _state.IsA320NeoV2 ? "A320neo V2" : "AIRCRAFT UNSUPPORTED",
             _state.IsA320NeoV2
+                ? "iniBuilds A320neo V2"
+                : _state.IsFlyByWireA320Neo
+                    ? "FBW A32NX EXPERIMENTAL"
+                    : "AIRCRAFT UNSUPPORTED",
+            _state.IsSupportedA320
                 ? System.Drawing.Color.FromArgb(39, 130, 87)
                 : System.Drawing.Color.FromArgb(172, 113, 37));
         SetStatusBadge(

@@ -111,7 +111,7 @@ internal static class A320ProcedureLibrary
             "1. Power Up & Initial Setup",
             new[]
             {
-                Observe("aircraft", "A320neo V2 loaded", state => state.IsA320NeoV2),
+                Observe("aircraft", "Supported A320 loaded", state => state.IsSupportedA320),
                 Observe("stationary", "Aircraft stationary on the ground", state => state.OnGround && state.GroundSpeedKnots <= 0.5),
                 Observe("engines-off", "Engines off", state => state.EnginesOff),
                 Manual("captain-batteries", "BAT 1 and BAT 2 ON", "Captain: turn BAT 1 and BAT 2 ON.", CrewRole.Captain, state => state.Battery1On && state.Battery2On),

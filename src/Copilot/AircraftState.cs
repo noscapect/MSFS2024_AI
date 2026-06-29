@@ -129,6 +129,13 @@ internal sealed class AircraftState
     public bool IsA320NeoV2 =>
         string.Equals(Title, "A320neo V2", StringComparison.OrdinalIgnoreCase);
 
+    public bool IsFlyByWireA320Neo =>
+        Title.IndexOf("A32NX", StringComparison.OrdinalIgnoreCase) >= 0
+        || Title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0;
+
+    public bool IsSupportedA320 =>
+        IsA320NeoV2 || IsFlyByWireA320Neo;
+
     public bool EnginesOff => !Engine1Running && !Engine2Running;
     public bool Engine1StartStabilized =>
         Engine1Running

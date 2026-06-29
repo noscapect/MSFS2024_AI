@@ -103,6 +103,8 @@ internal sealed class CopilotService : Form
     private bool? _nativeBattery2On;
     private bool? _fbwBattery1Auto;
     private bool? _fbwBattery2Auto;
+    private bool? _fbwBattery1AutoTyped;
+    private bool? _fbwBattery2AutoTyped;
     private float? _fbwBattery1Potential;
     private float? _fbwBattery2Potential;
     private double? _lastLoggedBattery1Voltage;
@@ -252,7 +254,9 @@ internal sealed class CopilotService : Form
         FbwBattery1Auto = 157,
         FbwBattery2Auto = 158,
         FbwBattery1Potential = 159,
-        FbwBattery2Potential = 160
+        FbwBattery2Potential = 160,
+        FbwBattery1AutoTyped = 161,
+        FbwBattery2AutoTyped = 162
     }
 
     private enum ClientDataArea
@@ -317,7 +321,9 @@ internal sealed class CopilotService : Form
         FbwBattery1Auto = 157,
         FbwBattery2Auto = 158,
         FbwBattery1Potential = 159,
-        FbwBattery2Potential = 160
+        FbwBattery2Potential = 160,
+        FbwBattery1AutoTyped = 161,
+        FbwBattery2AutoTyped = 162
     }
 
     private enum CopilotEvent
@@ -773,7 +779,7 @@ internal sealed class CopilotService : Form
         }
 
         var request = (Request)data.dwRequestID;
-        if (request is >= Request.NativeBattery1 and <= Request.FbwBattery2Potential)
+        if (request is >= Request.NativeBattery1 and <= Request.FbwBattery2AutoTyped)
         {
             var value = ((MobiFlightFloat)data.dwData[0]).Value;
             if (request == Request.NativeBattery1)
@@ -819,6 +825,24 @@ internal sealed class CopilotService : Form
                     AppLog.Write($"FBW A32NX BAT 2 potential changed to {value:F1} V.");
                 }
                 _fbwBattery2Potential = value;
+            }
+            else if (request == Request.FbwBattery1AutoTyped)
+            {
+                var batteryOn = value != 0;
+                if (!_fbwBattery1AutoTyped.HasValue || _fbwBattery1AutoTyped.Value != batteryOn)
+                {
+                    AppLog.Write($"FBW A32NX BAT 1 AUTO typed changed to {value:F0}.");
+                }
+                _fbwBattery1AutoTyped = batteryOn;
+            }
+            else if (request == Request.FbwBattery2AutoTyped)
+            {
+                var batteryOn = value != 0;
+                if (!_fbwBattery2AutoTyped.HasValue || _fbwBattery2AutoTyped.Value != batteryOn)
+                {
+                    AppLog.Write($"FBW A32NX BAT 2 AUTO typed changed to {value:F0}.");
+                }
+                _fbwBattery2AutoTyped = batteryOn;
             }
             else
             {
@@ -1054,6 +1078,8 @@ internal sealed class CopilotService : Form
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwBattery2Auto, Request.FbwBattery2Auto, 47 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwBattery1Potential, Request.FbwBattery1Potential, 48 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwBattery2Potential, Request.FbwBattery2Potential, 49 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwBattery1AutoTyped, Request.FbwBattery1AutoTyped, 50 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwBattery2AutoTyped, Request.FbwBattery2AutoTyped, 51 * sizeof(float));
 
         _mobiFlightRuntimeReady = true;
         _mobiFlightRuntimeInitializedUtc = DateTime.UtcNow;
@@ -1113,6 +1139,10 @@ internal sealed class CopilotService : Form
             "MF.SimVars.Add.(L:A32NX_ELEC_BAT_1_POTENTIAL)");
         SendMobiFlightRuntimeCommand(
             "MF.SimVars.Add.(L:A32NX_ELEC_BAT_2_POTENTIAL)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_BAT_1_PB_IS_AUTO, Bool)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_BAT_2_PB_IS_AUTO, Bool)");
         SendMobiFlightRuntimeCommand("MF.DummyCmd");
         AppendDashboardLog("iniBuilds native state monitoring connected.");
     }
@@ -1155,13 +1185,21 @@ internal sealed class CopilotService : Form
         {
             _state.Battery2On = _nativeBattery2On.Value;
         }
-        if (_state.IsFlyByWireA320Neo && _fbwBattery1Auto.HasValue)
+        if (_state.IsFlyByWireA320Neo
+            && (_fbwBattery1AutoTyped.HasValue || _fbwBattery1Auto.HasValue))
         {
-            _state.Battery1On = _fbwBattery1Auto.Value;
+            _state.Battery1On = ResolveFbwBatteryState(
+                _fbwBattery1AutoTyped,
+                _fbwBattery1Auto,
+                _state.Battery1On ? 1 : 0);
         }
-        if (_state.IsFlyByWireA320Neo && _fbwBattery2Auto.HasValue)
+        if (_state.IsFlyByWireA320Neo
+            && (_fbwBattery2AutoTyped.HasValue || _fbwBattery2Auto.HasValue))
         {
-            _state.Battery2On = _fbwBattery2Auto.Value;
+            _state.Battery2On = ResolveFbwBatteryState(
+                _fbwBattery2AutoTyped,
+                _fbwBattery2Auto,
+                _state.Battery2On ? 1 : 0);
         }
         if (_nativeFuelPump1.HasValue
             && _nativeFuelPump2.HasValue
@@ -1319,12 +1357,12 @@ internal sealed class CopilotService : Form
             Battery1On = isIniBuildsA320NeoV2
                 ? _nativeBattery1On ?? raw.Battery1 != 0
                 : isFlyByWireA320Neo
-                    ? ResolveFbwBatteryState(_fbwBattery1Auto, _fbwBattery1Potential, raw.Battery1, raw.Battery1Voltage)
+                    ? ResolveFbwBatteryState(_fbwBattery1AutoTyped, _fbwBattery1Auto, raw.Battery1)
                 : raw.Battery1 != 0,
             Battery2On = isIniBuildsA320NeoV2
                 ? _nativeBattery2On ?? raw.Battery2 != 0
                 : isFlyByWireA320Neo
-                    ? ResolveFbwBatteryState(_fbwBattery2Auto, _fbwBattery2Potential, raw.Battery2, raw.Battery2Voltage)
+                    ? ResolveFbwBatteryState(_fbwBattery2AutoTyped, _fbwBattery2Auto, raw.Battery2)
                 : raw.Battery2 != 0,
             Battery1Voltage = raw.Battery1Voltage,
             Battery2Voltage = raw.Battery2Voltage,
@@ -1494,24 +1532,18 @@ internal sealed class CopilotService : Form
     }
 
     private static bool ResolveFbwBatteryState(
-        bool? pushbuttonAuto,
-        float? fbwPotential,
-        double genericMasterBattery,
-        double genericBatteryVoltage)
+        bool? typedPushbuttonAuto,
+        bool? untypedPushbuttonAuto,
+        double genericMasterBattery)
     {
-        if (fbwPotential.HasValue && fbwPotential.Value > 5)
+        if (typedPushbuttonAuto.HasValue)
         {
-            return true;
+            return typedPushbuttonAuto.Value;
         }
 
-        if (genericBatteryVoltage > 5)
+        if (untypedPushbuttonAuto.HasValue)
         {
-            return true;
-        }
-
-        if (pushbuttonAuto.HasValue)
-        {
-            return pushbuttonAuto.Value;
+            return untypedPushbuttonAuto.Value;
         }
 
         return genericMasterBattery != 0;
@@ -2359,10 +2391,10 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        if (!_state.IsA320NeoV2 || !_state.OnGround || !_state.EnginesOff)
+        if (!_state.IsSupportedA320 || !_state.OnGround || !_state.EnginesOff)
         {
             Console.Error.WriteLine(
-                "Battery procedure blocked: requires A320neo V2 on the ground with engines off.");
+                "Battery procedure blocked: requires a supported A320 on the ground with engines off.");
             FinishOneShot(3);
             return;
         }
@@ -2385,11 +2417,18 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        var preset = $"Battery_{batteryNumber}_{(desiredOn ? "On" : "Off")}";
-        if (!ExecuteDocumentedPreset(preset))
+        if (_state.IsFlyByWireA320Neo)
         {
-            FinishOneShot(4);
-            return;
+            ExecuteFlyByWireBatteryCommand(batteryNumber, desiredOn);
+        }
+        else
+        {
+            var preset = $"Battery_{batteryNumber}_{(desiredOn ? "On" : "Off")}";
+            if (!ExecuteDocumentedPreset(preset))
+            {
+                FinishOneShot(4);
+                return;
+            }
         }
         SendMobiFlightCommand("MF.DummyCmd");
         _pendingBatteryProcedure = new PendingBatteryProcedure(
@@ -2399,6 +2438,16 @@ internal sealed class CopilotService : Form
         Console.WriteLine(
             $"BAT {batteryNumber} command sent: {desiredOn.ToOnOff()}; awaiting readback.");
         AppendDashboardLog($"BAT {batteryNumber} command sent: {desiredOn.ToOnOff()}");
+    }
+
+    private void ExecuteFlyByWireBatteryCommand(int batteryNumber, bool desiredOn)
+    {
+        var value = desiredOn ? 1 : 0;
+        var calculatorCode =
+            $"{value} (>L:A32NX_OVHD_ELEC_BAT_{batteryNumber}_PB_IS_AUTO, Bool)";
+        SendMobiFlightCommand($"MF.SimVars.Set.{calculatorCode}");
+        AppLog.Write(
+            $"Executed FBW battery command: {calculatorCode}");
     }
 
     private bool ExecuteDocumentedPreset(string preset)

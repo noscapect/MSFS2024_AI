@@ -36,6 +36,7 @@ Each control must have a row with:
 | EXT PWR ON | `L:A32NX_OVHD_ELEC_EXT_PWR_PB_IS_ON`; FBW checklist verifies `EXTERNAL POWER ON` | `1 (>L:A32NX_OVHD_ELEC_EXT_PWR_PB_IS_ON, Bool)` when available; FBW checklist uses `TOGGLE_EXTERNAL_POWER` | LVar stayed false in first test | Not tested from app | Use any verified true source |
 | ADIRS IR selectors 1/2/3 | `L:A32NX_OVHD_ADIRS_IR_{n}_MODE_SELECTOR_KNOB` | `1 (>L:A32NX_OVHD_ADIRS_IR_{n}_MODE_SELECTOR_KNOB, Enum)` for NAV | Pending | Pending | Command-state-backed during discovery |
 | ADIRS ON BAT | `L:A32NX_OVHD_ADIRS_ON_BAT_IS_ILLUMINATED` | N/A | Pending | N/A | Passive readback |
+| Crew oxygen | `L:PUSH_OVHD_OXYGEN_CREW` | `1 (>L:PUSH_OVHD_OXYGEN_CREW, Bool)` for ON, `0` for OFF | Pending | Pending | Command-state-backed during discovery |
 
 ## Repeatable test flow
 

@@ -121,6 +121,9 @@ internal sealed class CopilotService : Form
     private float? _fbwCommandedAdirs1Selector;
     private float? _fbwCommandedAdirs2Selector;
     private float? _fbwCommandedAdirs3Selector;
+    private bool? _fbwCrewOxygen;
+    private bool? _fbwCrewOxygenTyped;
+    private bool? _fbwCommandedCrewOxygen;
     private float? _fbwBattery1Potential;
     private float? _fbwBattery2Potential;
     private double? _lastLoggedBattery1Voltage;
@@ -283,7 +286,9 @@ internal sealed class CopilotService : Form
         FbwAdirs1SelectorTyped = 170,
         FbwAdirs2SelectorTyped = 171,
         FbwAdirs3SelectorTyped = 172,
-        FbwAdirsOnBattery = 173
+        FbwAdirsOnBattery = 173,
+        FbwCrewOxygen = 174,
+        FbwCrewOxygenTyped = 175
     }
 
     private enum ClientDataArea
@@ -361,7 +366,9 @@ internal sealed class CopilotService : Form
         FbwAdirs1SelectorTyped = 170,
         FbwAdirs2SelectorTyped = 171,
         FbwAdirs3SelectorTyped = 172,
-        FbwAdirsOnBattery = 173
+        FbwAdirsOnBattery = 173,
+        FbwCrewOxygen = 174,
+        FbwCrewOxygenTyped = 175
     }
 
     private enum CopilotEvent
@@ -821,7 +828,7 @@ internal sealed class CopilotService : Form
         }
 
         var request = (Request)data.dwRequestID;
-        if (request is >= Request.NativeBattery1 and <= Request.FbwAdirsOnBattery)
+        if (request is >= Request.NativeBattery1 and <= Request.FbwCrewOxygenTyped)
         {
             var value = ((MobiFlightFloat)data.dwData[0]).Value;
             if (request == Request.NativeBattery1)
@@ -929,6 +936,14 @@ internal sealed class CopilotService : Form
             else if (request == Request.FbwAdirsOnBattery)
             {
                 SetLoggedBool(ref _fbwAdirsOnBattery, value, "FBW A32NX ADIRS ON BAT");
+            }
+            else if (request == Request.FbwCrewOxygen)
+            {
+                SetLoggedBool(ref _fbwCrewOxygen, value, "FBW A32NX crew oxygen");
+            }
+            else if (request == Request.FbwCrewOxygenTyped)
+            {
+                SetLoggedBool(ref _fbwCrewOxygenTyped, value, "FBW A32NX crew oxygen typed");
             }
             else
             {
@@ -1177,6 +1192,8 @@ internal sealed class CopilotService : Form
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwAdirs2SelectorTyped, Request.FbwAdirs2SelectorTyped, 60 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwAdirs3SelectorTyped, Request.FbwAdirs3SelectorTyped, 61 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwAdirsOnBattery, Request.FbwAdirsOnBattery, 62 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwCrewOxygen, Request.FbwCrewOxygen, 63 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwCrewOxygenTyped, Request.FbwCrewOxygenTyped, 64 * sizeof(float));
 
         _mobiFlightRuntimeReady = true;
         _mobiFlightRuntimeInitializedUtc = DateTime.UtcNow;
@@ -1262,6 +1279,10 @@ internal sealed class CopilotService : Form
             "MF.SimVars.Add.(L:A32NX_OVHD_ADIRS_IR_3_MODE_SELECTOR_KNOB, Enum)");
         SendMobiFlightRuntimeCommand(
             "MF.SimVars.Add.(L:A32NX_OVHD_ADIRS_ON_BAT_IS_ILLUMINATED, Bool)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:PUSH_OVHD_OXYGEN_CREW)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:PUSH_OVHD_OXYGEN_CREW, Bool)");
         SendMobiFlightRuntimeCommand("MF.DummyCmd");
         AppendDashboardLog("iniBuilds native state monitoring connected.");
     }
@@ -1595,7 +1616,12 @@ internal sealed class CopilotService : Form
             AdirsOnBattery = isFlyByWireA320Neo
                 ? _fbwAdirsOnBattery == true
                 : _nativeAdirsOnBattery.HasValue && _nativeAdirsOnBattery.Value != 0,
-            CrewOxygenOn = _nativeCrewOxygen.HasValue && _nativeCrewOxygen.Value != 0,
+            CrewOxygenOn = isFlyByWireA320Neo
+                ? ResolveFbwBoolState(
+                    _fbwCommandedCrewOxygen,
+                    _fbwCrewOxygenTyped,
+                    _fbwCrewOxygen)
+                : _nativeCrewOxygen.HasValue && _nativeCrewOxygen.Value != 0,
             StrobeSelectorPosition = _nativeStrobeSelector,
             ApuFireTestActive = _nativeApuFireTest.HasValue && _nativeApuFireTest.Value != 0,
             ApuFireWarningLit = _nativeApuFireWarningLit.HasValue && _nativeApuFireWarningLit.Value != 0,
@@ -1722,6 +1748,24 @@ internal sealed class CopilotService : Form
         }
 
         return genericValue != 0;
+    }
+
+    private static bool ResolveFbwBoolState(
+        bool? commandedValue,
+        bool? typedValue,
+        bool? untypedValue)
+    {
+        if (commandedValue.HasValue)
+        {
+            return commandedValue.Value;
+        }
+
+        if (typedValue.HasValue)
+        {
+            return typedValue.Value;
+        }
+
+        return untypedValue == true;
     }
 
     private static bool ResolveFbwAnyTrueState(
@@ -3079,6 +3123,12 @@ internal sealed class CopilotService : Form
 
     private void SetCrewOxygen(bool desiredOn)
     {
+        if (_state?.IsFlyByWireA320Neo == true)
+        {
+            SetFlyByWireCrewOxygen(desiredOn);
+            return;
+        }
+
         if (!ValidateNativeInputAction("Crew oxygen", requireCompleteNativeState: false))
         {
             return;
@@ -3097,6 +3147,35 @@ internal sealed class CopilotService : Form
             "(L:INI_CREW_SUPPLY) ! (>L:INI_CREW_SUPPLY) " +
             "(L:__OXY_CREWIsPressed) ! (>L:__OXY_CREWIsPressed)");
         SendMobiFlightCommand("MF.DummyCmd");
+        BeginNativeAction(
+            "Crew oxygen",
+            state => state.CrewOxygenOn == desiredOn,
+            desiredOn,
+            TimeSpan.FromSeconds(10));
+    }
+
+    private void SetFlyByWireCrewOxygen(bool desiredOn)
+    {
+        if (_simConnect == null || _state == null)
+        {
+            AppendDashboardLog("Crew oxygen blocked: aircraft state is unavailable.");
+            FinishOneShot(3);
+            return;
+        }
+
+        if (_state.CrewOxygenOn == desiredOn)
+        {
+            AppendDashboardLog($"Crew oxygen already {desiredOn.ToOnOff()}.");
+            FinishOneShot();
+            return;
+        }
+
+        var value = desiredOn ? 1 : 0;
+        var calculatorCode = $"{value} (>L:PUSH_OVHD_OXYGEN_CREW, Bool)";
+        SendMobiFlightCommand($"MF.SimVars.Set.{calculatorCode}");
+        SendMobiFlightCommand("MF.DummyCmd");
+        _fbwCommandedCrewOxygen = desiredOn;
+        AppLog.Write($"Executed FBW crew oxygen command: {calculatorCode}");
         BeginNativeAction(
             "Crew oxygen",
             state => state.CrewOxygenOn == desiredOn,
@@ -4522,6 +4601,7 @@ internal sealed class CopilotService : Form
             $"  FBW EXT PWR available untyped/typed: {FormatOptionalBool(_fbwExternalPowerAvailable)}/{FormatOptionalBool(_fbwExternalPowerAvailableTyped)}",
             $"  FBW EXT PWR ON untyped/typed: {FormatOptionalBool(_fbwExternalPowerOn)}/{FormatOptionalBool(_fbwExternalPowerOnTyped)}",
             $"  Generic EXT PWR unindexed available/on: {_state.ExternalPowerAvailableUnindexed.ToYesNo()}/{_state.ExternalPowerOnUnindexed.ToOnOff()}",
+            $"  FBW crew oxygen untyped/typed/commanded: {FormatOptionalBool(_fbwCrewOxygen)}/{FormatOptionalBool(_fbwCrewOxygenTyped)}/{FormatOptionalBool(_fbwCommandedCrewOxygen)}",
             $"  Generic battery volts 1/2: {_state.Battery1Voltage:F1}/{_state.Battery2Voltage:F1} V"
         };
 

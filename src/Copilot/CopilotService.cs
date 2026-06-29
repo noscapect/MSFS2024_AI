@@ -1081,11 +1081,11 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        if (_nativeBattery1On.HasValue)
+        if (_state.IsA320NeoV2 && _nativeBattery1On.HasValue)
         {
             _state.Battery1On = _nativeBattery1On.Value;
         }
-        if (_nativeBattery2On.HasValue)
+        if (_state.IsA320NeoV2 && _nativeBattery2On.HasValue)
         {
             _state.Battery2On = _nativeBattery2On.Value;
         }
@@ -1218,6 +1218,7 @@ internal sealed class CopilotService : Form
 
         var raw = (AircraftData)data.dwData[0];
         var approachDistance = ResolveApproachDistance(raw);
+        var isIniBuildsA320NeoV2 = raw.Title.Equals("A320neo V2", StringComparison.OrdinalIgnoreCase);
         _state = new AircraftState
         {
             Title = raw.Title,
@@ -1233,8 +1234,12 @@ internal sealed class CopilotService : Form
             Engine2EgtCelsius = raw.Engine2Egt,
             Engine1FuelFlowPph = raw.Engine1FuelFlow,
             Engine2FuelFlowPph = raw.Engine2FuelFlow,
-            Battery1On = _nativeBattery1On ?? raw.Battery1 != 0,
-            Battery2On = _nativeBattery2On ?? raw.Battery2 != 0,
+            Battery1On = isIniBuildsA320NeoV2
+                ? _nativeBattery1On ?? raw.Battery1 != 0
+                : raw.Battery1 != 0,
+            Battery2On = isIniBuildsA320NeoV2
+                ? _nativeBattery2On ?? raw.Battery2 != 0
+                : raw.Battery2 != 0,
             ExternalPowerAvailable = raw.ExternalPowerAvailable != 0,
             ExternalPowerOn = raw.ExternalPowerOn != 0,
             ParkingBrakeSet = raw.ParkingBrake != 0,

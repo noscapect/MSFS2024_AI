@@ -105,6 +105,8 @@ internal sealed class CopilotService : Form
     private bool? _fbwBattery2Auto;
     private float? _fbwBattery1Potential;
     private float? _fbwBattery2Potential;
+    private double? _lastLoggedBattery1Voltage;
+    private double? _lastLoggedBattery2Voltage;
     private float? _nativeFuelPump1;
     private float? _nativeFuelPump2;
     private float? _nativeFuelPump3;
@@ -367,6 +369,8 @@ internal sealed class CopilotService : Form
         public double Engine2FuelFlow;
         public double Battery1;
         public double Battery2;
+        public double Battery1Voltage;
+        public double Battery2Voltage;
         public double ExternalPowerAvailable;
         public double ExternalPowerOn;
         public double ParkingBrake;
@@ -624,6 +628,8 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "TURB ENG FUEL FLOW PPH:2", "Pounds per hour", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "ELECTRICAL MASTER BATTERY:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "ELECTRICAL MASTER BATTERY:2", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "ELECTRICAL BATTERY VOLTAGE:1", "Volts", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "ELECTRICAL BATTERY VOLTAGE:2", "Volts", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "EXTERNAL POWER AVAILABLE:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "EXTERNAL POWER ON:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "BRAKE PARKING POSITION", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
@@ -1290,6 +1296,11 @@ internal sealed class CopilotService : Form
         var isFlyByWireA320Neo =
             raw.Title.IndexOf("A32NX", StringComparison.OrdinalIgnoreCase) >= 0
             || raw.Title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0;
+        if (isFlyByWireA320Neo)
+        {
+            LogChangedVoltage("FBW generic BAT 1 voltage", raw.Battery1Voltage, ref _lastLoggedBattery1Voltage);
+            LogChangedVoltage("FBW generic BAT 2 voltage", raw.Battery2Voltage, ref _lastLoggedBattery2Voltage);
+        }
         _state = new AircraftState
         {
             Title = raw.Title,
@@ -1308,13 +1319,15 @@ internal sealed class CopilotService : Form
             Battery1On = isIniBuildsA320NeoV2
                 ? _nativeBattery1On ?? raw.Battery1 != 0
                 : isFlyByWireA320Neo
-                    ? _fbwBattery1Auto ?? raw.Battery1 != 0
+                    ? ResolveFbwBatteryState(_fbwBattery1Auto, _fbwBattery1Potential, raw.Battery1, raw.Battery1Voltage)
                 : raw.Battery1 != 0,
             Battery2On = isIniBuildsA320NeoV2
                 ? _nativeBattery2On ?? raw.Battery2 != 0
                 : isFlyByWireA320Neo
-                    ? _fbwBattery2Auto ?? raw.Battery2 != 0
+                    ? ResolveFbwBatteryState(_fbwBattery2Auto, _fbwBattery2Potential, raw.Battery2, raw.Battery2Voltage)
                 : raw.Battery2 != 0,
+            Battery1Voltage = raw.Battery1Voltage,
+            Battery2Voltage = raw.Battery2Voltage,
             ExternalPowerAvailable = raw.ExternalPowerAvailable != 0,
             ExternalPowerOn = raw.ExternalPowerOn != 0,
             ParkingBrakeSet = raw.ParkingBrake != 0,
@@ -1478,6 +1491,39 @@ internal sealed class CopilotService : Form
             Console.Write("> ");
         }
         TryExecuteOneShotCommand();
+    }
+
+    private static bool ResolveFbwBatteryState(
+        bool? pushbuttonAuto,
+        float? fbwPotential,
+        double genericMasterBattery,
+        double genericBatteryVoltage)
+    {
+        if (fbwPotential.HasValue && fbwPotential.Value > 5)
+        {
+            return true;
+        }
+
+        if (genericBatteryVoltage > 5)
+        {
+            return true;
+        }
+
+        if (pushbuttonAuto.HasValue)
+        {
+            return pushbuttonAuto.Value;
+        }
+
+        return genericMasterBattery != 0;
+    }
+
+    private static void LogChangedVoltage(string label, double value, ref double? previousValue)
+    {
+        if (!previousValue.HasValue || Math.Abs(previousValue.Value - value) >= 0.1)
+        {
+            AppLog.Write($"{label} changed to {value:F1} V.");
+            previousValue = value;
+        }
     }
 
     private static (double? DistanceNm, string Source) ResolveApproachDistance(

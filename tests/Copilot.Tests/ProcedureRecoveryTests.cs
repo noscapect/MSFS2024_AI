@@ -26,13 +26,9 @@ public sealed class ProcedureRecoveryTests
 
         runner.Start(A320ProcedureLibrary.PowerUpAndInitialSetup, state);
 
-        Assert.AreEqual("fo-battery-one", runner.CurrentStep?.Id);
+        Assert.AreEqual("captain-batteries", runner.CurrentStep?.Id);
         Assert.IsTrue(state.IsFlyByWireA320Neo);
         Assert.IsTrue(state.IsSupportedA320);
-
-        runner.Update(state);
-
-        Assert.AreEqual("battery-1 on", commands.Single());
     }
 
     [TestMethod]

@@ -1836,6 +1836,10 @@ internal sealed class CopilotService : Form
                 PrintStatus();
                 FinishOneShot();
                 break;
+            case "fbw-bridge-status":
+                PrintFbwBridgeStatus();
+                FinishOneShot();
+                break;
             case "checklist":
                 PrintChecklist();
                 FinishOneShot();
@@ -4313,6 +4317,45 @@ internal sealed class CopilotService : Form
         Console.WriteLine($"[{(complete ? "x" : " ")}] {label}{(note == null || complete ? "" : $" — {note}")}");
     }
 
+    private void PrintFbwBridgeStatus()
+    {
+        if (_state == null)
+        {
+            Console.WriteLine("Aircraft state unavailable.");
+            AppendDashboardLog("FBW bridge status unavailable: aircraft state missing.");
+            return;
+        }
+
+        var lines = new[]
+        {
+            "FBW bridge status snapshot:",
+            $"  Aircraft: {_state.Title}",
+            $"  Detected FBW: {_state.IsFlyByWireA320Neo.ToYesNo()}",
+            $"  App BAT 1/2: {_state.Battery1On.ToOnOff()}/{_state.Battery2On.ToOnOff()}",
+            $"  FBW BAT 1 AUTO untyped/typed/commanded: {FormatOptionalBool(_fbwBattery1Auto)}/{FormatOptionalBool(_fbwBattery1AutoTyped)}/{FormatOptionalBool(_fbwCommandedBattery1Auto)}",
+            $"  FBW BAT 2 AUTO untyped/typed/commanded: {FormatOptionalBool(_fbwBattery2Auto)}/{FormatOptionalBool(_fbwBattery2AutoTyped)}/{FormatOptionalBool(_fbwCommandedBattery2Auto)}",
+            $"  FBW BAT potential 1/2: {FormatOptionalFloat(_fbwBattery1Potential, "F1")}/{FormatOptionalFloat(_fbwBattery2Potential, "F1")} V",
+            $"  App EXT PWR available/on: {_state.ExternalPowerAvailable.ToYesNo()}/{_state.ExternalPowerOn.ToOnOff()}",
+            $"  FBW EXT PWR available untyped/typed: {FormatOptionalBool(_fbwExternalPowerAvailable)}/{FormatOptionalBool(_fbwExternalPowerAvailableTyped)}",
+            $"  FBW EXT PWR ON untyped/typed: {FormatOptionalBool(_fbwExternalPowerOn)}/{FormatOptionalBool(_fbwExternalPowerOnTyped)}",
+            $"  Generic battery volts 1/2: {_state.Battery1Voltage:F1}/{_state.Battery2Voltage:F1} V"
+        };
+
+        foreach (var line in lines)
+        {
+            Console.WriteLine(line);
+            AppLog.Write(line);
+        }
+
+        AppendDashboardLog("FBW bridge status snapshot written to log.");
+    }
+
+    private static string FormatOptionalBool(bool? value) =>
+        value.HasValue ? value.Value.ToOnOff() : "UNKNOWN";
+
+    private static string FormatOptionalFloat(float? value, string format) =>
+        value.HasValue ? value.Value.ToString(format) : "UNKNOWN";
+
     private void PrintPhase()
     {
         Console.WriteLine(
@@ -4332,7 +4375,7 @@ internal sealed class CopilotService : Form
 
     private static void PrintHelp()
     {
-        Console.WriteLine("Commands: status | phase | checklist | capabilities");
+        Console.WriteLine("Commands: status | fbw-bridge-status | phase | checklist | capabilities");
         Console.WriteLine("          external-power on | external-power off");
         Console.WriteLine("          beacon on | beacon off");
         Console.WriteLine("          nav-logo off | nav-logo 2");
@@ -4789,6 +4832,7 @@ internal sealed class CopilotService : Form
                 ? "Hide tools & diagnostics"
                 : "Show tools & diagnostics";
         };
+        actions.Controls.Add(NewCommandButton("FBW bridge status", "fbw-bridge-status"));
         actions.Controls.Add(NewCommandButton("External power ON", "external-power on"));
         actions.Controls.Add(NewCommandButton("External power OFF", "external-power off"));
         actions.Controls.Add(NewCommandButton("Beacon ON", "beacon on"));

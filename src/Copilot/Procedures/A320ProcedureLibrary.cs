@@ -276,7 +276,8 @@ internal static class A320ProcedureLibrary
                     "WXR/PWS selector 1",
                     state => state.WeatherRadarPwsSelectorPosition.HasValue
                              && Math.Abs(
-                                 state.WeatherRadarPwsSelectorPosition.Value - 0) < 0.1,
+                                 state.WeatherRadarPwsSelectorPosition.Value
+                                 - (state.IsFlyByWireA320Neo ? 1 : 0)) < 0.1,
                     "wxr-pws 1",
                     requireCommandExecution: true),
                 Automatic(

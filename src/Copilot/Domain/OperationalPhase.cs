@@ -28,7 +28,7 @@ internal static class OperationalPhaseDetector
 {
     public static OperationalPhase Detect(AircraftState state)
     {
-        if (!state.IsA320NeoV2)
+        if (!state.IsSupportedA320)
         {
             return OperationalPhase.Unknown;
         }

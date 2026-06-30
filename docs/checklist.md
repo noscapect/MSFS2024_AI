@@ -26,7 +26,7 @@ diagnostics** or **Copy last diagnostic** when reporting a test issue.
 
 ## 1. Power Up & Initial Setup
 
-1. **Monitor:** A320neo V2 loaded.
+1. **Monitor:** Supported A320 loaded: iniBuilds A320neo V2 or FlyByWire A32NX.
 2. **Monitor:** Aircraft stationary on the ground at 0.5 knots or less.
 3. **Monitor:** Both engines off.
 4. **Captain:** Turn BAT 1 and BAT 2 ON; detected from battery state.
@@ -263,7 +263,9 @@ radar display selectors and engine anti-ice are not operated by this flow.
 7. **F/O automatic:** Turn beacon OFF after engine shutdown.
 8. **F/O automatic:** Turn all six fuel pumps OFF.
 9. **F/O automatic:** Turn seatbelt signs OFF.
-10. **Monitor:** Wait until a configured required cabin or cargo door opens.
+
+Doors and slides are treated as a real-world turnaround/ground-handling item
+and do not block the cockpit shutdown flow.
 
 ### Optional cold-and-dark secure
 

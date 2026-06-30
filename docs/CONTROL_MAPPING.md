@@ -1,4 +1,8 @@
-# iniBuilds A320 control mapping
+# A320 control mapping
+
+This document started as the iniBuilds A320neo V2 mapping record. Version
+0.6.0 also supports the FlyByWire A32NX through separate FBW-specific state and
+command mappings in the application code.
 
 ## Evidence levels
 

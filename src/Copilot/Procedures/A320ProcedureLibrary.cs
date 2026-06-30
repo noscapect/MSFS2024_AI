@@ -111,10 +111,10 @@ internal static class A320ProcedureLibrary
             "1. Power Up & Initial Setup",
             new[]
             {
-                Observe("aircraft", "A320neo V2 loaded", state => state.IsA320NeoV2),
+                Observe("aircraft", "Supported A320 loaded", state => state.IsSupportedA320),
                 Observe("stationary", "Aircraft stationary on the ground", state => state.OnGround && state.GroundSpeedKnots <= 0.5),
                 Observe("engines-off", "Engines off", state => state.EnginesOff),
-                Manual("captain-batteries", "BAT 1 and BAT 2 ON", "Captain: turn BAT 1 and BAT 2 ON.", CrewRole.Captain, state => state.Battery1On && state.Battery2On),
+                Manual("captain-batteries", "BAT 1 and BAT 2 ON", "Captain: turn BAT 1 and BAT 2 ON, then confirm if the app does not detect the FBW switch state.", CrewRole.Captain, state => state.Battery1On && state.Battery2On),
                 Manual("captain-external-power", "External power ON when available", "Captain: when EXT PWR shows AVAIL, turn external power ON.", CrewRole.Captain, state => state.ExternalPowerOn),
                 Automatic("fo-adirs-1", "ADIRS 1 set to NAV", state => Math.Abs(state.Adirs1SelectorState - 1) < 0.1, "adirs-1 nav"),
                 Observe("fo-adirs-1-on-bat", "ADIRS ON BAT extinguished after selector 1", state => !state.AdirsOnBattery),
@@ -225,6 +225,7 @@ internal static class A320ProcedureLibrary
                     "Engine mode selector IGN/START",
                     "Captain: set the engine mode selector to IGN/START, then confirm.",
                     CrewRole.Captain,
+                    complete: state => state.EngineModeIgnStart,
                     recoveryComplete: state => state.Engine1Running || state.Engine2Running),
                 Manual("captain-engine-two", "Engine 2 master ON", "Captain: set Engine 2 Master ON.", CrewRole.Captain, state => state.Engine2StarterActive || state.Engine2Running),
                 Observe(
@@ -235,7 +236,7 @@ internal static class A320ProcedureLibrary
                 Observe(
                     "fo-engine-two-fuel",
                     "Engine 2 — Fuel Flow",
-                    state => state.Engine2FuelFlowPph > 0,
+                    state => state.Engine2FuelFlowDetected,
                     recoveryComplete: state => state.Engine2StartStabilized),
                 Observe("fo-engine-two-stable", "Engine 2 — Stabilized", state => state.Engine2StartStabilized),
                 Manual("captain-engine-one", "Engine 1 master ON", "Captain: once Engine 2 is stable, set Engine 1 Master ON.", CrewRole.Captain, state => state.Engine1StarterActive || state.Engine1Running),
@@ -247,10 +248,15 @@ internal static class A320ProcedureLibrary
                 Observe(
                     "fo-engine-one-fuel",
                     "Engine 1 — Fuel Flow",
-                    state => state.Engine1FuelFlowPph > 0,
+                    state => state.Engine1FuelFlowDetected,
                     recoveryComplete: state => state.Engine1StartStabilized),
                 Observe("fo-engine-one-stable", "Engine 1 — Stabilized", state => state.Engine1StartStabilized),
-                Manual("captain-engine-mode-normal", "Engine mode selector NORM", "Captain: return the engine mode selector to NORM, then confirm.", CrewRole.Captain)
+                Manual(
+                    "captain-engine-mode-normal",
+                    "Engine mode selector NORM",
+                    "Captain: return the engine mode selector to NORM, then confirm.",
+                    CrewRole.Captain,
+                    state => state.EngineModeNormal)
             });
 
     public static ProcedureDefinition AfterStartAndTaxi { get; } =
@@ -270,7 +276,8 @@ internal static class A320ProcedureLibrary
                     "WXR/PWS selector 1",
                     state => state.WeatherRadarPwsSelectorPosition.HasValue
                              && Math.Abs(
-                                 state.WeatherRadarPwsSelectorPosition.Value - 0) < 0.1,
+                                 state.WeatherRadarPwsSelectorPosition.Value
+                                 - (state.IsFlyByWireA320Neo ? 1 : 0)) < 0.1,
                     "wxr-pws 1",
                     requireCommandExecution: true),
                 Automatic(
@@ -649,7 +656,7 @@ internal static class A320ProcedureLibrary
                     "APU MASTER ON",
                     state => state.ApuMasterSwitchOn,
                     "apu-master on"),
-                Observe("fo-apu-flap-open", "APU intake flap open", state => state.ApuFlapPercent >= 0.95),
+                Observe("fo-apu-flap-open", "APU intake flap open", state => state.IsFlyByWireA320Neo ? state.ApuMasterSwitchOn : state.ApuFlapPercent >= 0.95),
                 Automatic("fo-apu-start-on", "APU START selected", state => state.ApuStartButtonOn, "apu-start on"),
                 Observe(
                     "captain-runway-exit",
@@ -735,11 +742,6 @@ internal static class A320ProcedureLibrary
                     "beacon off"),
                 Automatic("fo-fuel-pumps-off", "All six fuel pumps OFF", state => state.AllFuelPumpsOff, "fuel-pumps off"),
                 Automatic("fo-seatbelts-off", "Seatbelt signs OFF", state => state.SeatbeltSelectorPosition.HasValue && Math.Abs(state.SeatbeltSelectorPosition.Value - 2) < 0.1, "seatbelts off"),
-                Observe(
-                    "fo-doors",
-                    "A required cabin or cargo door opened",
-                    state => state.AnyRequiredDoorOpen,
-                    CrewRole.FirstOfficer),
                 Manual("secure-decision", "Cold-and-dark secure requested", "Captain and First Officer: confirm continuation to final cold-and-dark secure.", CrewRole.Either),
                 Automatic(
                     "secure-oxygen",
@@ -757,11 +759,11 @@ internal static class A320ProcedureLibrary
                     "secure-apu-power",
                     "APU power available before external-power disconnect",
                     state => !state.ExternalPowerOn
-                             || (state.ApuAvailable && state.ApuGeneratorSwitchOn),
+                             || (state.ApuAvailable && (state.IsFlyByWireA320Neo || state.ApuGeneratorSwitchOn)),
                     CrewRole.Either),
                 Automatic("secure-external-power-off", "External power OFF", state => !state.ExternalPowerOn, "external-power off", CrewRole.Either),
                 Automatic("secure-apu-master-off", "APU MASTER OFF", state => !state.ApuMasterSwitchOn, "apu-master off", CrewRole.Either),
-                Observe("secure-apu-flap", "APU exhaust/intake flap closed", state => state.ApuFlapPercent <= 0.05, CrewRole.Either),
+                Observe("secure-apu-flap", "APU exhaust/intake flap closed", state => state.IsFlyByWireA320Neo ? !state.ApuMasterSwitchOn : state.ApuFlapPercent <= 0.05, CrewRole.Either),
                 Automatic("secure-battery-one-off", "BAT 1 OFF", state => !state.Battery1On, "battery-1 off", CrewRole.Either),
                 Automatic("secure-battery-two-off", "BAT 2 OFF", state => !state.Battery2On, "battery-2 off", CrewRole.Either)
             });

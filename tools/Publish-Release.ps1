@@ -89,12 +89,12 @@ MSFS 2024 AI First Officer $version
 Requirements:
 - Windows 10 or Windows 11
 - Microsoft Flight Simulator 2024
-- iniBuilds A320neo V2
+- iniBuilds A320neo V2 or FlyByWire A32NX for MSFS 2024
 - MobiFlight WASM module installed
 - .NET Framework 4.7.2 or newer
 
 The required Microsoft SimConnect client libraries are included. Start MSFS
-2024, load the iniBuilds A320neo V2, and run Copilot.exe.
+2024, load a supported A320, and run Copilot.exe.
 
 Project:
 https://github.com/$Repository

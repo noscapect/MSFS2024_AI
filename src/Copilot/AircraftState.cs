@@ -15,10 +15,17 @@ internal sealed class AircraftState
     public double Engine2EgtCelsius { get; set; }
     public double Engine1FuelFlowPph { get; set; }
     public double Engine2FuelFlowPph { get; set; }
+    public double? EngineModeSelectorPosition { get; set; }
+    public double? FbwEngine1State { get; set; }
+    public double? FbwEngine2State { get; set; }
     public bool Battery1On { get; set; }
     public bool Battery2On { get; set; }
+    public double Battery1Voltage { get; set; }
+    public double Battery2Voltage { get; set; }
     public bool ExternalPowerAvailable { get; set; }
     public bool ExternalPowerOn { get; set; }
+    public bool ExternalPowerAvailableUnindexed { get; set; }
+    public bool ExternalPowerOnUnindexed { get; set; }
     public bool CockpitDisplaysReady { get; set; }
     public bool ParkingBrakeSet { get; set; }
     public bool BeaconOn { get; set; }
@@ -129,17 +136,42 @@ internal sealed class AircraftState
     public bool IsA320NeoV2 =>
         string.Equals(Title, "A320neo V2", StringComparison.OrdinalIgnoreCase);
 
+    public bool IsFlyByWireA320Neo =>
+        Title.IndexOf("A32NX", StringComparison.OrdinalIgnoreCase) >= 0
+        || Title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0;
+
+    public bool IsSupportedA320 =>
+        IsA320NeoV2 || IsFlyByWireA320Neo;
+
     public bool EnginesOff => !Engine1Running && !Engine2Running;
+    public bool EngineModeIgnStart =>
+        EngineModeSelectorPosition.HasValue
+        && Math.Abs(EngineModeSelectorPosition.Value - 2) < 0.1;
+    public bool EngineModeNormal =>
+        EngineModeSelectorPosition.HasValue
+        && Math.Abs(EngineModeSelectorPosition.Value - 1) < 0.1;
+    public bool Engine1FuelFlowDetected =>
+        Engine1FuelFlowPph > 0
+        || IsFlyByWireA320Neo
+        && (Engine1StarterActive || Engine1Running)
+        && Engine1N1Percent >= 3;
+    public bool Engine2FuelFlowDetected =>
+        Engine2FuelFlowPph > 0
+        || IsFlyByWireA320Neo
+        && (Engine2StarterActive || Engine2Running)
+        && Engine2N1Percent >= 3;
     public bool Engine1StartStabilized =>
-        Engine1Running
+        IsFlyByWireA320Neo && FbwEngine1State == 1
+        || Engine1Running
         && !Engine1StarterActive
         && Engine1N1Percent >= 15
-        && Engine1FuelFlowPph > 0;
+        && Engine1FuelFlowDetected;
     public bool Engine2StartStabilized =>
-        Engine2Running
+        IsFlyByWireA320Neo && FbwEngine2State == 1
+        || Engine2Running
         && !Engine2StarterActive
         && Engine2N1Percent >= 15
-        && Engine2FuelFlowPph > 0;
+        && Engine2FuelFlowDetected;
     public bool ReverseThrustEngaged =>
         Engine1ReverseEngaged || Engine2ReverseEngaged;
     public bool GroundSpoilersDeployed =>
@@ -159,8 +191,41 @@ internal sealed class AircraftState
         && Math.Abs(Adirs2SelectorState - 1) < 0.1
         && Math.Abs(Adirs3SelectorState - 1) < 0.1;
 
-    public bool FlapsAtDetent(int detent) =>
-        Math.Abs(FlapsHandleIndex - detent) < 0.1;
+    public bool FlapsAtDetent(int detent)
+    {
+        if (Math.Abs(FlapsHandleIndex - detent) < 0.1)
+        {
+            return true;
+        }
+
+        // The FlyByWire A32NX can briefly report inconsistent handle values
+        // while the physical flap surfaces have already reached the requested
+        // position. In the landing test it reported handle detent 1 with the
+        // surfaces clean, and also used 5 for FULL while our flow model uses 4.
+        // When the handle readback is flagged as suspicious, use the surface
+        // position as the truth source instead of blocking the procedure.
+        if (!FlapReadbackSane || detent == 4 && FlapsHandleIndex > 4.1)
+        {
+            return FlapSurfacesMatchDetent(detent);
+        }
+
+        return false;
+    }
+
+    private bool FlapSurfacesMatchDetent(int detent)
+    {
+        var maximumSurface =
+            Math.Max(LeftFlapPositionPercent, RightFlapPositionPercent);
+        return detent switch
+        {
+            0 => maximumSurface <= 1,
+            1 => maximumSurface is >= 5 and <= 18,
+            2 => maximumSurface is >= 18 and <= 35,
+            3 => maximumSurface is >= 35 and <= 75,
+            4 => maximumSurface >= 90,
+            _ => false
+        };
+    }
 }
 
 internal sealed class AircraftExitState

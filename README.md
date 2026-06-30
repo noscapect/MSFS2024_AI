@@ -1,7 +1,7 @@
 # MSFS 2024 AI First Officer
 
-A Windows first-officer companion for the **iniBuilds A320neo V2** in
-Microsoft Flight Simulator 2024.
+A Windows first-officer companion for the **iniBuilds A320neo V2** and
+**FlyByWire A32NX** in Microsoft Flight Simulator 2024.
 
 Application icon artwork contributed by the project owner.
 The icon is embedded in the executable and assigned to the running WinForms
@@ -22,7 +22,8 @@ important callouts.
   commands and independent readback are available
 - Monitoring of Captain actions without requiring app confirmations during
   takeoff, approach, landing, or taxi
-- Native iniBuilds A320neo V2 state monitoring through MobiFlight
+- Native iniBuilds A320neo V2 and FlyByWire A32NX state monitoring through
+  MobiFlight
 - Verification after every automatic aircraft action
 - Optional Windows offline voice callouts
 - Persistent preflight settings for V1, VR, and transition altitude
@@ -54,7 +55,11 @@ The gameplay flow is defined in [docs/checklist.md](docs/checklist.md).
 
 ## Supported aircraft
 
-Only the Microsoft Flight Simulator 2024 **iniBuilds A320neo V2** is supported.
+The app supports two Microsoft Flight Simulator 2024 A320 variants:
+
+- iniBuilds A320neo V2
+- FlyByWire A32NX for MSFS 2024
+
 The application deliberately avoids guessed generic events for unsupported
 aircraft controls.
 
@@ -64,7 +69,7 @@ To run the application:
 
 - Windows 10 or Windows 11
 - Microsoft Flight Simulator 2024
-- iniBuilds A320neo V2
+- iniBuilds A320neo V2 or FlyByWire A32NX for MSFS 2024
 - MobiFlight WASM module installed in MSFS
 - .NET Framework 4.7.2 or newer
 
@@ -93,7 +98,7 @@ src\Copilot\bin\Release\net472\Copilot.exe
 
 ## Run
 
-Start MSFS 2024, load the iniBuilds A320neo V2, and then run:
+Start MSFS 2024, load a supported A320 variant, and then run:
 
 ```powershell
 .\src\Copilot\bin\Release\net472\Copilot.exe
@@ -181,8 +186,10 @@ dotnet build .\src\SimConnectProbe\SimConnectProbe.csproj -c Release
 .\src\SimConnectProbe\bin\Release\net472\SimConnectProbe.exe list-lvars
 ```
 
-See [docs/NATIVE_CONTROL_STRATEGY.md](docs/NATIVE_CONTROL_STRATEGY.md) and
-[docs/LIVE_TESTS.md](docs/LIVE_TESTS.md) for control evidence and test history.
+See [docs/NATIVE_CONTROL_STRATEGY.md](docs/NATIVE_CONTROL_STRATEGY.md),
+[docs/FBW_A32NX_SUPPORT_PLAN.md](docs/FBW_A32NX_SUPPORT_PLAN.md), and
+[docs/LIVE_TESTS.md](docs/LIVE_TESTS.md) for control evidence and test
+history.
 
 ## Automated tests
 
@@ -212,8 +219,8 @@ See [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Development status
 
-All behavior through Flow 10 has been live verified. The latest timing changes
-for display initialization, automatic-action pacing, fuel-pump spacing, and
-the new `Cabin crew, prepare for landing` callout still require confirmation.
-Complete end-to-end testing also remains for Flows 11 and 12. Treat this as
-active development software and remain ready to operate the aircraft manually.
+The iniBuilds A320neo V2 flow is the mature baseline. FlyByWire A32NX support
+has been added and live-tested across the complete 12-flow sequence, with
+aircraft-specific mappings for power-up, engine start, taxi, takeoff, approach,
+landing, after-landing taxi, and shutdown. Treat this as active development
+software and remain ready to operate the aircraft manually.

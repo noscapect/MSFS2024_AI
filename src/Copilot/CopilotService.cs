@@ -23,7 +23,7 @@ internal sealed class CopilotService : Form
     private const double MetersPerNauticalMile = 1852.0;
     // Change the schema suffix whenever the ordered runtime LVar list changes.
     // MobiFlight client-data layouts persist for the simulator session.
-    private const string MobiFlightRuntimeClientName = "MSFS2024_AI_Copilot_v26";
+    private const string MobiFlightRuntimeClientName = "MSFS2024_AI_Copilot_v27";
     private readonly string? _oneShotCommand;
     private readonly bool _showUi;
     private readonly CopilotSettings _settings;
@@ -136,6 +136,14 @@ internal sealed class CopilotService : Form
     private DateTime? _fbwCommandedWeatherRadarPwsSelectorUtc;
     private float? _fbwCommandedNoseLightSelector;
     private DateTime? _fbwCommandedNoseLightSelectorUtc;
+    private bool? _fbwTcasAltitudeReporting;
+    private float? _fbwTcasMode;
+    private bool? _fbwCommandedTcasAltitudeReporting;
+    private DateTime? _fbwCommandedTcasAltitudeReportingUtc;
+    private float? _fbwCommandedTcasMode;
+    private DateTime? _fbwCommandedTcasModeUtc;
+    private float? _fbwCommandedLandingLightSelector;
+    private DateTime? _fbwCommandedLandingLightSelectorUtc;
     private float? _fbwAdirs1Selector;
     private float? _fbwAdirs2Selector;
     private float? _fbwAdirs3Selector;
@@ -346,7 +354,9 @@ internal sealed class CopilotService : Form
         FbwSpoilersArmed = 195,
         FbwFlapsHandleIndex = 196,
         FbwAutobrakeLevel = 197,
-        FbwWeatherRadarPwsSelector = 198
+        FbwWeatherRadarPwsSelector = 198,
+        FbwTcasAltitudeReporting = 199,
+        FbwTcasMode = 200
     }
 
     private enum ClientDataArea
@@ -449,7 +459,9 @@ internal sealed class CopilotService : Form
         FbwSpoilersArmed = 195,
         FbwFlapsHandleIndex = 196,
         FbwAutobrakeLevel = 197,
-        FbwWeatherRadarPwsSelector = 198
+        FbwWeatherRadarPwsSelector = 198,
+        FbwTcasAltitudeReporting = 199,
+        FbwTcasMode = 200
     }
 
     private enum CopilotEvent
@@ -520,6 +532,8 @@ internal sealed class CopilotService : Form
         public double LogoLights;
         public double TaxiLight;
         public double FbwNoseTakeoffLightCircuit;
+        public double FbwLeftLandingLightCircuit;
+        public double FbwRightLandingLightCircuit;
         public double FbwNoseTaxiLightCircuit;
         public double ApuRpm;
         public double ApuStarter;
@@ -791,6 +805,8 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "LIGHT LOGO", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "LIGHT TAXI", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "CIRCUIT SWITCH ON:17", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "CIRCUIT SWITCH ON:18", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "CIRCUIT SWITCH ON:19", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "CIRCUIT SWITCH ON:20", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "APU PCT RPM", "Percent", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "APU PCT STARTER", "Percent", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
@@ -939,7 +955,7 @@ internal sealed class CopilotService : Form
         }
 
         var request = (Request)data.dwRequestID;
-        if (request is >= Request.NativeBattery1 and <= Request.FbwWeatherRadarPwsSelector)
+        if (request is >= Request.NativeBattery1 and <= Request.FbwTcasMode)
         {
             var value = ((MobiFlightFloat)data.dwData[0]).Value;
             if (request == Request.NativeBattery1)
@@ -1147,6 +1163,14 @@ internal sealed class CopilotService : Form
             else if (request == Request.FbwWeatherRadarPwsSelector)
             {
                 SetLoggedFloat(ref _fbwWeatherRadarPwsSelector, value, "FBW A32NX WXR/PWS selector");
+            }
+            else if (request == Request.FbwTcasAltitudeReporting)
+            {
+                SetLoggedBool(ref _fbwTcasAltitudeReporting, value, "FBW A32NX TCAS altitude reporting");
+            }
+            else if (request == Request.FbwTcasMode)
+            {
+                SetLoggedFloat(ref _fbwTcasMode, value, "FBW A32NX TCAS mode");
             }
             else
             {
@@ -1420,6 +1444,8 @@ internal sealed class CopilotService : Form
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwFlapsHandleIndex, Request.FbwFlapsHandleIndex, 85 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwAutobrakeLevel, Request.FbwAutobrakeLevel, 86 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwWeatherRadarPwsSelector, Request.FbwWeatherRadarPwsSelector, 87 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwTcasAltitudeReporting, Request.FbwTcasAltitudeReporting, 88 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwTcasMode, Request.FbwTcasMode, 89 * sizeof(float));
 
         _mobiFlightRuntimeReady = true;
         _mobiFlightRuntimeInitializedUtc = DateTime.UtcNow;
@@ -1555,6 +1581,10 @@ internal sealed class CopilotService : Form
             "MF.SimVars.Add.(L:A32NX_AUTOBRAKES_ARMED_MODE)");
         SendMobiFlightRuntimeCommand(
             "MF.SimVars.Add.(L:A32NX_SWITCH_RADAR_PWS_POSITION)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_SWITCH_ATC_ALT)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_SWITCH_TCAS_POSITION)");
         SendMobiFlightRuntimeCommand("MF.DummyCmd");
         AppendDashboardLog("iniBuilds native state monitoring connected.");
     }
@@ -1651,6 +1681,21 @@ internal sealed class CopilotService : Form
             if (_fbwTransponderMode.HasValue)
             {
                 _state.TransponderModeSelectorPosition = _fbwTransponderMode.Value;
+            }
+            if (_fbwTcasAltitudeReporting.HasValue
+                || _fbwCommandedTcasAltitudeReporting.HasValue)
+            {
+                _state.TcasAltitudeReportingOn = ResolveFbwTcasAltitudeReporting(
+                    _fbwCommandedTcasAltitudeReporting,
+                    _fbwCommandedTcasAltitudeReportingUtc,
+                    _fbwTcasAltitudeReporting);
+            }
+            if (_fbwTcasMode.HasValue || _fbwCommandedTcasMode.HasValue)
+            {
+                _state.TcasMode = ResolveFbwSelectorWithCommand(
+                    _fbwCommandedTcasMode,
+                    _fbwCommandedTcasModeUtc,
+                    _fbwTcasMode);
             }
             if (_fbwParkingBrake.HasValue)
             {
@@ -2095,14 +2140,33 @@ internal sealed class CopilotService : Form
                     raw.FbwNoseTaxiLightCircuit,
                     raw.TaxiLight)
                 : _nativeNoseLightSelector,
-            LeftLandingLightSelectorPosition = _nativeLeftLandingLightSelector,
-            RightLandingLightSelectorPosition = _nativeRightLandingLightSelector,
-            TcasAltitudeReportingOn =
-                _nativeTcasAltitudeReporting.HasValue
+            LeftLandingLightSelectorPosition = isFlyByWireA320Neo
+                ? ResolveFbwLandingLightSelectorPosition(
+                    _fbwCommandedLandingLightSelector,
+                    _fbwCommandedLandingLightSelectorUtc,
+                    raw.FbwLeftLandingLightCircuit)
+                : _nativeLeftLandingLightSelector,
+            RightLandingLightSelectorPosition = isFlyByWireA320Neo
+                ? ResolveFbwLandingLightSelectorPosition(
+                    _fbwCommandedLandingLightSelector,
+                    _fbwCommandedLandingLightSelectorUtc,
+                    raw.FbwRightLandingLightCircuit)
+                : _nativeRightLandingLightSelector,
+            TcasAltitudeReportingOn = isFlyByWireA320Neo
+                ? ResolveFbwTcasAltitudeReporting(
+                    _fbwCommandedTcasAltitudeReporting,
+                    _fbwCommandedTcasAltitudeReportingUtc,
+                    _fbwTcasAltitudeReporting)
+                : _nativeTcasAltitudeReporting.HasValue
                     ? _nativeTcasAltitudeReporting.Value == 0
                     : null,
             TransponderAtcState = _nativeTransponderAtcState,
-            TcasMode = _nativeTcasMode,
+            TcasMode = isFlyByWireA320Neo
+                ? ResolveFbwSelectorWithCommand(
+                    _fbwCommandedTcasMode,
+                    _fbwCommandedTcasModeUtc,
+                    _fbwTcasMode)
+                : _nativeTcasMode,
             TransponderModeSelectorPosition = isFlyByWireA320Neo
                 ? _fbwTransponderMode
                 : _nativeTransponderStandby,
@@ -2380,6 +2444,51 @@ internal sealed class CopilotService : Form
         return 2;
     }
 
+    private static bool? ResolveFbwTcasAltitudeReporting(
+        bool? commandedValue,
+        DateTime? commandedUtc,
+        bool? fbwLVarValue)
+    {
+        if (commandedValue.HasValue
+            && commandedUtc.HasValue
+            && DateTime.UtcNow - commandedUtc.Value < TimeSpan.FromMinutes(2))
+        {
+            return commandedValue.Value;
+        }
+
+        return fbwLVarValue;
+    }
+
+    private static double? ResolveFbwSelectorWithCommand(
+        float? commandedValue,
+        DateTime? commandedUtc,
+        float? fbwLVarValue)
+    {
+        if (commandedValue.HasValue
+            && commandedUtc.HasValue
+            && DateTime.UtcNow - commandedUtc.Value < TimeSpan.FromMinutes(2))
+        {
+            return commandedValue.Value;
+        }
+
+        return fbwLVarValue;
+    }
+
+    private static double ResolveFbwLandingLightSelectorPosition(
+        float? commandedValue,
+        DateTime? commandedUtc,
+        double circuitOn)
+    {
+        if (commandedValue.HasValue
+            && commandedUtc.HasValue
+            && DateTime.UtcNow - commandedUtc.Value < TimeSpan.FromMinutes(2))
+        {
+            return commandedValue.Value;
+        }
+
+        return circuitOn != 0 ? 0 : 2;
+    }
+
     private static double? ResolveFbwStrobeSelectorPosition(bool? autoValue, float? lightState)
     {
         if (autoValue == true)
@@ -2567,15 +2676,24 @@ internal sealed class CopilotService : Form
                     : _nativeTransponderStandby.HasValue,
             var command when command.StartsWith("atc-system ") => _nativeTransponderAtcState.HasValue,
             var command when command.StartsWith("tcas altitude-reporting ") =>
-                _nativeTcasAltitudeReporting.HasValue,
-            var command when command.StartsWith("tcas traffic ") => _nativeTcasMode.HasValue,
+                _state?.IsFlyByWireA320Neo == true
+                    ? _mobiFlightRuntimeReady
+                    : _nativeTcasAltitudeReporting.HasValue,
+            var command when command.StartsWith("tcas traffic ") =>
+                _state?.IsFlyByWireA320Neo == true
+                    ? _mobiFlightRuntimeReady
+                    : _nativeTcasMode.HasValue,
             var command when command.StartsWith("wxr-pws ") =>
-                _nativeWeatherRadarPwsSelector.HasValue,
+                _state?.IsFlyByWireA320Neo == true
+                    ? _mobiFlightRuntimeReady
+                    : _nativeWeatherRadarPwsSelector.HasValue,
             var command when command.StartsWith("nose-light ") =>
-                _nativeNoseLightSelector.HasValue,
+                _state?.IsFlyByWireA320Neo == true
+                    || _nativeNoseLightSelector.HasValue,
             var command when command.StartsWith("landing-lights ") =>
-                _nativeLeftLandingLightSelector.HasValue
-                && _nativeRightLandingLightSelector.HasValue,
+                _state?.IsFlyByWireA320Neo == true
+                    || _nativeLeftLandingLightSelector.HasValue
+                    && _nativeRightLandingLightSelector.HasValue,
             var command when command.StartsWith("tcas-mode ") => _nativeTransponderStandby.HasValue,
             _ => true
         };
@@ -4579,6 +4697,36 @@ internal sealed class CopilotService : Form
 
     private void SetTcasTrafficMode(int desiredPosition)
     {
+        if (_state?.IsFlyByWireA320Neo == true)
+        {
+            if (_state == null || !_mobiFlightRuntimeReady)
+            {
+                AppendDashboardLog("TCAS traffic mode blocked: FBW runtime adapter is unavailable.");
+                FinishOneShot(4);
+                return;
+            }
+            if (_state.TcasMode.HasValue
+                && Math.Abs(_state.TcasMode.Value - desiredPosition) < 0.1)
+            {
+                AppendDashboardLog("TCAS traffic mode already TA/RA.");
+                FinishOneShot();
+                return;
+            }
+
+            SendMobiFlightCommand(
+                $"MF.SimVars.Set.{desiredPosition} (>L:A32NX_SWITCH_TCAS_POSITION)");
+            _fbwCommandedTcasMode = desiredPosition;
+            _fbwCommandedTcasModeUtc = DateTime.UtcNow;
+            SendMobiFlightCommand("MF.DummyCmd");
+            BeginNativeAction(
+                "TCAS traffic mode",
+                state => state.TcasMode.HasValue
+                         && Math.Abs(state.TcasMode.Value - desiredPosition) < 0.1,
+                true,
+                TimeSpan.FromSeconds(10));
+            return;
+        }
+
         if (!ValidateNativeInputAction("TCAS traffic mode"))
         {
             return;
@@ -4609,6 +4757,38 @@ internal sealed class CopilotService : Form
 
     private void SetTcasAltitudeReporting(bool desiredOn)
     {
+        if (_state?.IsFlyByWireA320Neo == true)
+        {
+            if (_state == null || !_mobiFlightRuntimeReady)
+            {
+                AppendDashboardLog("TCAS altitude reporting blocked: FBW runtime adapter is unavailable.");
+                FinishOneShot(4);
+                return;
+            }
+            if (_state.TcasAltitudeReportingOn.HasValue
+                && _state.TcasAltitudeReportingOn.Value == desiredOn)
+            {
+                AppendDashboardLog(
+                    $"TCAS altitude reporting already {desiredOn.ToOnOff()}.");
+                FinishOneShot();
+                return;
+            }
+
+            var value = desiredOn ? 1 : 0;
+            SendMobiFlightCommand(
+                $"MF.SimVars.Set.{value} (>L:A32NX_SWITCH_ATC_ALT)");
+            _fbwCommandedTcasAltitudeReporting = desiredOn;
+            _fbwCommandedTcasAltitudeReportingUtc = DateTime.UtcNow;
+            SendMobiFlightCommand("MF.DummyCmd");
+            BeginNativeAction(
+                "TCAS altitude reporting",
+                state => state.TcasAltitudeReportingOn.HasValue
+                         && state.TcasAltitudeReportingOn.Value == desiredOn,
+                desiredOn,
+                TimeSpan.FromSeconds(10));
+            return;
+        }
+
         if (!ValidateNativeInputAction("TCAS altitude reporting"))
         {
             return;
@@ -4903,6 +5083,50 @@ internal sealed class CopilotService : Form
 
     private void SetLandingLightSelectors(int desiredPosition)
     {
+        if (_state?.IsFlyByWireA320Neo == true)
+        {
+            if (_simConnect == null || !_mobiFlightReady)
+            {
+                AppendDashboardLog("Landing lights blocked: simulator state is unavailable.");
+                FinishOneShot(3);
+                return;
+            }
+
+            bool VerifyFbw(AircraftState state) =>
+                state.LeftLandingLightSelectorPosition.HasValue
+                && state.RightLandingLightSelectorPosition.HasValue
+                && Math.Abs(state.LeftLandingLightSelectorPosition.Value - desiredPosition) < 0.1
+                && Math.Abs(state.RightLandingLightSelectorPosition.Value - desiredPosition) < 0.1;
+
+            if (VerifyFbw(_state))
+            {
+                AppendDashboardLog(
+                    $"Landing light selectors already at position {desiredPosition}.");
+                FinishOneShot();
+                return;
+            }
+
+            var calculatorCode = desiredPosition switch
+            {
+                0 => "0 (>L:LIGHTING_LANDING_2) 0 (>L:LANDING_2_RETRACTED) (A:CIRCUIT SWITCH ON:18, Bool) ! if{ 18 (>K:ELECTRICAL_CIRCUIT_TOGGLE) } 0 (>L:LIGHTING_LANDING_3) 0 (>L:LANDING_3_RETRACTED) (A:CIRCUIT SWITCH ON:19, Bool) ! if{ 19 (>K:ELECTRICAL_CIRCUIT_TOGGLE) }",
+                1 => "(A:CIRCUIT SWITCH ON:18, Bool) if{ 18 (>K:ELECTRICAL_CIRCUIT_TOGGLE) } (A:CIRCUIT SWITCH ON:19, Bool) if{ 19 (>K:ELECTRICAL_CIRCUIT_TOGGLE) }",
+                2 => "2 (>L:LIGHTING_LANDING_2) 1 (>L:LANDING_2_RETRACTED) (A:CIRCUIT SWITCH ON:18, Bool) if{ 18 (>K:ELECTRICAL_CIRCUIT_TOGGLE) } 2 (>L:LIGHTING_LANDING_3) 1 (>L:LANDING_3_RETRACTED) (A:CIRCUIT SWITCH ON:19, Bool) if{ 19 (>K:ELECTRICAL_CIRCUIT_TOGGLE) }",
+                _ => throw new ArgumentOutOfRangeException(nameof(desiredPosition))
+            };
+
+            SendMobiFlightCommand($"MF.SimVars.Set.{calculatorCode}");
+            _fbwCommandedLandingLightSelector = desiredPosition;
+            _fbwCommandedLandingLightSelectorUtc = DateTime.UtcNow;
+            SendMobiFlightCommand("MF.DummyCmd");
+            BeginNativeAction(
+                "Landing lights",
+                VerifyFbw,
+                desiredPosition == 0,
+                TimeSpan.FromSeconds(10),
+                FormatLandingLightPosition(desiredPosition));
+            return;
+        }
+
         if (!ValidateNativeInputAction("Landing lights", false, false))
         {
             return;

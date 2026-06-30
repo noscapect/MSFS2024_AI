@@ -1650,7 +1650,10 @@ internal sealed class CopilotService : Form
         {
             if (_fbwSeatbeltSelector.HasValue)
             {
-                _state.SeatbeltSelectorPosition = _fbwSeatbeltSelector.Value;
+                _state.SeatbeltSelectorPosition =
+                    ResolveFbwSeatbeltSelectorPosition(
+                        _fbwSeatbeltSelector,
+                        _state.SeatbeltSignsOn);
             }
             if (_fbwNoSmokingSelector.HasValue)
             {
@@ -2064,9 +2067,11 @@ internal sealed class CopilotService : Form
             FlapsHandleIndex = raw.FlapsHandleIndex,
             LeftFlapPositionPercent = raw.LeftFlapPosition,
             RightFlapPositionPercent = raw.RightFlapPosition,
-            GearHandleDown = _nativeGearHandlePosition.HasValue
-                ? _nativeGearHandlePosition.Value >= 0.5
-                : raw.GearHandle != 0,
+            GearHandleDown = isFlyByWireA320Neo
+                ? raw.GearHandle != 0
+                : _nativeGearHandlePosition.HasValue
+                    ? _nativeGearHandlePosition.Value >= 0.5
+                    : raw.GearHandle != 0,
             PitchDegrees = raw.PitchDegrees,
             AutopilotMasterOn = raw.AutopilotMaster != 0,
             Adirs1SelectorState = isFlyByWireA320Neo
@@ -2097,7 +2102,9 @@ internal sealed class CopilotService : Form
             Engine2FireWarningLit = _nativeEngine2FireWarningLit.HasValue && _nativeEngine2FireWarningLit.Value != 0,
             Engine2FireSoundActive = _nativeEngine2FireSound.HasValue && _nativeEngine2FireSound.Value != 0,
             SeatbeltSelectorPosition = isFlyByWireA320Neo
-                ? _fbwSeatbeltSelector
+                ? ResolveFbwSeatbeltSelectorPosition(
+                    _fbwSeatbeltSelector,
+                    raw.CabinSeatbeltsAlert != 0)
                 : _nativeSeatbeltSelector,
             SeatbeltSignsOn = isFlyByWireA320Neo
                 ? raw.CabinSeatbeltsAlert != 0
@@ -2472,6 +2479,26 @@ internal sealed class CopilotService : Form
         }
 
         return fbwLVarValue;
+    }
+
+    private static double? ResolveFbwSeatbeltSelectorPosition(
+        float? fbwLVarValue,
+        bool seatbeltSignsOn)
+    {
+        if (!fbwLVarValue.HasValue)
+        {
+            return null;
+        }
+
+        // FBW exposes the seatbelt switch as a two-position LVar:
+        // 1 = AUTO, 0 = manual. In manual, the active cabin alert state tells
+        // us whether that manual state is ON or OFF in our three-state flow
+        // model.
+        return Math.Abs(fbwLVarValue.Value - 1) < 0.1
+            ? 1
+            : seatbeltSignsOn
+                ? 0
+                : 2;
     }
 
     private static double ResolveFbwLandingLightSelectorPosition(
@@ -4536,7 +4563,8 @@ internal sealed class CopilotService : Form
                 var fbwSeatbeltPosition = desiredPosition == 1 ? 1 : 0;
                 SendMobiFlightCommand(
                     $"MF.SimVars.Set.{fbwSeatbeltPosition} (>L:XMLVAR_SWITCH_OVHD_INTLT_SEATBELT_Position)");
-                if ((desiredPosition == 1) != _state.SeatbeltSignsOn)
+                if (desiredPosition != 1
+                    && (desiredPosition == 0) != _state.SeatbeltSignsOn)
                 {
                     SendMobiFlightCommand("MF.SimVars.Set.1 (>K:CABIN_SEATBELTS_ALERT_SWITCH_TOGGLE)");
                 }
@@ -4833,9 +4861,10 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        SendMobiFlightCommand(
-            "MF.SimVars.Set.(>B:LANDING_GEAR_Gear_Inc) " +
-            "'INI.GEAR_UP' (>F:KeyEvent)");
+        SendMobiFlightCommand(_state.IsFlyByWireA320Neo
+            ? "MF.SimVars.Set.(>K:GEAR_UP)"
+            : "MF.SimVars.Set.(>B:LANDING_GEAR_Gear_Inc) " +
+              "'INI.GEAR_UP' (>F:KeyEvent)");
         SendMobiFlightCommand("MF.DummyCmd");
         BeginNativeAction(
             "Landing gear",
@@ -4859,9 +4888,10 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        SendMobiFlightCommand(
-            "MF.SimVars.Set.(>B:LANDING_GEAR_Gear_Dec) " +
-            "'INI.GEAR_DOWN' (>F:KeyEvent)");
+        SendMobiFlightCommand(_state.IsFlyByWireA320Neo
+            ? "MF.SimVars.Set.(>K:GEAR_DOWN)"
+            : "MF.SimVars.Set.(>B:LANDING_GEAR_Gear_Dec) " +
+              "'INI.GEAR_DOWN' (>F:KeyEvent)");
         SendMobiFlightCommand("MF.DummyCmd");
         BeginNativeAction(
             "Landing gear",
@@ -5161,8 +5191,8 @@ internal sealed class CopilotService : Form
     private static string FormatLandingLightPosition(int position) =>
         position switch
         {
-            0 => "OFF",
-            1 => "ON",
+            0 => "ON",
+            1 => "OFF",
             2 => "RETRACTED",
             _ => position.ToString()
         };
@@ -5172,7 +5202,7 @@ internal sealed class CopilotService : Form
         if (!_cruiseSeatbeltMonitoring
             || _state == null
             || _simConnect == null
-            || !_state.IsA320NeoV2
+            || !_state.IsSupportedA320
             || _state.OnGround)
         {
             return;
@@ -5485,7 +5515,7 @@ internal sealed class CopilotService : Form
 
     private void SetFlapsClean()
     {
-        if (_simConnect == null || _state == null || !_state.IsA320NeoV2)
+        if (_simConnect == null || _state == null || !_state.IsSupportedA320)
         {
             AppendDashboardLog("Flaps retraction blocked: simulator state is unavailable.");
             FinishOneShot(3);
@@ -5506,10 +5536,18 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        SendMobiFlightCommand(_state.OnGround
-            ? "MF.SimVars.Set.0 (>B:HANDLING_Flaps_Set)"
-            : "MF.SimVars.Set.16384 (A:FLAPS NUM HANDLE POSITIONS, Number) / " +
-              "(>B:HANDLING_Flaps_Dec)");
+        if (_state.IsFlyByWireA320Neo)
+        {
+            SendMobiFlightCommand(
+                "MF.SimVars.Set.0 (>L:A32NX_FLAPS_HANDLE_INDEX)");
+        }
+        else
+        {
+            SendMobiFlightCommand(_state.OnGround
+                ? "MF.SimVars.Set.0 (>B:HANDLING_Flaps_Set)"
+                : "MF.SimVars.Set.16384 (A:FLAPS NUM HANDLE POSITIONS, Number) / " +
+                  "(>B:HANDLING_Flaps_Dec)");
+        }
         SendMobiFlightCommand("MF.DummyCmd");
         BeginNativeAction(
             "Flaps CLEAN",

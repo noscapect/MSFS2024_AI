@@ -7,7 +7,7 @@ internal static class AircraftStateSanity
         var issues = new List<string>();
         if (!IsFinite(state.FlapsHandleIndex)
             || state.FlapsHandleIndex < -0.1
-            || state.FlapsHandleIndex > 4.1
+            || state.FlapsHandleIndex > 5.1
             || Math.Abs(state.FlapsHandleIndex - Math.Round(state.FlapsHandleIndex)) > 0.1)
         {
             issues.Add($"Invalid flap handle index {state.FlapsHandleIndex:F2}.");

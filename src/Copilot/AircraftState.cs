@@ -191,8 +191,41 @@ internal sealed class AircraftState
         && Math.Abs(Adirs2SelectorState - 1) < 0.1
         && Math.Abs(Adirs3SelectorState - 1) < 0.1;
 
-    public bool FlapsAtDetent(int detent) =>
-        Math.Abs(FlapsHandleIndex - detent) < 0.1;
+    public bool FlapsAtDetent(int detent)
+    {
+        if (Math.Abs(FlapsHandleIndex - detent) < 0.1)
+        {
+            return true;
+        }
+
+        // The FlyByWire A32NX can briefly report inconsistent handle values
+        // while the physical flap surfaces have already reached the requested
+        // position. In the landing test it reported handle detent 1 with the
+        // surfaces clean, and also used 5 for FULL while our flow model uses 4.
+        // When the handle readback is flagged as suspicious, use the surface
+        // position as the truth source instead of blocking the procedure.
+        if (!FlapReadbackSane || detent == 4 && FlapsHandleIndex > 4.1)
+        {
+            return FlapSurfacesMatchDetent(detent);
+        }
+
+        return false;
+    }
+
+    private bool FlapSurfacesMatchDetent(int detent)
+    {
+        var maximumSurface =
+            Math.Max(LeftFlapPositionPercent, RightFlapPositionPercent);
+        return detent switch
+        {
+            0 => maximumSurface <= 1,
+            1 => maximumSurface is >= 5 and <= 18,
+            2 => maximumSurface is >= 18 and <= 35,
+            3 => maximumSurface is >= 35 and <= 75,
+            4 => maximumSurface >= 90,
+            _ => false
+        };
+    }
 }
 
 internal sealed class AircraftExitState

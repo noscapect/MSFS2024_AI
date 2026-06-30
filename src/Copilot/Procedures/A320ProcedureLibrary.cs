@@ -656,7 +656,7 @@ internal static class A320ProcedureLibrary
                     "APU MASTER ON",
                     state => state.ApuMasterSwitchOn,
                     "apu-master on"),
-                Observe("fo-apu-flap-open", "APU intake flap open", state => state.ApuFlapPercent >= 0.95),
+                Observe("fo-apu-flap-open", "APU intake flap open", state => state.IsFlyByWireA320Neo ? state.ApuMasterSwitchOn : state.ApuFlapPercent >= 0.95),
                 Automatic("fo-apu-start-on", "APU START selected", state => state.ApuStartButtonOn, "apu-start on"),
                 Observe(
                     "captain-runway-exit",
@@ -742,11 +742,6 @@ internal static class A320ProcedureLibrary
                     "beacon off"),
                 Automatic("fo-fuel-pumps-off", "All six fuel pumps OFF", state => state.AllFuelPumpsOff, "fuel-pumps off"),
                 Automatic("fo-seatbelts-off", "Seatbelt signs OFF", state => state.SeatbeltSelectorPosition.HasValue && Math.Abs(state.SeatbeltSelectorPosition.Value - 2) < 0.1, "seatbelts off"),
-                Observe(
-                    "fo-doors",
-                    "A required cabin or cargo door opened",
-                    state => state.AnyRequiredDoorOpen,
-                    CrewRole.FirstOfficer),
                 Manual("secure-decision", "Cold-and-dark secure requested", "Captain and First Officer: confirm continuation to final cold-and-dark secure.", CrewRole.Either),
                 Automatic(
                     "secure-oxygen",
@@ -764,11 +759,11 @@ internal static class A320ProcedureLibrary
                     "secure-apu-power",
                     "APU power available before external-power disconnect",
                     state => !state.ExternalPowerOn
-                             || (state.ApuAvailable && state.ApuGeneratorSwitchOn),
+                             || (state.ApuAvailable && (state.IsFlyByWireA320Neo || state.ApuGeneratorSwitchOn)),
                     CrewRole.Either),
                 Automatic("secure-external-power-off", "External power OFF", state => !state.ExternalPowerOn, "external-power off", CrewRole.Either),
                 Automatic("secure-apu-master-off", "APU MASTER OFF", state => !state.ApuMasterSwitchOn, "apu-master off", CrewRole.Either),
-                Observe("secure-apu-flap", "APU exhaust/intake flap closed", state => state.ApuFlapPercent <= 0.05, CrewRole.Either),
+                Observe("secure-apu-flap", "APU exhaust/intake flap closed", state => state.IsFlyByWireA320Neo ? !state.ApuMasterSwitchOn : state.ApuFlapPercent <= 0.05, CrewRole.Either),
                 Automatic("secure-battery-one-off", "BAT 1 OFF", state => !state.Battery1On, "battery-1 off", CrewRole.Either),
                 Automatic("secure-battery-two-off", "BAT 2 OFF", state => !state.Battery2On, "battery-2 off", CrewRole.Either)
             });

@@ -263,7 +263,9 @@ radar display selectors and engine anti-ice are not operated by this flow.
 7. **F/O automatic:** Turn beacon OFF after engine shutdown.
 8. **F/O automatic:** Turn all six fuel pumps OFF.
 9. **F/O automatic:** Turn seatbelt signs OFF.
-10. **Monitor:** Wait until a configured required cabin or cargo door opens.
+
+Doors and slides are treated as a real-world turnaround/ground-handling item
+and do not block the cockpit shutdown flow.
 
 ### Optional cold-and-dark secure
 

@@ -2222,7 +2222,7 @@ internal sealed class CopilotService : Form
         AppendDashboardLog($"Aircraft detected: {_state.Title}");
         if (!_state.IsSupportedA320)
         {
-            Console.Error.WriteLine("Warning: this build currently supports only iniBuilds A320neo V2 and experimental FBW A32NX discovery mode.");
+            Console.Error.WriteLine("Warning: this build supports the iniBuilds A320neo V2 and FlyByWire A32NX.");
         }
 
         if (_oneShotCommand == null)
@@ -6199,7 +6199,7 @@ internal sealed class CopilotService : Form
 
         var title = new Label
         {
-            Text = "iniBuilds A320neo Virtual First Officer",
+            Text = "MSFS 2024 A320 Virtual First Officer",
             AutoSize = true,
             Font = new System.Drawing.Font(Font.FontFamily, 16, System.Drawing.FontStyle.Bold),
             Margin = new Padding(0, 0, 0, 10)
@@ -7105,7 +7105,7 @@ internal sealed class CopilotService : Form
             $"APU {_state.ApuMasterSwitchOn.ToOnOff()}/{_state.ApuRpmPercent:F0}%";
         _adapterLabel!.Text = _mobiFlightReady
             ? "MobiFlight connected"
-            : "MobiFlight not connected — iniBuilds controls unavailable";
+            : "MobiFlight not connected — aircraft controls unavailable";
         _adapterLabel.ForeColor = _mobiFlightReady
             ? System.Drawing.Color.DarkGreen
             : System.Drawing.Color.DarkRed;

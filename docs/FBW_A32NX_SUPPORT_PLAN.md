@@ -1,9 +1,11 @@
-# FBW A32NX support development plan
+# FBW A32NX support notes
 
 Branch: `feature/fbw-a320neo-support`
 
-Goal: add FlyByWire A32NX support without destabilizing the released
-iniBuilds A320neo V2 app.
+Status: merged for version 0.6.0.
+
+Goal: add FlyByWire A32NX support without destabilizing the iniBuilds A320neo
+V2 app.
 
 ## Development strategy
 
@@ -11,7 +13,7 @@ The existing gate-to-gate procedure engine remains the source of truth. FBW
 support should be added through an aircraft-adapter layer, not by mixing FBW
 control mappings into iniBuilds-specific code paths.
 
-The first development phase is discovery only:
+The first development phase used live discovery:
 
 1. Load the FBW A32NX cold and dark at a gate.
 2. Allow the app to recognize FBW as an experimental supported A320.
@@ -23,9 +25,9 @@ The first development phase is discovery only:
 iniBuilds-only automatic commands must remain blocked on FBW until an explicit
 FBW equivalent has been mapped and verified.
 
-## Phase 1 scope: cold and dark through before takeoff
+## Implemented scope
 
-Target flows:
+The FBW adapter now covers the complete 12-flow gate-to-gate sequence:
 
 1. Power Up & Initial Setup
 2. Flight Computer & Pre-Flight
@@ -33,8 +35,12 @@ Target flows:
 4. Engine Start Sequence
 5. After Start & Taxi
 6. Before Takeoff
-
-Do not include Flow 7 takeoff yet.
+7. Takeoff & Climb
+8. Cruise
+9. Descent Preparation
+10. Approach & Landing
+11. After Landing & Taxi
+12. Parking & Shutdown
 
 ## What to capture during live tests
 
@@ -54,17 +60,18 @@ Use the app's diagnostic export after each run:
 %LOCALAPPDATA%\MSFS2024_AI\logs\copilot.log
 ```
 
-## Expected initial blockers
+## Initial blockers resolved
 
 - ADIRS selectors and ON BAT logic
 - Crew oxygen
 - NAV/LOGO/strobe selector positions
-- Fire test buttons and warning/sound readbacks
+- Fire test buttons
 - Fuel pumps
 - Seatbelt/no-smoking/emergency-exit selectors
 - APU master/start/bleed/available readbacks
 - Transponder/TCAS controls
 - Ground spoilers, flaps, autobrake
+- WXR/PWS enablement
 - Nose and landing light selector positions
 
 Some generic SimVars may already work for aircraft state, engines, basic
@@ -84,9 +91,9 @@ aircraft supports that action and how to command/verify it.
 
 ## Release rule
 
-Do not merge to `main` or publish a public release with FBW enabled until:
+FBW support was not released until:
 
-- Flows 1 through 6 are live-tested on FBW.
+- Flows 1 through 12 were live-tested on FBW.
 - Existing iniBuilds flows still pass regression tests and at least one smoke
   live test.
 - Unsupported FBW actions fail cleanly or are marked manual/monitor-only.

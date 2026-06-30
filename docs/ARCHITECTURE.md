@@ -26,7 +26,7 @@ Represents normalized A320 state such as electrical power, engines, lights,
 flight controls, autoflight modes, navigation, radios, doors, and ground
 services. Procedures depend on this normalized model rather than raw SimVars.
 
-### iniBuilds A320neo adapter
+### Aircraft adapters
 
 Maps normalized state and commands to:
 
@@ -39,8 +39,14 @@ Maps normalized state and commands to:
 Every capability is marked as supported, unsupported, read-only, or requiring
 manual confirmation.
 
+Version 0.6.0 supports two A320 adapters:
+
+- iniBuilds A320neo V2
+- FlyByWire A32NX for MSFS 2024
+
 iniBuilds command/state pairs and the mandatory momentary-command workflow are
-defined in `docs/NATIVE_CONTROL_STRATEGY.md`.
+defined in `docs/NATIVE_CONTROL_STRATEGY.md`. FBW-specific mappings were added
+through the same normalized state/action model so procedures can stay shared.
 
 ### SimConnect transport
 

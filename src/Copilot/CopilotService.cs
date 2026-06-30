@@ -23,7 +23,7 @@ internal sealed class CopilotService : Form
     private const double MetersPerNauticalMile = 1852.0;
     // Change the schema suffix whenever the ordered runtime LVar list changes.
     // MobiFlight client-data layouts persist for the simulator session.
-    private const string MobiFlightRuntimeClientName = "MSFS2024_AI_Copilot_v21";
+    private const string MobiFlightRuntimeClientName = "MSFS2024_AI_Copilot_v22";
     private readonly string? _oneShotCommand;
     private readonly bool _showUi;
     private readonly CopilotSettings _settings;
@@ -132,6 +132,9 @@ internal sealed class CopilotService : Form
     private float? _fbwNavLogoSelectorTyped;
     private bool? _fbwStrobeAuto;
     private float? _fbwStrobeLightState;
+    private float? _fbwSeatbeltSelector;
+    private float? _fbwNoSmokingSelector;
+    private float? _fbwEmergencyExitSelector;
     private float? _fbwBattery1Potential;
     private float? _fbwBattery2Potential;
     private double? _lastLoggedBattery1Voltage;
@@ -300,7 +303,10 @@ internal sealed class CopilotService : Form
         FbwNavLogoSelector = 176,
         FbwNavLogoSelectorTyped = 177,
         FbwStrobeAuto = 178,
-        FbwStrobeLightState = 179
+        FbwStrobeLightState = 179,
+        FbwSeatbeltSelector = 180,
+        FbwNoSmokingSelector = 181,
+        FbwEmergencyExitSelector = 182
     }
 
     private enum ClientDataArea
@@ -384,7 +390,10 @@ internal sealed class CopilotService : Form
         FbwNavLogoSelector = 176,
         FbwNavLogoSelectorTyped = 177,
         FbwStrobeAuto = 178,
-        FbwStrobeLightState = 179
+        FbwStrobeLightState = 179,
+        FbwSeatbeltSelector = 180,
+        FbwNoSmokingSelector = 181,
+        FbwEmergencyExitSelector = 182
     }
 
     private enum CopilotEvent
@@ -394,7 +403,12 @@ internal sealed class CopilotService : Form
         StartApu,
         SetApuBleed,
         SetApuGenerator,
-        SetFuelPump
+        SetFuelPump,
+        FuelSystemPumpOn,
+        FuelSystemPumpOff,
+        FuelSystemValveOpen,
+        FuelSystemValveClose,
+        CabinSeatbeltsToggle
     }
 
     private enum Priority
@@ -456,6 +470,11 @@ internal sealed class CopilotService : Form
         public double FuelPump2;
         public double FuelPump3;
         public double FuelPump4;
+        public double FbwFuelPump5;
+        public double FbwFuelPump6;
+        public double FbwFuelValve9;
+        public double FbwFuelValve10;
+        public double CabinSeatbeltsAlert;
         public double AltitudeAboveGround;
         public double IndicatedAltitude;
         public double IndicatedAirspeed;
@@ -717,6 +736,11 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "FUELSYSTEM PUMP SWITCH:2", "Enum", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "FUELSYSTEM PUMP SWITCH:3", "Enum", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "FUELSYSTEM PUMP SWITCH:4", "Enum", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "FUELSYSTEM PUMP SWITCH:5", "Enum", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "FUELSYSTEM PUMP SWITCH:6", "Enum", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "FUELSYSTEM VALVE SWITCH:9", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "FUELSYSTEM VALVE SWITCH:10", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "CABIN SEATBELTS ALERT SWITCH", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "PLANE ALT ABOVE GROUND", "Feet", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "INDICATED ALTITUDE", "Feet", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "AIRSPEED INDICATED", "Knots", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
@@ -758,6 +782,11 @@ internal sealed class CopilotService : Form
         sender.MapClientEventToSimEvent(CopilotEvent.SetApuBleed, "APU_BLEED_AIR_SOURCE_SET");
         sender.MapClientEventToSimEvent(CopilotEvent.SetApuGenerator, "APU_GENERATOR_SWITCH_SET");
         sender.MapClientEventToSimEvent(CopilotEvent.SetFuelPump, "FUELSYSTEM_PUMP_SET");
+        sender.MapClientEventToSimEvent(CopilotEvent.FuelSystemPumpOn, "FUELSYSTEM_PUMP_ON");
+        sender.MapClientEventToSimEvent(CopilotEvent.FuelSystemPumpOff, "FUELSYSTEM_PUMP_OFF");
+        sender.MapClientEventToSimEvent(CopilotEvent.FuelSystemValveOpen, "FUELSYSTEM_VALVE_OPEN");
+        sender.MapClientEventToSimEvent(CopilotEvent.FuelSystemValveClose, "FUELSYSTEM_VALVE_CLOSE");
+        sender.MapClientEventToSimEvent(CopilotEvent.CabinSeatbeltsToggle, "CABIN_SEATBELTS_ALERT_SWITCH_TOGGLE");
         InitializeMobiFlight(sender);
 
         sender.RequestDataOnSimObject(
@@ -844,7 +873,7 @@ internal sealed class CopilotService : Form
         }
 
         var request = (Request)data.dwRequestID;
-        if (request is >= Request.NativeBattery1 and <= Request.FbwStrobeLightState)
+        if (request is >= Request.NativeBattery1 and <= Request.FbwEmergencyExitSelector)
         {
             var value = ((MobiFlightFloat)data.dwData[0]).Value;
             if (request == Request.NativeBattery1)
@@ -976,6 +1005,18 @@ internal sealed class CopilotService : Form
             else if (request == Request.FbwStrobeLightState)
             {
                 SetLoggedFloat(ref _fbwStrobeLightState, value, "FBW A32NX strobe light state");
+            }
+            else if (request == Request.FbwSeatbeltSelector)
+            {
+                SetLoggedFloat(ref _fbwSeatbeltSelector, value, "FBW A32NX seatbelt selector");
+            }
+            else if (request == Request.FbwNoSmokingSelector)
+            {
+                SetLoggedFloat(ref _fbwNoSmokingSelector, value, "FBW A32NX no-smoking selector");
+            }
+            else if (request == Request.FbwEmergencyExitSelector)
+            {
+                SetLoggedFloat(ref _fbwEmergencyExitSelector, value, "FBW A32NX emergency-exit selector");
             }
             else
             {
@@ -1230,6 +1271,9 @@ internal sealed class CopilotService : Form
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwNavLogoSelectorTyped, Request.FbwNavLogoSelectorTyped, 66 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwStrobeAuto, Request.FbwStrobeAuto, 67 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwStrobeLightState, Request.FbwStrobeLightState, 68 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwSeatbeltSelector, Request.FbwSeatbeltSelector, 69 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwNoSmokingSelector, Request.FbwNoSmokingSelector, 70 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwEmergencyExitSelector, Request.FbwEmergencyExitSelector, 71 * sizeof(float));
 
         _mobiFlightRuntimeReady = true;
         _mobiFlightRuntimeInitializedUtc = DateTime.UtcNow;
@@ -1327,6 +1371,12 @@ internal sealed class CopilotService : Form
             "MF.SimVars.Add.(L:STROBE_0_AUTO)");
         SendMobiFlightRuntimeCommand(
             "MF.SimVars.Add.(L:LIGHTING_STROBE_0)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:XMLVAR_SWITCH_OVHD_INTLT_SEATBELT_Position)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:XMLVAR_SWITCH_OVHD_INTLT_NOSMOKING_Position)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:XMLVAR_SWITCH_OVHD_INTLT_EMEREXIT_Position)");
         SendMobiFlightRuntimeCommand("MF.DummyCmd");
         AppendDashboardLog("iniBuilds native state monitoring connected.");
     }
@@ -1390,6 +1440,19 @@ internal sealed class CopilotService : Form
         }
         if (_state.IsFlyByWireA320Neo)
         {
+            if (_fbwSeatbeltSelector.HasValue)
+            {
+                _state.SeatbeltSelectorPosition = _fbwSeatbeltSelector.Value;
+            }
+            if (_fbwNoSmokingSelector.HasValue)
+            {
+                _state.NoSmokingSelectorPosition = _fbwNoSmokingSelector.Value;
+                _state.NoSmokingSignsOn = Math.Abs(_fbwNoSmokingSelector.Value) < 0.1;
+            }
+            if (_fbwEmergencyExitSelector.HasValue)
+            {
+                _state.EmergencyExitSelectorPosition = _fbwEmergencyExitSelector.Value;
+            }
             // From here down the fields are iniBuilds-native LVars. Do not let
             // their default/stale values masquerade as valid FBW cockpit state.
             return;
@@ -1604,18 +1667,25 @@ internal sealed class CopilotService : Form
                                    ? _nativeApuGeneratorOn.Value != 0
                                    : raw.ApuGeneratorSwitch != 0,
             ApuVolts = raw.ApuVolts,
-            FuelPumpsConfigured = (_nativeFuelPump1 ?? (float)raw.FuelPump1) != 0
-                                  && (_nativeFuelPump2 ?? (float)raw.FuelPump2) != 0
-                                  && (_nativeFuelPump3 ?? (float)raw.FuelPump3) != 0
-                                  && (_nativeFuelPump4 ?? (float)raw.FuelPump4) != 0
-                                  && (_nativeFuelPump5 ?? 0) != 0
-                                  && (_nativeFuelPump6 ?? 0) != 0,
-            FuelPump1State = _nativeFuelPump1 ?? raw.FuelPump1,
-            FuelPump2State = _nativeFuelPump2 ?? raw.FuelPump2,
-            FuelPump3State = _nativeFuelPump3 ?? raw.FuelPump3,
-            FuelPump4State = _nativeFuelPump4 ?? raw.FuelPump4,
-            FuelPump5State = _nativeFuelPump5 ?? 0,
-            FuelPump6State = _nativeFuelPump6 ?? 0,
+            FuelPumpsConfigured = isFlyByWireA320Neo
+                ? raw.FuelPump2 != 0
+                  && raw.FbwFuelPump5 != 0
+                  && raw.FbwFuelValve9 != 0
+                  && raw.FbwFuelValve10 != 0
+                  && raw.FuelPump3 != 0
+                  && raw.FbwFuelPump6 != 0
+                : (_nativeFuelPump1 ?? (float)raw.FuelPump1) != 0
+                  && (_nativeFuelPump2 ?? (float)raw.FuelPump2) != 0
+                  && (_nativeFuelPump3 ?? (float)raw.FuelPump3) != 0
+                  && (_nativeFuelPump4 ?? (float)raw.FuelPump4) != 0
+                  && (_nativeFuelPump5 ?? 0) != 0
+                  && (_nativeFuelPump6 ?? 0) != 0,
+            FuelPump1State = isFlyByWireA320Neo ? raw.FuelPump2 : _nativeFuelPump1 ?? raw.FuelPump1,
+            FuelPump2State = isFlyByWireA320Neo ? raw.FbwFuelPump5 : _nativeFuelPump2 ?? raw.FuelPump2,
+            FuelPump3State = isFlyByWireA320Neo ? raw.FbwFuelValve9 : _nativeFuelPump3 ?? raw.FuelPump3,
+            FuelPump4State = isFlyByWireA320Neo ? raw.FbwFuelValve10 : _nativeFuelPump4 ?? raw.FuelPump4,
+            FuelPump5State = isFlyByWireA320Neo ? raw.FuelPump3 : _nativeFuelPump5 ?? 0,
+            FuelPump6State = isFlyByWireA320Neo ? raw.FbwFuelPump6 : _nativeFuelPump6 ?? 0,
             AltitudeAboveGroundFeet = raw.AltitudeAboveGround,
             IndicatedAltitudeFeet = raw.IndicatedAltitude,
             TransitionAltitudeFeet = _settings.TransitionAltitudeFeet,
@@ -1684,11 +1754,21 @@ internal sealed class CopilotService : Form
             Engine2FireTestActive = _nativeEngine2FireTest.HasValue && _nativeEngine2FireTest.Value != 0,
             Engine2FireWarningLit = _nativeEngine2FireWarningLit.HasValue && _nativeEngine2FireWarningLit.Value != 0,
             Engine2FireSoundActive = _nativeEngine2FireSound.HasValue && _nativeEngine2FireSound.Value != 0,
-            SeatbeltSelectorPosition = _nativeSeatbeltSelector,
-            SeatbeltSignsOn = _nativeSeatbeltSignsOn.HasValue && _nativeSeatbeltSignsOn.Value != 0,
-            NoSmokingSelectorPosition = _nativeNoSmokingSelector,
-            NoSmokingSignsOn = _nativeNoSmokingSignsOn.HasValue && _nativeNoSmokingSignsOn.Value != 0,
-            EmergencyExitSelectorPosition = _nativeEmergencyExitSelector,
+            SeatbeltSelectorPosition = isFlyByWireA320Neo
+                ? _fbwSeatbeltSelector
+                : _nativeSeatbeltSelector,
+            SeatbeltSignsOn = isFlyByWireA320Neo
+                ? raw.CabinSeatbeltsAlert != 0
+                : _nativeSeatbeltSignsOn.HasValue && _nativeSeatbeltSignsOn.Value != 0,
+            NoSmokingSelectorPosition = isFlyByWireA320Neo
+                ? _fbwNoSmokingSelector
+                : _nativeNoSmokingSelector,
+            NoSmokingSignsOn = isFlyByWireA320Neo
+                ? _fbwNoSmokingSelector.HasValue && Math.Abs(_fbwNoSmokingSelector.Value) < 0.1
+                : _nativeNoSmokingSignsOn.HasValue && _nativeNoSmokingSignsOn.Value != 0,
+            EmergencyExitSelectorPosition = isFlyByWireA320Neo
+                ? _fbwEmergencyExitSelector
+                : _nativeEmergencyExitSelector,
             GroundSpoilersArmed = _nativeSpoilersArmed.HasValue
                 ? _nativeSpoilersArmed.Value != 0
                 : raw.SpoilersArmed != 0,
@@ -2030,7 +2110,8 @@ internal sealed class CopilotService : Form
                 && _nativeApuGeneratorOn.HasValue
                 && _nativeApuFlapPercent.HasValue,
             var command when command.StartsWith("fuel-pumps ") =>
-                _nativeFuelPump1.HasValue
+                _state?.IsFlyByWireA320Neo == true
+                    || _nativeFuelPump1.HasValue
                 && _nativeFuelPump2.HasValue
                 && _nativeFuelPump3.HasValue
                 && _nativeFuelPump4.HasValue
@@ -2044,12 +2125,24 @@ internal sealed class CopilotService : Form
                 _state?.IsFlyByWireA320Neo == true
                     ? _mobiFlightRuntimeReady
                     : _nativeStrobeSelector.HasValue,
-            var command when command == "fire-test apu" => _nativeApuFireTest.HasValue,
-            var command when command == "fire-test engine-1" => _nativeEngine1FireTest.HasValue,
-            var command when command == "fire-test engine-2" => _nativeEngine2FireTest.HasValue,
-            var command when command.StartsWith("seatbelts ") => _nativeSeatbeltSelector.HasValue,
-            var command when command.StartsWith("no-smoking ") => _nativeNoSmokingSelector.HasValue,
-            var command when command.StartsWith("emergency-exit ") => _nativeEmergencyExitSelector.HasValue,
+            var command when command == "fire-test apu" =>
+                _state?.IsFlyByWireA320Neo == true || _nativeApuFireTest.HasValue,
+            var command when command == "fire-test engine-1" =>
+                _state?.IsFlyByWireA320Neo == true || _nativeEngine1FireTest.HasValue,
+            var command when command == "fire-test engine-2" =>
+                _state?.IsFlyByWireA320Neo == true || _nativeEngine2FireTest.HasValue,
+            var command when command.StartsWith("seatbelts ") =>
+                _state?.IsFlyByWireA320Neo == true
+                    ? _mobiFlightRuntimeReady
+                    : _nativeSeatbeltSelector.HasValue,
+            var command when command.StartsWith("no-smoking ") =>
+                _state?.IsFlyByWireA320Neo == true
+                    ? _mobiFlightRuntimeReady
+                    : _nativeNoSmokingSelector.HasValue,
+            var command when command.StartsWith("emergency-exit ") =>
+                _state?.IsFlyByWireA320Neo == true
+                    ? _mobiFlightRuntimeReady
+                    : _nativeEmergencyExitSelector.HasValue,
             var command when command.StartsWith("transponder ") => _nativeTransponderStandby.HasValue,
             var command when command.StartsWith("atc-system ") => _nativeTransponderAtcState.HasValue,
             var command when command.StartsWith("tcas altitude-reporting ") =>
@@ -2977,6 +3070,12 @@ internal sealed class CopilotService : Form
 
     private void SetFuelPumps(bool desiredOn)
     {
+        if (_state?.IsFlyByWireA320Neo == true)
+        {
+            SetFlyByWireFuelPumps(desiredOn);
+            return;
+        }
+
         if (!ValidateNativeInputAction("Fuel pumps"))
         {
             return;
@@ -3032,8 +3131,59 @@ internal sealed class CopilotService : Form
             toggles.Enqueue(
                 new FuelPumpToggle(
                     index + 1,
-                    selectors[index],
-                    pressStates[index]));
+                    $"(L:{selectors[index]}) ! (>L:{selectors[index]}) " +
+                    $"(L:{pressStates[index]}) ! (>L:{pressStates[index]})"));
+        }
+
+        _pendingFuelPumpSequence = new PendingFuelPumpSequence(toggles, desiredOn);
+        _fuelPumpSequenceTimer?.Dispose();
+        _fuelPumpSequenceTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+        _fuelPumpSequenceTimer.Tick += (_, _) => ExecuteNextFuelPumpToggle();
+        ExecuteNextFuelPumpToggle();
+    }
+
+    private void SetFlyByWireFuelPumps(bool desiredOn)
+    {
+        if (_simConnect == null || _state == null)
+        {
+            AppendDashboardLog("Fuel pumps blocked: aircraft state is unavailable.");
+            FinishOneShot(3);
+            return;
+        }
+
+        var alreadyDesired = desiredOn
+            ? _state.FuelPumpsConfigured
+            : AreAllFuelPumpsOff(_state);
+        if (alreadyDesired)
+        {
+            AppendDashboardLog($"Fuel pumps already {(desiredOn ? "ON" : "OFF")}.");
+            FinishOneShot();
+            return;
+        }
+
+        var states = new[]
+        {
+            _state.FuelPump1State,
+            _state.FuelPump2State,
+            _state.FuelPump3State,
+            _state.FuelPump4State,
+            _state.FuelPump5State,
+            _state.FuelPump6State
+        };
+        var commands = desiredOn
+            ? new[] { "2 (>K:FUELSYSTEM_PUMP_ON)", "5 (>K:FUELSYSTEM_PUMP_ON)", "9 (>K:FUELSYSTEM_VALVE_OPEN)", "10 (>K:FUELSYSTEM_VALVE_OPEN)", "3 (>K:FUELSYSTEM_PUMP_ON)", "6 (>K:FUELSYSTEM_PUMP_ON)" }
+            : new[] { "2 (>K:FUELSYSTEM_PUMP_OFF)", "5 (>K:FUELSYSTEM_PUMP_OFF)", "9 (>K:FUELSYSTEM_VALVE_CLOSE)", "10 (>K:FUELSYSTEM_VALVE_CLOSE)", "3 (>K:FUELSYSTEM_PUMP_OFF)", "6 (>K:FUELSYSTEM_PUMP_OFF)" };
+
+        var toggles = new Queue<FuelPumpToggle>();
+        for (var index = 0; index < states.Length; index++)
+        {
+            var isOn = Math.Abs(states[index]) >= 0.1;
+            if (isOn == desiredOn)
+            {
+                continue;
+            }
+
+            toggles.Enqueue(new FuelPumpToggle(index + 1, commands[index]));
         }
 
         _pendingFuelPumpSequence = new PendingFuelPumpSequence(toggles, desiredOn);
@@ -3067,11 +3217,8 @@ internal sealed class CopilotService : Form
         }
 
         var toggle = _pendingFuelPumpSequence.Toggles.Dequeue();
-        // Exact Behavior Viewer Mouserect code: toggle one pump selector and
-        // its press-animation state. Buttons are spaced one second apart.
-        SendMobiFlightCommand(
-            $"MF.SimVars.Set.(L:{toggle.SelectorLVar}) ! (>L:{toggle.SelectorLVar}) " +
-            $"(L:{toggle.PressLVar}) ! (>L:{toggle.PressLVar})");
+        // Buttons are spaced one second apart for a believable F/O cadence.
+        SendMobiFlightCommand($"MF.SimVars.Set.{toggle.CalculatorCode}");
         SendMobiFlightCommand("MF.DummyCmd");
         AppendDashboardLog(
             $"Fuel pump {toggle.Number}/6 pressed " +
@@ -3669,6 +3816,12 @@ internal sealed class CopilotService : Form
 
     private void SetSignSelector(SignSelector selector, int desiredPosition)
     {
+        if (_state?.IsFlyByWireA320Neo == true)
+        {
+            SetFlyByWireSignSelector(selector, desiredPosition);
+            return;
+        }
+
         if (!ValidateNativeInputAction(
                 FormatSignSelectorName(selector),
                 requireStationary: false))
@@ -3717,6 +3870,82 @@ internal sealed class CopilotService : Form
         }
 
         _simConnect!.SetInputEvent(inputEventHash, (double)desiredPosition);
+        BeginNativeAction(
+            FormatSignSelectorName(selector),
+            Verify,
+            desiredPosition != 2,
+            TimeSpan.FromSeconds(10));
+    }
+
+    private void SetFlyByWireSignSelector(SignSelector selector, int desiredPosition)
+    {
+        if (_simConnect == null || _state == null)
+        {
+            AppendDashboardLog($"{FormatSignSelectorName(selector)} blocked: aircraft state is unavailable.");
+            FinishOneShot(3);
+            return;
+        }
+
+        double? ReadPosition(AircraftState state) =>
+            selector switch
+            {
+                SignSelector.Seatbelts => state.SeatbeltSelectorPosition,
+                SignSelector.NoSmoking => state.NoSmokingSelectorPosition,
+                SignSelector.EmergencyExit => state.EmergencyExitSelectorPosition,
+                _ => null
+            };
+
+        bool Verify(AircraftState state)
+        {
+            var position = ReadPosition(state);
+            if (!position.HasValue || Math.Abs(position.Value - desiredPosition) >= 0.1)
+            {
+                return false;
+            }
+
+            return selector switch
+            {
+                SignSelector.Seatbelts when desiredPosition == 1 => state.SeatbeltSignsOn,
+                SignSelector.NoSmoking when desiredPosition == 0 => state.NoSmokingSignsOn,
+                _ => true
+            };
+        }
+
+        if (Verify(_state))
+        {
+            AppendDashboardLog(
+                $"{FormatSignSelectorName(selector)} already " +
+                $"{FormatSignSelectorPosition(selector, desiredPosition)}.");
+            FinishOneShot();
+            return;
+        }
+
+        switch (selector)
+        {
+            case SignSelector.Seatbelts:
+            {
+                var fbwSeatbeltPosition = desiredPosition == 1 ? 1 : 0;
+                SendMobiFlightCommand(
+                    $"MF.SimVars.Set.{fbwSeatbeltPosition} (>L:XMLVAR_SWITCH_OVHD_INTLT_SEATBELT_Position)");
+                if ((desiredPosition == 1) != _state.SeatbeltSignsOn)
+                {
+                    SendMobiFlightCommand("MF.SimVars.Set.1 (>K:CABIN_SEATBELTS_ALERT_SWITCH_TOGGLE)");
+                }
+                break;
+            }
+            case SignSelector.NoSmoking:
+                SendMobiFlightCommand(
+                    $"MF.SimVars.Set.{desiredPosition} (>L:XMLVAR_SWITCH_OVHD_INTLT_NOSMOKING_Position)");
+                break;
+            case SignSelector.EmergencyExit:
+                SendMobiFlightCommand(
+                    $"MF.SimVars.Set.{desiredPosition} (>L:XMLVAR_SWITCH_OVHD_INTLT_EMEREXIT_Position)");
+                break;
+            default:
+                throw new ArgumentOutOfRangeException(nameof(selector));
+        }
+
+        SendMobiFlightCommand("MF.DummyCmd");
         BeginNativeAction(
             FormatSignSelectorName(selector),
             Verify,
@@ -6544,17 +6773,14 @@ internal sealed class CopilotService : Form
     {
         public FuelPumpToggle(
             int number,
-            string selectorLVar,
-            string pressLVar)
+            string calculatorCode)
         {
             Number = number;
-            SelectorLVar = selectorLVar;
-            PressLVar = pressLVar;
+            CalculatorCode = calculatorCode;
         }
 
         public int Number { get; }
-        public string SelectorLVar { get; }
-        public string PressLVar { get; }
+        public string CalculatorCode { get; }
     }
 
     private sealed class ProcedureListItem

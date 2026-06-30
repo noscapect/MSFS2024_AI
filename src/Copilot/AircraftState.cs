@@ -15,6 +15,9 @@ internal sealed class AircraftState
     public double Engine2EgtCelsius { get; set; }
     public double Engine1FuelFlowPph { get; set; }
     public double Engine2FuelFlowPph { get; set; }
+    public double? EngineModeSelectorPosition { get; set; }
+    public double? FbwEngine1State { get; set; }
+    public double? FbwEngine2State { get; set; }
     public bool Battery1On { get; set; }
     public bool Battery2On { get; set; }
     public double Battery1Voltage { get; set; }
@@ -141,16 +144,34 @@ internal sealed class AircraftState
         IsA320NeoV2 || IsFlyByWireA320Neo;
 
     public bool EnginesOff => !Engine1Running && !Engine2Running;
+    public bool EngineModeIgnStart =>
+        EngineModeSelectorPosition.HasValue
+        && Math.Abs(EngineModeSelectorPosition.Value - 2) < 0.1;
+    public bool EngineModeNormal =>
+        EngineModeSelectorPosition.HasValue
+        && Math.Abs(EngineModeSelectorPosition.Value - 1) < 0.1;
+    public bool Engine1FuelFlowDetected =>
+        Engine1FuelFlowPph > 0
+        || IsFlyByWireA320Neo
+        && (Engine1StarterActive || Engine1Running)
+        && Engine1N1Percent >= 3;
+    public bool Engine2FuelFlowDetected =>
+        Engine2FuelFlowPph > 0
+        || IsFlyByWireA320Neo
+        && (Engine2StarterActive || Engine2Running)
+        && Engine2N1Percent >= 3;
     public bool Engine1StartStabilized =>
-        Engine1Running
+        IsFlyByWireA320Neo && FbwEngine1State == 1
+        || Engine1Running
         && !Engine1StarterActive
         && Engine1N1Percent >= 15
-        && Engine1FuelFlowPph > 0;
+        && Engine1FuelFlowDetected;
     public bool Engine2StartStabilized =>
-        Engine2Running
+        IsFlyByWireA320Neo && FbwEngine2State == 1
+        || Engine2Running
         && !Engine2StarterActive
         && Engine2N1Percent >= 15
-        && Engine2FuelFlowPph > 0;
+        && Engine2FuelFlowDetected;
     public bool ReverseThrustEngaged =>
         Engine1ReverseEngaged || Engine2ReverseEngaged;
     public bool GroundSpoilersDeployed =>

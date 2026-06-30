@@ -225,6 +225,7 @@ internal static class A320ProcedureLibrary
                     "Engine mode selector IGN/START",
                     "Captain: set the engine mode selector to IGN/START, then confirm.",
                     CrewRole.Captain,
+                    complete: state => state.EngineModeIgnStart,
                     recoveryComplete: state => state.Engine1Running || state.Engine2Running),
                 Manual("captain-engine-two", "Engine 2 master ON", "Captain: set Engine 2 Master ON.", CrewRole.Captain, state => state.Engine2StarterActive || state.Engine2Running),
                 Observe(
@@ -235,7 +236,7 @@ internal static class A320ProcedureLibrary
                 Observe(
                     "fo-engine-two-fuel",
                     "Engine 2 — Fuel Flow",
-                    state => state.Engine2FuelFlowPph > 0,
+                    state => state.Engine2FuelFlowDetected,
                     recoveryComplete: state => state.Engine2StartStabilized),
                 Observe("fo-engine-two-stable", "Engine 2 — Stabilized", state => state.Engine2StartStabilized),
                 Manual("captain-engine-one", "Engine 1 master ON", "Captain: once Engine 2 is stable, set Engine 1 Master ON.", CrewRole.Captain, state => state.Engine1StarterActive || state.Engine1Running),
@@ -247,10 +248,15 @@ internal static class A320ProcedureLibrary
                 Observe(
                     "fo-engine-one-fuel",
                     "Engine 1 — Fuel Flow",
-                    state => state.Engine1FuelFlowPph > 0,
+                    state => state.Engine1FuelFlowDetected,
                     recoveryComplete: state => state.Engine1StartStabilized),
                 Observe("fo-engine-one-stable", "Engine 1 — Stabilized", state => state.Engine1StartStabilized),
-                Manual("captain-engine-mode-normal", "Engine mode selector NORM", "Captain: return the engine mode selector to NORM, then confirm.", CrewRole.Captain)
+                Manual(
+                    "captain-engine-mode-normal",
+                    "Engine mode selector NORM",
+                    "Captain: return the engine mode selector to NORM, then confirm.",
+                    CrewRole.Captain,
+                    state => state.EngineModeNormal)
             });
 
     public static ProcedureDefinition AfterStartAndTaxi { get; } =

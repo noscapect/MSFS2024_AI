@@ -23,7 +23,7 @@ internal sealed class CopilotService : Form
     private const double MetersPerNauticalMile = 1852.0;
     // Change the schema suffix whenever the ordered runtime LVar list changes.
     // MobiFlight client-data layouts persist for the simulator session.
-    private const string MobiFlightRuntimeClientName = "MSFS2024_AI_Copilot_v24";
+    private const string MobiFlightRuntimeClientName = "MSFS2024_AI_Copilot_v25";
     private readonly string? _oneShotCommand;
     private readonly bool _showUi;
     private readonly CopilotSettings _settings;
@@ -118,6 +118,12 @@ internal sealed class CopilotService : Form
     private bool? _fbwApuBleedButton;
     private float? _fbwTransponderMode;
     private bool? _fbwParkingBrake;
+    private float? _fbwEngine1State;
+    private float? _fbwEngine2State;
+    private float? _fbwEngine1N1;
+    private float? _fbwEngine2N1;
+    private bool? _fbwEngine1StarterValveOpen;
+    private bool? _fbwEngine2StarterValveOpen;
     private float? _fbwAdirs1Selector;
     private float? _fbwAdirs2Selector;
     private float? _fbwAdirs3Selector;
@@ -318,7 +324,13 @@ internal sealed class CopilotService : Form
         FbwApuStartAvailable = 185,
         FbwApuBleedButton = 186,
         FbwTransponderMode = 187,
-        FbwParkingBrake = 188
+        FbwParkingBrake = 188,
+        FbwEngine1State = 189,
+        FbwEngine2State = 190,
+        FbwEngine1N1 = 191,
+        FbwEngine2N1 = 192,
+        FbwEngine1StarterValveOpen = 193,
+        FbwEngine2StarterValveOpen = 194
     }
 
     private enum ClientDataArea
@@ -411,7 +423,13 @@ internal sealed class CopilotService : Form
         FbwApuStartAvailable = 185,
         FbwApuBleedButton = 186,
         FbwTransponderMode = 187,
-        FbwParkingBrake = 188
+        FbwParkingBrake = 188,
+        FbwEngine1State = 189,
+        FbwEngine2State = 190,
+        FbwEngine1N1 = 191,
+        FbwEngine2N1 = 192,
+        FbwEngine1StarterValveOpen = 193,
+        FbwEngine2StarterValveOpen = 194
     }
 
     private enum CopilotEvent
@@ -466,6 +484,8 @@ internal sealed class CopilotService : Form
         public double Engine2Egt;
         public double Engine1FuelFlow;
         public double Engine2FuelFlow;
+        public double Engine1IgnitionSwitch;
+        public double Engine2IgnitionSwitch;
         public double Battery1;
         public double Battery2;
         public double Battery1Voltage;
@@ -732,6 +752,8 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "GENERAL ENG EXHAUST GAS TEMPERATURE:2", "Celsius", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "TURB ENG FUEL FLOW PPH:1", "Pounds per hour", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "TURB ENG FUEL FLOW PPH:2", "Pounds per hour", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "TURB ENG IGNITION SWITCH EX1:1", "Enum", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "TURB ENG IGNITION SWITCH EX1:2", "Enum", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "ELECTRICAL MASTER BATTERY:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "ELECTRICAL MASTER BATTERY:2", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "ELECTRICAL BATTERY VOLTAGE:1", "Volts", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
@@ -891,7 +913,7 @@ internal sealed class CopilotService : Form
         }
 
         var request = (Request)data.dwRequestID;
-        if (request is >= Request.NativeBattery1 and <= Request.FbwParkingBrake)
+        if (request is >= Request.NativeBattery1 and <= Request.FbwEngine2StarterValveOpen)
         {
             var value = ((MobiFlightFloat)data.dwData[0]).Value;
             if (request == Request.NativeBattery1)
@@ -1059,6 +1081,30 @@ internal sealed class CopilotService : Form
             else if (request == Request.FbwParkingBrake)
             {
                 SetLoggedBool(ref _fbwParkingBrake, value, "FBW A32NX parking brake");
+            }
+            else if (request == Request.FbwEngine1State)
+            {
+                SetLoggedFloat(ref _fbwEngine1State, value, "FBW A32NX engine 1 state");
+            }
+            else if (request == Request.FbwEngine2State)
+            {
+                SetLoggedFloat(ref _fbwEngine2State, value, "FBW A32NX engine 2 state");
+            }
+            else if (request == Request.FbwEngine1N1)
+            {
+                SetLoggedFloat(ref _fbwEngine1N1, value, "FBW A32NX engine 1 N1");
+            }
+            else if (request == Request.FbwEngine2N1)
+            {
+                SetLoggedFloat(ref _fbwEngine2N1, value, "FBW A32NX engine 2 N1");
+            }
+            else if (request == Request.FbwEngine1StarterValveOpen)
+            {
+                SetLoggedBool(ref _fbwEngine1StarterValveOpen, value, "FBW A32NX engine 1 starter valve");
+            }
+            else if (request == Request.FbwEngine2StarterValveOpen)
+            {
+                SetLoggedBool(ref _fbwEngine2StarterValveOpen, value, "FBW A32NX engine 2 starter valve");
             }
             else
             {
@@ -1322,6 +1368,12 @@ internal sealed class CopilotService : Form
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwApuBleedButton, Request.FbwApuBleedButton, 75 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwTransponderMode, Request.FbwTransponderMode, 76 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwParkingBrake, Request.FbwParkingBrake, 77 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwEngine1State, Request.FbwEngine1State, 78 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwEngine2State, Request.FbwEngine2State, 79 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwEngine1N1, Request.FbwEngine1N1, 80 * sizeof(float), SIMCONNECT_CLIENT_DATA_PERIOD.SECOND);
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwEngine2N1, Request.FbwEngine2N1, 81 * sizeof(float), SIMCONNECT_CLIENT_DATA_PERIOD.SECOND);
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwEngine1StarterValveOpen, Request.FbwEngine1StarterValveOpen, 82 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwEngine2StarterValveOpen, Request.FbwEngine2StarterValveOpen, 83 * sizeof(float));
 
         _mobiFlightRuntimeReady = true;
         _mobiFlightRuntimeInitializedUtc = DateTime.UtcNow;
@@ -1437,6 +1489,18 @@ internal sealed class CopilotService : Form
             "MF.SimVars.Add.(L:A32NX_TRANSPONDER_MODE)");
         SendMobiFlightRuntimeCommand(
             "MF.SimVars.Add.(L:A32NX_PARK_BRAKE_LEVER_POS)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_ENGINE_STATE:1)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_ENGINE_STATE:2)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_ENGINE_N1:1)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_ENGINE_N1:2)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_PNEU_ENG_1_STARTER_VALVE_OPEN)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_PNEU_ENG_2_STARTER_VALVE_OPEN)");
         SendMobiFlightRuntimeCommand("MF.DummyCmd");
         AppendDashboardLog("iniBuilds native state monitoring connected.");
     }
@@ -1537,6 +1601,42 @@ internal sealed class CopilotService : Form
             if (_fbwParkingBrake.HasValue)
             {
                 _state.ParkingBrakeSet = _fbwParkingBrake.Value;
+            }
+            if (_fbwEngine1State.HasValue || _fbwEngine1N1.HasValue)
+            {
+                _state.FbwEngine1State = _fbwEngine1State;
+                _state.Engine1Running =
+                    _fbwEngine1State == 1
+                    || (_fbwEngine1N1 ?? (float)_state.Engine1N1Percent) >= 15;
+            }
+            if (_fbwEngine2State.HasValue || _fbwEngine2N1.HasValue)
+            {
+                _state.FbwEngine2State = _fbwEngine2State;
+                _state.Engine2Running =
+                    _fbwEngine2State == 1
+                    || (_fbwEngine2N1 ?? (float)_state.Engine2N1Percent) >= 15;
+            }
+            if (_fbwEngine1StarterValveOpen.HasValue || _fbwEngine1State.HasValue)
+            {
+                _state.Engine1StarterActive =
+                    _fbwEngine1StarterValveOpen == true
+                    || _fbwEngine1State == 2
+                    || _fbwEngine1State == 3;
+            }
+            if (_fbwEngine2StarterValveOpen.HasValue || _fbwEngine2State.HasValue)
+            {
+                _state.Engine2StarterActive =
+                    _fbwEngine2StarterValveOpen == true
+                    || _fbwEngine2State == 2
+                    || _fbwEngine2State == 3;
+            }
+            if (_fbwEngine1N1.HasValue)
+            {
+                _state.Engine1N1Percent = _fbwEngine1N1.Value;
+            }
+            if (_fbwEngine2N1.HasValue)
+            {
+                _state.Engine2N1Percent = _fbwEngine2N1.Value;
             }
             // From here down the fields are iniBuilds-native LVars. Do not let
             // their default/stale values masquerade as valid FBW cockpit state.
@@ -1685,16 +1785,39 @@ internal sealed class CopilotService : Form
             Title = raw.Title,
             OnGround = raw.OnGround != 0,
             GroundSpeedKnots = raw.GroundSpeed,
-            Engine1Running = raw.Engine1Combustion != 0,
-            Engine2Running = raw.Engine2Combustion != 0,
-            Engine1StarterActive = raw.Engine1Starter != 0,
-            Engine2StarterActive = raw.Engine2Starter != 0,
-            Engine1N1Percent = raw.Engine1N1,
-            Engine2N1Percent = raw.Engine2N1,
+            Engine1Running = isFlyByWireA320Neo
+                ? _fbwEngine1State == 1 || (_fbwEngine1N1 ?? (float)raw.Engine1N1) >= 15
+                : raw.Engine1Combustion != 0,
+            Engine2Running = isFlyByWireA320Neo
+                ? _fbwEngine2State == 1 || (_fbwEngine2N1 ?? (float)raw.Engine2N1) >= 15
+                : raw.Engine2Combustion != 0,
+            Engine1StarterActive = isFlyByWireA320Neo
+                ? _fbwEngine1StarterValveOpen == true
+                  || _fbwEngine1State == 2
+                  || _fbwEngine1State == 3
+                  || raw.Engine1Starter != 0
+                : raw.Engine1Starter != 0,
+            Engine2StarterActive = isFlyByWireA320Neo
+                ? _fbwEngine2StarterValveOpen == true
+                  || _fbwEngine2State == 2
+                  || _fbwEngine2State == 3
+                  || raw.Engine2Starter != 0
+                : raw.Engine2Starter != 0,
+            Engine1N1Percent = isFlyByWireA320Neo
+                ? _fbwEngine1N1 ?? raw.Engine1N1
+                : raw.Engine1N1,
+            Engine2N1Percent = isFlyByWireA320Neo
+                ? _fbwEngine2N1 ?? raw.Engine2N1
+                : raw.Engine2N1,
             Engine1EgtCelsius = raw.Engine1Egt,
             Engine2EgtCelsius = raw.Engine2Egt,
             Engine1FuelFlowPph = raw.Engine1FuelFlow,
             Engine2FuelFlowPph = raw.Engine2FuelFlow,
+            EngineModeSelectorPosition = ResolveEngineModeSelectorPosition(
+                raw.Engine1IgnitionSwitch,
+                raw.Engine2IgnitionSwitch),
+            FbwEngine1State = _fbwEngine1State,
+            FbwEngine2State = _fbwEngine2State,
             Battery1On = isIniBuildsA320NeoV2
                 ? _nativeBattery1On ?? raw.Battery1 != 0
                 : isFlyByWireA320Neo
@@ -2092,6 +2215,21 @@ internal sealed class CopilotService : Form
         // The FBW/Asobo strobe switch exposes the same visible order:
         // 0=ON, 1=AUTO, 2=OFF. Prefer the explicit AUTO flag when present.
         return (int)Math.Round(lightState.Value);
+    }
+
+    private static double? ResolveEngineModeSelectorPosition(
+        double engine1IgnitionSwitch,
+        double engine2IgnitionSwitch)
+    {
+        if (Math.Abs(engine1IgnitionSwitch - engine2IgnitionSwitch) > 0.1)
+        {
+            return null;
+        }
+
+        var position = (int)Math.Round(engine1IgnitionSwitch);
+        return position >= 0 && position <= 2
+            ? position
+            : null;
     }
 
     private static void LogChangedVoltage(string label, double value, ref double? previousValue)

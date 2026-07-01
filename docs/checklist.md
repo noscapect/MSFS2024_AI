@@ -26,7 +26,8 @@ diagnostics** or **Copy last diagnostic** when reporting a test issue.
 
 ## 1. Power Up & Initial Setup
 
-1. **Monitor:** Supported A320 loaded: iniBuilds A320neo V2 or FlyByWire A32NX.
+1. **Monitor:** Supported A320-family aircraft loaded: iniBuilds A320neo V2,
+   iniBuilds A321LR, or FlyByWire A32NX.
 2. **Monitor:** Aircraft stationary on the ground at 0.5 knots or less.
 3. **Monitor:** Both engines off.
 4. **Captain:** Turn BAT 1 and BAT 2 ON; detected from battery state.

@@ -1,7 +1,11 @@
 # MSFS 2024 AI First Officer
 
-A Windows first-officer companion for the **iniBuilds A320neo V2** and
-**FlyByWire A32NX** in Microsoft Flight Simulator 2024.
+A Windows first-officer companion for supported Airbus A320-family aircraft in
+Microsoft Flight Simulator 2024:
+
+- **iniBuilds A320neo V2**
+- **iniBuilds A321LR**
+- **FlyByWire A32NX**
 
 Application icon artwork contributed by the project owner.
 The icon is embedded in the executable and assigned to the running WinForms
@@ -22,15 +26,15 @@ important callouts.
   commands and independent readback are available
 - Monitoring of Captain actions without requiring app confirmations during
   takeoff, approach, landing, or taxi
-- Native iniBuilds A320neo V2 and FlyByWire A32NX state monitoring through
+- Native iniBuilds A320-family and FlyByWire A32NX state monitoring through
   MobiFlight
 - Verification after every automatic aircraft action
 - Optional Windows offline voice callouts
 - Persistent preflight settings for V1, VR, and transition altitude
 - A distance-aware standard approach schedule that can be overridden for flap,
   gear, and landing-configuration gates
-- Configurable automatic chaining between earlier flows, Flow 10 to 11, and
-  Flow 11 to 12
+- Configurable automatic chaining between Flow 6 to 7, Flow 10 to 11, Flow 11
+  to 12, and optional earlier-flow handoffs
 - One-second flight telemetry recording with 10x replay for procedure testing;
   only the latest three flights are retained
 - Prioritized voice-callout queue that prevents overlapping speech
@@ -55,9 +59,11 @@ The gameplay flow is defined in [docs/checklist.md](docs/checklist.md).
 
 ## Supported aircraft
 
-The app supports two Microsoft Flight Simulator 2024 A320 variants:
+The app supports three Microsoft Flight Simulator 2024 Airbus A320-family
+aircraft:
 
 - iniBuilds A320neo V2
+- iniBuilds A321LR
 - FlyByWire A32NX for MSFS 2024
 
 The application deliberately avoids guessed generic events for unsupported
@@ -69,7 +75,7 @@ To run the application:
 
 - Windows 10 or Windows 11
 - Microsoft Flight Simulator 2024
-- iniBuilds A320neo V2 or FlyByWire A32NX for MSFS 2024
+- iniBuilds A320neo V2, iniBuilds A321LR, or FlyByWire A32NX for MSFS 2024
 - MobiFlight WASM module installed in MSFS
 - .NET Framework 4.7.2 or newer
 
@@ -98,7 +104,7 @@ src\Copilot\bin\Release\net472\Copilot.exe
 
 ## Run
 
-Start MSFS 2024, load a supported A320 variant, and then run:
+Start MSFS 2024, load a supported A320-family aircraft, and then run:
 
 ```powershell
 .\src\Copilot\bin\Release\net472\Copilot.exe
@@ -220,7 +226,9 @@ See [docs/RELEASING.md](docs/RELEASING.md).
 ## Development status
 
 The iniBuilds A320neo V2 flow is the mature baseline. FlyByWire A32NX support
-has been added and live-tested across the complete 12-flow sequence, with
-aircraft-specific mappings for power-up, engine start, taxi, takeoff, approach,
-landing, after-landing taxi, and shutdown. Treat this as active development
-software and remain ready to operate the aircraft manually.
+has been added and live-tested across the complete 12-flow sequence. iniBuilds
+A321LR support is implemented through the shared iniBuilds A320-family adapter;
+Flows 1 through 9 have been live-tested on the A321LR, with final
+approach/landing/taxi/shutdown validation still in progress on the feature
+branch. Treat this as active development software and remain ready to operate
+the aircraft manually.

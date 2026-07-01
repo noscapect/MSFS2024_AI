@@ -2,9 +2,10 @@
 
 ## Purpose
 
-This document defines the preferred method for operating iniBuilds A320neo V2
-controls. It exists to prevent repeating the long and unreliable process of
-guessing Input Event bindings.
+This document defines the preferred method for operating iniBuilds A320-family
+controls, currently the iniBuilds A320neo V2 and iniBuilds A321LR. It exists to
+prevent repeating the long and unreliable process of guessing Input Event
+bindings.
 
 ## The working architecture
 

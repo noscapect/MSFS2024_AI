@@ -1,11 +1,11 @@
 # Product vision
 
 MSFS 2024 AI Copilot is an external application that performs the duties of a
-first officer in supported Airbus A320 variants throughout a complete
+first officer in supported Airbus A320-family aircraft throughout a complete
 gate-to-gate operation.
 
-Version 0.6.0 supports the iniBuilds A320neo V2 and the FlyByWire A32NX for
-MSFS 2024.
+The app supports the iniBuilds A320neo V2, iniBuilds A321LR, and FlyByWire
+A32NX for MSFS 2024.
 
 The application begins with a cold-and-dark aircraft at the departure gate and
 continues through shutdown and passenger offboarding at the destination.

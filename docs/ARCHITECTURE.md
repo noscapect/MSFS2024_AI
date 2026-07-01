@@ -39,14 +39,17 @@ Maps normalized state and commands to:
 Every capability is marked as supported, unsupported, read-only, or requiring
 manual confirmation.
 
-Version 0.6.0 supports two A320 adapters:
+The application supports three A320-family aircraft profiles:
 
 - iniBuilds A320neo V2
+- iniBuilds A321LR
 - FlyByWire A32NX for MSFS 2024
 
 iniBuilds command/state pairs and the mandatory momentary-command workflow are
-defined in `docs/NATIVE_CONTROL_STRATEGY.md`. FBW-specific mappings were added
-through the same normalized state/action model so procedures can stay shared.
+defined in `docs/NATIVE_CONTROL_STRATEGY.md`. The A321LR uses the shared
+iniBuilds A320-family adapter where its controls match the A320neo V2.
+FBW-specific mappings were added through the same normalized state/action model
+so procedures can stay shared.
 
 ### SimConnect transport
 

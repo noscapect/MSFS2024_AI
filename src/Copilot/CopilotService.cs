@@ -8,6 +8,7 @@ using Msfs2024Ai.Copilot.Settings;
 using Msfs2024Ai.Copilot.Telemetry;
 using Msfs2024Ai.Copilot.Voice;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
@@ -247,7 +248,6 @@ internal sealed class CopilotService : Form
     private Label? _waitingForLabel;
     private ProgressBar? _procedureProgress;
     private ComboBox? _automationPolicyBox;
-    private ComboBox? _pilotFlyingBox;
     private NumericUpDown? _transitionAltitudeBox;
     private NumericUpDown? _takeoffV1Box;
     private NumericUpDown? _takeoffRotateBox;
@@ -3166,6 +3166,7 @@ internal sealed class CopilotService : Form
 
         var enabled = completedId switch
         {
+            "before-takeoff" => _settings.AutoChainFlow6To7,
             "approach-landing" => _settings.AutoChainFlow10To11,
             "after-landing-taxi" => _settings.AutoChainFlow11To12,
             _ => _settings.AutoChainEarlierFlows
@@ -3257,6 +3258,13 @@ internal sealed class CopilotService : Form
         {
             Console.WriteLine(procedureMessage);
             AppendDashboardLog(procedureMessage!);
+        }
+        if (_state != null
+            && _procedureRunner.Status == ProcedureStatus.WaitingForVerification
+            && step != null
+            && TryDescribeApproachGateStatus(step.Id, _state, out var gateStatus))
+        {
+            AppendDashboardLog(gateStatus);
         }
         UpdateDashboard();
     }
@@ -4758,7 +4766,7 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        if (!ValidateNativeInputAction("TCAS traffic mode"))
+        if (!ValidateNativeInputAction("TCAS traffic mode", requireStationary: false))
         {
             return;
         }
@@ -4820,7 +4828,7 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        if (!ValidateNativeInputAction("TCAS altitude reporting"))
+        if (!ValidateNativeInputAction("TCAS altitude reporting", requireStationary: false))
         {
             return;
         }
@@ -5492,8 +5500,9 @@ internal sealed class CopilotService : Form
         if (_state.FlapsHandleIndex > desiredPosition)
         {
             AppendDashboardLog(
-                $"Flap extension blocked: current position {_state.FlapsHandleIndex:F0} exceeds target {desiredPosition}.");
-            FinishOneShot(3);
+                $"Flaps already beyond CONFIG {desiredPosition} " +
+                $"(handle index {_state.FlapsHandleIndex:F0}); continuing.");
+            FinishOneShot();
             return;
         }
 
@@ -6261,29 +6270,9 @@ internal sealed class CopilotService : Form
         };
         settingsPanel.Controls.Add(new Label
         {
-            Text = "Pilot flying:",
-            AutoSize = true,
-            Margin = new Padding(0, 7, 4, 0)
-        });
-        _pilotFlyingBox = new ComboBox
-        {
-            DropDownStyle = ComboBoxStyle.DropDownList,
-            Width = 120
-        };
-        _pilotFlyingBox.Items.AddRange(new object[] { CrewRole.Captain, CrewRole.FirstOfficer });
-        _pilotFlyingBox.SelectedItem = _settings.PilotFlying;
-        _pilotFlyingBox.SelectedIndexChanged += (_, _) =>
-        {
-            _settings.PilotFlying = (CrewRole)_pilotFlyingBox.SelectedItem;
-            SettingsStore.Save(_settings);
-        };
-        settingsPanel.Controls.Add(_pilotFlyingBox);
-
-        settingsPanel.Controls.Add(new Label
-        {
             Text = "Automation:",
             AutoSize = true,
-            Margin = new Padding(18, 7, 4, 0)
+            Margin = new Padding(0, 7, 4, 0)
         });
         _automationPolicyBox = new ComboBox
         {
@@ -6771,8 +6760,11 @@ internal sealed class CopilotService : Form
         }
 
         var earlierChains = AddCheck(
-            "Automatically chain Flows 1 through 9",
+            "Automatically chain other early flows",
             _settings.AutoChainEarlierFlows);
+        var flow6Chain = AddCheck(
+            "Automatically start Flow 7 after Flow 6",
+            _settings.AutoChainFlow6To7);
         var flow10Chain = AddCheck(
             "Automatically start Flow 11 after Flow 10",
             _settings.AutoChainFlow10To11);
@@ -6792,7 +6784,7 @@ internal sealed class CopilotService : Form
         {
             flapDistance.Value = 15;
             flapAltitude.Value = 10000;
-            flapSpeed.Value = 220;
+            flapSpeed.Value = 230;
             flap2Distance.Value = 10;
             flap2Altitude.Value = 4000;
             flap2Speed.Value = 200;
@@ -6803,8 +6795,9 @@ internal sealed class CopilotService : Form
             landingAltitude.Value = 1800;
             landingSpeed.Value = 185;
             earlierChains.Checked = false;
+            flow6Chain.Checked = true;
             flow10Chain.Checked = true;
-            flow11Chain.Checked = false;
+            flow11Chain.Checked = true;
         };
         buttons.Controls.Add(save);
         buttons.Controls.Add(defaults);
@@ -6831,6 +6824,7 @@ internal sealed class CopilotService : Form
         _settings.ApproachLandingConfigAltitudeAglFeet = (int)landingAltitude.Value;
         _settings.ApproachLandingConfigSpeedKnots = (int)landingSpeed.Value;
         _settings.AutoChainEarlierFlows = earlierChains.Checked;
+        _settings.AutoChainFlow6To7 = flow6Chain.Checked;
         _settings.AutoChainFlow10To11 = flow10Chain.Checked;
         _settings.AutoChainFlow11To12 = flow11Chain.Checked;
         SettingsStore.Save(_settings);
@@ -7304,6 +7298,82 @@ internal sealed class CopilotService : Form
                 $"taxi speed after landing. Current GS {state.GroundSpeedKnots:F1} kt.",
             _ => step.Label
         };
+    }
+
+    private static bool TryDescribeApproachGateStatus(
+        string stepId,
+        AircraftState state,
+        out string description)
+    {
+        int distanceGate;
+        int speedGate;
+        string fallbackLabel;
+        bool fallbackReached;
+
+        switch (stepId)
+        {
+            case "approach-config-start":
+                distanceGate = state.ApproachFlaps1DistanceNm;
+                speedGate = state.ApproachFlaps1SpeedKnots;
+                fallbackLabel = $"ALT <= {state.ApproachFlaps1AltitudeFeet:N0} ft";
+                fallbackReached =
+                    state.IndicatedAltitudeFeet <= state.ApproachFlaps1AltitudeFeet;
+                break;
+            case "flaps-two-point":
+                distanceGate = state.ApproachFlaps2DistanceNm;
+                speedGate = state.ApproachFlaps2SpeedKnots;
+                fallbackLabel = $"AGL <= {state.ApproachFlaps2AltitudeAglFeet:N0} ft";
+                fallbackReached =
+                    state.AltitudeAboveGroundFeet <= state.ApproachFlaps2AltitudeAglFeet;
+                break;
+            case "gear-down-point":
+                distanceGate = state.ApproachGearDistanceNm;
+                speedGate = state.ApproachGearSpeedKnots;
+                fallbackLabel = $"AGL <= {state.ApproachGearAltitudeAglFeet:N0} ft";
+                fallbackReached =
+                    state.AltitudeAboveGroundFeet <= state.ApproachGearAltitudeAglFeet;
+                break;
+            case "landing-config-point":
+                distanceGate = state.ApproachLandingConfigDistanceNm;
+                speedGate = state.ApproachLandingConfigSpeedKnots;
+                fallbackLabel = $"AGL <= {state.ApproachLandingConfigAltitudeAglFeet:N0} ft";
+                fallbackReached =
+                    state.AltitudeAboveGroundFeet <= state.ApproachLandingConfigAltitudeAglFeet;
+                break;
+            default:
+                description = string.Empty;
+                return false;
+        }
+
+        var speedReached = state.IndicatedAirspeedKnots <= speedGate;
+        var distanceReached =
+            state.ApproachDistanceToTouchdownNm.HasValue
+            && state.ApproachDistanceToTouchdownNm.Value > 0
+            && state.ApproachDistanceToTouchdownNm.Value <= distanceGate;
+        var distanceText = state.ApproachDistanceToTouchdownNm.HasValue
+            ? $"{state.ApproachDistanceToTouchdownNm.Value:F1} NM {state.ApproachDistanceSource}"
+            : "n/a";
+        var blockers = new List<string>();
+        if (!speedReached)
+        {
+            blockers.Add($"speed {state.IndicatedAirspeedKnots:F0}>{speedGate}");
+        }
+        if (!distanceReached && !fallbackReached)
+        {
+            blockers.Add($"distance/fallback not reached ({distanceText}, {fallbackLabel})");
+        }
+
+        description =
+            "Approach gate status: " +
+            $"IAS {state.IndicatedAirspeedKnots:F0}/{speedGate} kt, " +
+            $"ALT {state.IndicatedAltitudeFeet:F0} ft, " +
+            $"AGL {state.AltitudeAboveGroundFeet:F0} ft, " +
+            $"DIST {distanceText} <= {distanceGate} NM, " +
+            $"fallback {fallbackLabel} {(fallbackReached ? "met" : "not met")}; " +
+            (blockers.Count == 0
+                ? "gate ready."
+                : "waiting for " + string.Join(" and ", blockers) + ".");
+        return true;
     }
 
     private string FormatCurrentStepTelemetry(AircraftState state)

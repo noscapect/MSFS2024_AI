@@ -131,6 +131,10 @@ Master ON steps complete.
    Flow 1; the aircraft manages takeoff strobe behavior.
 8. **F/O automatic:** Set both landing lights ON.
 
+By default, completing Flow 6 automatically starts Flow 7. This keeps the
+before-takeoff and takeoff phases hands-off while the aircraft is entering the
+runway and beginning the takeoff roll.
+
 ## 7. Takeoff & Climb
 
 This flow requires no app confirmations during takeoff.
@@ -197,7 +201,7 @@ after the aircraft is already below 10,000 feet.
 5. **F/O automatic:** Turn both landing lights ON.
 6. **F/O automatic:** Set nose light to T.O. / landing position.
 7. **Monitor:** Approach configuration point at or inside 15 NM to touchdown
-   or below 10,000 feet indicated, and at or below 220 knots by default.
+   or below 10,000 feet indicated, and at or below 230 knots by default.
 8. **F/O callout:** “Cabin crew, prepare for landing.”
 9. **F/O automatic:** Set flaps CONFIG 1.
 10. **Monitor:** Flaps 2 point at or inside 10 NM to touchdown or below

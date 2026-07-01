@@ -54,7 +54,7 @@ The only items still awaiting live verification are:
 - Revised Flow 1 timing: 45-second display/warning-system initialization gate
   before fire tests.
 - Revised automatic-action pacing and one-second fuel-pump intervals.
-- Revised Flow 10 exact flap-handle verification and earlier 220-knot
+- Revised Flow 10 exact flap-handle verification and earlier 230-knot
   CONFIG 1 trigger below 10,000 feet.
 - Captured WXR/PWS selector InputEvent polarity: physical OFF=1, mode 1=0,
   mode 2=2. Flow 5 now commands mode 1 with `SetInputEvent(..., 0)`.
@@ -64,7 +64,7 @@ The only items still awaiting live verification are:
   "Reverse green" as optional when reverse thrust is not used.
 - Added distance-aware Flow 10 approach gates. The app now prefers MSFS ATC
   runway distance, falls back to GPS distance, and then uses altitude/speed
-  fallback gates. Standard gates are Flaps 1 at 15 NM/220 kt, Flaps 2 at
+  fallback gates. Standard gates are Flaps 1 at 15 NM/230 kt, Flaps 2 at
   10 NM/200 kt, gear down at 7 NM/210 kt, and landing configuration at
   5 NM/185 kt. Live validation pending.
 - Landing test telemetry showed the current reverse-thrust SimVars did not
@@ -618,7 +618,7 @@ automatically performs the First Officer workload using gated aircraft state:
 - On passing or starting below 10,000 feet, the First Officer calls
   `Cabin crew, prepare for landing`.
 - Below 10,000 feet: seatbelts ON, landing lights ON, nose light TAXI.
-- Below 10,000 feet indicated and at or below 220 knots: flaps CONFIG 1.
+- Below 10,000 feet indicated and at or below 230 knots: flaps CONFIG 1.
 - At or below 2,000 feet AGL and 210 knots: gear DOWN, spoilers ARMED, flaps 2.
 - At or below 1,200 feet AGL and 185 knots: flaps 3 then FULL.
 
@@ -652,7 +652,7 @@ an unexpected higher handle-index value satisfied every detent. CONFIG 1, 2,
 Flap completion now uses the exact physical handle detent. Surface-position
 sanity remains visible as a warning but no longer blocks the sequence while
 the surfaces are moving. CONFIG 1 begins below 10,000 feet indicated at
-220 knots or less, rather than waiting until 5,000 feet AGL. This correction
+230 knots or less, rather than waiting until 5,000 feet AGL. This correction
 awaits live verification.
 
 Flow 10 now starts Flow 11 automatically after the landing callouts complete.

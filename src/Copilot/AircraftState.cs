@@ -61,7 +61,7 @@ internal sealed class AircraftState
     public string ApproachDistanceSource { get; set; } = "";
     public int ApproachFlaps1DistanceNm { get; set; } = 15;
     public int ApproachFlaps1AltitudeFeet { get; set; } = 10000;
-    public int ApproachFlaps1SpeedKnots { get; set; } = 220;
+    public int ApproachFlaps1SpeedKnots { get; set; } = 230;
     public int ApproachFlaps2DistanceNm { get; set; } = 10;
     public int ApproachFlaps2AltitudeAglFeet { get; set; } = 4000;
     public int ApproachFlaps2SpeedKnots { get; set; } = 200;

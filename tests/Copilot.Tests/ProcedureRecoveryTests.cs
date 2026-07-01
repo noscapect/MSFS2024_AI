@@ -32,6 +32,30 @@ public sealed class ProcedureRecoveryTests
     }
 
     [TestMethod]
+    public void PowerUpFlowAcceptsIniBuildsA321Lr()
+    {
+        var commands = new List<string>();
+        var runner = new ProcedureRunner(
+            commands.Add,
+            () => AutomationPolicy.AutomaticWhenSupported);
+        var state = new AircraftState
+        {
+            Title = "A321",
+            OnGround = true,
+            GroundSpeedKnots = 0,
+            Engine1Running = false,
+            Engine2Running = false
+        };
+
+        runner.Start(A320ProcedureLibrary.PowerUpAndInitialSetup, state);
+
+        Assert.AreEqual("captain-batteries", runner.CurrentStep?.Id);
+        Assert.IsTrue(state.IsIniBuildsA321Lr);
+        Assert.IsTrue(state.IsIniBuildsA320Family);
+        Assert.IsTrue(state.IsSupportedA320);
+    }
+
+    [TestMethod]
     public void TakeoffFlowStartedAirborneSkipsHistoricalRunwayMilestones()
     {
         var commands = new List<string>();

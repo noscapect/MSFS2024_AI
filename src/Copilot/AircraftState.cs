@@ -136,12 +136,19 @@ internal sealed class AircraftState
     public bool IsA320NeoV2 =>
         string.Equals(Title, "A320neo V2", StringComparison.OrdinalIgnoreCase);
 
+    public bool IsIniBuildsA321Lr =>
+        string.Equals(Title, "A321", StringComparison.OrdinalIgnoreCase)
+        || Title.IndexOf("A321", StringComparison.OrdinalIgnoreCase) >= 0;
+
+    public bool IsIniBuildsA320Family =>
+        IsA320NeoV2 || IsIniBuildsA321Lr;
+
     public bool IsFlyByWireA320Neo =>
         Title.IndexOf("A32NX", StringComparison.OrdinalIgnoreCase) >= 0
         || Title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0;
 
     public bool IsSupportedA320 =>
-        IsA320NeoV2 || IsFlyByWireA320Neo;
+        IsIniBuildsA320Family || IsFlyByWireA320Neo;
 
     public bool EnginesOff => !Engine1Running && !Engine2Running;
     public bool EngineModeIgnStart =>
@@ -202,9 +209,11 @@ internal sealed class AircraftState
         // while the physical flap surfaces have already reached the requested
         // position. In the landing test it reported handle detent 1 with the
         // surfaces clean, and also used 5 for FULL while our flow model uses 4.
-        // When the handle readback is flagged as suspicious, use the surface
-        // position as the truth source instead of blocking the procedure.
-        if (!FlapReadbackSane || detent == 4 && FlapsHandleIndex > 4.1)
+        // Only apply that fallback to FBW. The iniBuilds A320-family aircraft
+        // can report clean surfaces while the cockpit lever is still at detent
+        // 1, so for those aircraft the handle position remains the authority.
+        if (IsFlyByWireA320Neo
+            && (!FlapReadbackSane || detent == 4 && FlapsHandleIndex > 4.1))
         {
             return FlapSurfacesMatchDetent(detent);
         }

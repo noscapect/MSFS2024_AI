@@ -101,9 +101,8 @@ internal static class A320ProcedureLibrary
         int maximumDistanceNm,
         bool fallbackReached,
         int maximumSpeedKnots) =>
-        state.IndicatedAirspeedKnots <= maximumSpeedKnots
-        && (ApproachDistanceReached(state, maximumDistanceNm)
-            || fallbackReached);
+        ApproachDistanceReached(state, maximumDistanceNm)
+        || fallbackReached;
 
     public static ProcedureDefinition PowerUpAndInitialSetup { get; } =
         new(
@@ -530,6 +529,12 @@ internal static class A320ProcedureLibrary
                     "Cabin crew, prepare for landing",
                     _ => true,
                     CrewRole.FirstOfficer),
+                Observe(
+                    "flaps-one-speed",
+                    "Flaps CONFIG 1 speed safe",
+                    state => state.IndicatedAirspeedKnots
+                             <= state.ApproachFlaps1SpeedKnots,
+                    CrewRole.FirstOfficer),
                 Automatic(
                     "fo-flaps-one",
                     "Flaps CONFIG 1",
@@ -544,6 +549,12 @@ internal static class A320ProcedureLibrary
                         state.AltitudeAboveGroundFeet
                             <= state.ApproachFlaps2AltitudeAglFeet,
                         state.ApproachFlaps2SpeedKnots),
+                    CrewRole.FirstOfficer),
+                Observe(
+                    "flaps-two-speed",
+                    "Flaps CONFIG 2 speed safe",
+                    state => state.IndicatedAirspeedKnots
+                             <= state.ApproachFlaps2SpeedKnots,
                     CrewRole.FirstOfficer),
                 Automatic(
                     "fo-flaps-two",
@@ -579,6 +590,12 @@ internal static class A320ProcedureLibrary
                         state.AltitudeAboveGroundFeet
                             <= state.ApproachLandingConfigAltitudeAglFeet,
                         state.ApproachLandingConfigSpeedKnots),
+                    CrewRole.FirstOfficer),
+                Observe(
+                    "landing-config-speed",
+                    "Landing configuration speed safe",
+                    state => state.IndicatedAirspeedKnots
+                             <= state.ApproachLandingConfigSpeedKnots,
                     CrewRole.FirstOfficer),
                 Automatic(
                     "fo-flaps-three",

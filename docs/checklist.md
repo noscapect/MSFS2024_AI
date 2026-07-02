@@ -202,37 +202,43 @@ after the aircraft is already below 10,000 feet.
 5. **F/O automatic:** Turn both landing lights ON.
 6. **F/O automatic:** Set nose light to T.O. / landing position.
 7. **Monitor:** Approach configuration point at or inside 15 NM to touchdown
-   or below 10,000 feet indicated, and at or below 230 knots by default.
+   or below 10,000 feet indicated.
 8. **F/O callout:** “Cabin crew, prepare for landing.”
-9. **F/O automatic:** Set flaps CONFIG 1.
-10. **Monitor:** Flaps 2 point at or inside 10 NM to touchdown or below
-    4,000 feet AGL, and at or below 200 knots by default.
-11. **F/O automatic:** Set flaps CONFIG 2.
-12. **Monitor:** Gear-down point at or inside 7 NM to touchdown or below
-    2,500 feet AGL, and at or below 210 knots by default.
-13. **F/O automatic/callout:** Lower landing gear and say “Landing gear down”
+9. **Monitor:** Wait until speed is safe for flaps CONFIG 1.
+10. **F/O automatic:** Set flaps CONFIG 1.
+11. **Monitor:** Flaps 2 point at or inside 10 NM to touchdown or below
+    4,000 feet AGL.
+12. **Monitor:** Wait until speed is safe for flaps CONFIG 2.
+13. **F/O automatic:** Set flaps CONFIG 2.
+14. **Monitor:** Gear-down point at or inside 7 NM to touchdown or below
+    2,500 feet AGL.
+15. **F/O automatic/callout:** Lower landing gear and say “Landing gear down”
     after verified DOWN readback.
-14. **F/O automatic:** Arm ground spoilers.
-15. **Monitor:** Landing-configuration point at or inside 5 NM to touchdown
-    or below 1,800 feet AGL, and at or below 185 knots by default.
-16. **F/O automatic:** Set flaps CONFIG 3.
-17. **F/O automatic:** Set flaps FULL.
-18. **F/O callout:** “Approaching minimums” at decision height plus 100 feet.
-19. **F/O callout:** “Minimums” at decision height.
-20. **Monitor:** Touchdown.
-21. **F/O callout:** “Spoilers” after actual left and right spoiler deployment.
-22. **F/O callout:** “Reverse green” only if reverse thrust engages; if no
+16. **F/O automatic:** Arm ground spoilers.
+17. **Monitor:** Landing-configuration point at or inside 5 NM to touchdown
+    or below 1,800 feet AGL.
+18. **Monitor:** Wait until speed is safe for landing configuration.
+19. **F/O automatic:** Set flaps CONFIG 3.
+20. **F/O automatic:** Set flaps FULL.
+21. **F/O callout:** “Approaching minimums” at decision height plus 100 feet.
+22. **F/O callout:** “Minimums” at decision height.
+23. **Monitor:** Touchdown.
+24. **F/O callout:** “Spoilers” after actual left and right spoiler deployment.
+25. **F/O callout:** “Reverse green” only if reverse thrust engages; if no
     reverse is used, the flow continues once rollout slows below 40 knots.
-23. **F/O callout:** “Decel” when autobrakes are active or groundspeed falls
+26. **F/O callout:** “Decel” when autobrakes are active or groundspeed falls
     below 80 knots.
-24. **Automatic handoff:** Start Flow 11 after Flow 10 completes when the
+27. **Automatic handoff:** Start Flow 11 after Flow 10 completes when the
     standard Flow 10-to-11 chaining option is enabled.
 
 Destination QNH remains pilot-managed and is not operated or monitored.
 The approach gates use distance to the selected runway when MSFS exposes it,
-then GPS distance as a backup, and finally altitude/speed fallback gates. The
-included standard configuration can be overridden in `Approach & chaining
-settings`.
+then GPS distance as a backup, and finally altitude fallback gates. Speed no
+longer blocks the distance/altitude gates themselves, but each flap selection
+has its own monitored safe-speed step before the F/O moves the lever. If the
+aircraft is too fast, the flow waits at the relevant speed-safe step instead of
+failing the action. The included standard configuration can be overridden in
+`Approach & chaining settings`.
 
 ## 11. After Landing & Taxi
 

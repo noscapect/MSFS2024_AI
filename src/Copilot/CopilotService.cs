@@ -5505,6 +5505,14 @@ internal sealed class CopilotService : Form
             FinishOneShot();
             return;
         }
+        var maximumCommandSpeed = GetFlapCommandMaximumSpeed(desiredPosition);
+        if (_state.IndicatedAirspeedKnots > maximumCommandSpeed)
+        {
+            AppendDashboardLog(
+                $"Flaps CONFIG {desiredPosition} waiting: IAS {_state.IndicatedAirspeedKnots:F0} kt exceeds safe command speed {maximumCommandSpeed} kt.");
+            FinishOneShot(3);
+            return;
+        }
 
         if (_state.IsFlyByWireA320Neo)
         {
@@ -5524,6 +5532,16 @@ internal sealed class CopilotService : Form
             true,
             TimeSpan.FromSeconds(15));
     }
+
+    private int GetFlapCommandMaximumSpeed(uint desiredPosition) =>
+        desiredPosition switch
+        {
+            1 => _settings.ApproachFlaps1SpeedKnots,
+            2 => _settings.ApproachFlaps2SpeedKnots,
+            3 => _settings.ApproachLandingConfigSpeedKnots,
+            4 => _settings.ApproachLandingConfigSpeedKnots,
+            _ => 250
+        };
 
     private void SetFlapsClean()
     {
@@ -6713,7 +6731,7 @@ internal sealed class CopilotService : Form
             "Flaps 1 maximum indicated altitude",
             _settings.ApproachFlaps1AltitudeFeet, 1000, 20000, "ft");
         var flapSpeed = AddNumber(
-            "Flaps 1 target speed",
+            "Flaps 1 max command speed",
             _settings.ApproachFlaps1SpeedKnots, 100, 250, "kt");
         var flap2Distance = AddNumber(
             "Flaps 2 target distance",
@@ -6722,7 +6740,7 @@ internal sealed class CopilotService : Form
             "Flaps 2 maximum radio altitude",
             _settings.ApproachFlaps2AltitudeAglFeet, 1000, 8000, "ft");
         var flap2Speed = AddNumber(
-            "Flaps 2 target speed",
+            "Flaps 2 max command speed",
             _settings.ApproachFlaps2SpeedKnots, 100, 230, "kt");
         var gearDistance = AddNumber(
             "Gear-down target distance",
@@ -6740,7 +6758,7 @@ internal sealed class CopilotService : Form
             "Landing configuration maximum radio altitude",
             _settings.ApproachLandingConfigAltitudeAglFeet, 300, 3000, "ft");
         var landingSpeed = AddNumber(
-            "Landing configuration target speed",
+            "Landing config max command speed",
             _settings.ApproachLandingConfigSpeedKnots, 100, 220, "kt");
 
         CheckBox AddCheck(string text, bool value)
@@ -7281,13 +7299,19 @@ internal sealed class CopilotService : Form
             "captain-engine-shutdown" =>
                 $"engine masters OFF. Engines {(state.EnginesOff ? "OFF" : "running")}.",
             "approach-config-start" =>
-                $"Flaps 1 gate: distance <= {state.ApproachFlaps1DistanceNm} NM or altitude <= {state.ApproachFlaps1AltitudeFeet:N0} ft, speed <= {state.ApproachFlaps1SpeedKnots} kt.",
+                $"Flaps 1 gate: distance <= {state.ApproachFlaps1DistanceNm} NM or altitude <= {state.ApproachFlaps1AltitudeFeet:N0} ft.",
+            "flaps-one-speed" =>
+                $"Flaps CONFIG 1 speed safe: IAS {state.IndicatedAirspeedKnots:F0} kt <= {state.ApproachFlaps1SpeedKnots} kt.",
             "flaps-two-point" =>
-                $"Flaps 2 gate: distance <= {state.ApproachFlaps2DistanceNm} NM or radio altitude <= {state.ApproachFlaps2AltitudeAglFeet:N0} ft, speed <= {state.ApproachFlaps2SpeedKnots} kt.",
+                $"Flaps 2 gate: distance <= {state.ApproachFlaps2DistanceNm} NM or radio altitude <= {state.ApproachFlaps2AltitudeAglFeet:N0} ft.",
+            "flaps-two-speed" =>
+                $"Flaps CONFIG 2 speed safe: IAS {state.IndicatedAirspeedKnots:F0} kt <= {state.ApproachFlaps2SpeedKnots} kt.",
             "gear-down-point" =>
-                $"gear gate: distance <= {state.ApproachGearDistanceNm} NM or radio altitude <= {state.ApproachGearAltitudeAglFeet:N0} ft, speed <= {state.ApproachGearSpeedKnots} kt.",
+                $"gear gate: distance <= {state.ApproachGearDistanceNm} NM or radio altitude <= {state.ApproachGearAltitudeAglFeet:N0} ft.",
             "landing-config-point" =>
-                $"landing-config gate: distance <= {state.ApproachLandingConfigDistanceNm} NM or radio altitude <= {state.ApproachLandingConfigAltitudeAglFeet:N0} ft, speed <= {state.ApproachLandingConfigSpeedKnots} kt.",
+                $"landing-config gate: distance <= {state.ApproachLandingConfigDistanceNm} NM or radio altitude <= {state.ApproachLandingConfigAltitudeAglFeet:N0} ft.",
+            "landing-config-speed" =>
+                $"Landing configuration speed safe: IAS {state.IndicatedAirspeedKnots:F0} kt <= {state.ApproachLandingConfigSpeedKnots} kt.",
             "fo-approaching-minimums" =>
                 $"radio altitude at DH + 100 ft. RA {state.RadioHeightFeet:F0} ft, DH {state.DecisionHeightFeet:F0} ft.",
             "fo-minimums" =>
@@ -7345,7 +7369,6 @@ internal sealed class CopilotService : Form
                 return false;
         }
 
-        var speedReached = state.IndicatedAirspeedKnots <= speedGate;
         var distanceReached =
             state.ApproachDistanceToTouchdownNm.HasValue
             && state.ApproachDistanceToTouchdownNm.Value > 0
@@ -7354,10 +7377,6 @@ internal sealed class CopilotService : Form
             ? $"{state.ApproachDistanceToTouchdownNm.Value:F1} NM {state.ApproachDistanceSource}"
             : "n/a";
         var blockers = new List<string>();
-        if (!speedReached)
-        {
-            blockers.Add($"speed {state.IndicatedAirspeedKnots:F0}>{speedGate}");
-        }
         if (!distanceReached && !fallbackReached)
         {
             blockers.Add($"distance/fallback not reached ({distanceText}, {fallbackLabel})");
@@ -7365,7 +7384,7 @@ internal sealed class CopilotService : Form
 
         description =
             "Approach gate status: " +
-            $"IAS {state.IndicatedAirspeedKnots:F0}/{speedGate} kt, " +
+            $"IAS {state.IndicatedAirspeedKnots:F0} kt (speed reference {speedGate} kt), " +
             $"ALT {state.IndicatedAltitudeFeet:F0} ft, " +
             $"AGL {state.AltitudeAboveGroundFeet:F0} ft, " +
             $"DIST {distanceText} <= {distanceGate} NM, " +
@@ -7398,11 +7417,17 @@ internal sealed class CopilotService : Form
             "fo-v1" => $"{flight} | target V1 {state.TakeoffV1SpeedKnots} kt",
             "fo-rotate" => $"{flight} | target VR {state.TakeoffRotateSpeedKnots} kt",
             "approach-config-start" =>
-                $"{flight} | trigger ≤{state.ApproachFlaps1AltitudeFeet:N0} ft indicated and ≤{state.ApproachFlaps1SpeedKnots} kt",
+                $"{flight} | trigger ≤{state.ApproachFlaps1AltitudeFeet:N0} ft indicated or distance gate",
+            "flaps-one-speed" =>
+                $"{flight} | wait IAS ≤{state.ApproachFlaps1SpeedKnots} kt for CONFIG 1",
+            "flaps-two-speed" =>
+                $"{flight} | wait IAS ≤{state.ApproachFlaps2SpeedKnots} kt for CONFIG 2",
             "gear-down-point" =>
-                $"{flight} | trigger ≤{state.ApproachGearAltitudeAglFeet:N0} ft AGL and ≤{state.ApproachGearSpeedKnots} kt",
+                $"{flight} | trigger ≤{state.ApproachGearAltitudeAglFeet:N0} ft AGL or distance gate",
             "landing-config-point" =>
-                $"{flight} | trigger ≤{state.ApproachLandingConfigAltitudeAglFeet:N0} ft AGL and ≤{state.ApproachLandingConfigSpeedKnots} kt",
+                $"{flight} | trigger ≤{state.ApproachLandingConfigAltitudeAglFeet:N0} ft AGL or distance gate",
+            "landing-config-speed" =>
+                $"{flight} | wait IAS ≤{state.ApproachLandingConfigSpeedKnots} kt for landing config",
             "fo-approaching-minimums" or "fo-minimums" =>
                 $"{flight} | RA {state.RadioHeightFeet:F0} ft | DH {state.DecisionHeightFeet:F0} ft",
             "fo-flaps-one" or "fo-flaps-two" or "fo-flaps-three" or "fo-flaps-full"

@@ -238,7 +238,9 @@ longer blocks the distance/altitude gates themselves, but each flap selection
 has its own monitored safe-speed step before the F/O moves the lever. If the
 aircraft is too fast, the flow waits at the relevant speed-safe step instead of
 failing the action. The included standard configuration can be overridden in
-`Approach & chaining settings`.
+`Approach & chaining settings`. The iniBuilds A321LR uses separate approach
+flap speed limits for Flaps 2/3/FULL so it does not inherit the more
+conservative A320 schedule during landing tests.
 
 ## 11. After Landing & Taxi
 

@@ -71,6 +71,14 @@ internal sealed class AircraftState
     public int ApproachLandingConfigDistanceNm { get; set; } = 5;
     public int ApproachLandingConfigAltitudeAglFeet { get; set; } = 1800;
     public int ApproachLandingConfigSpeedKnots { get; set; } = 185;
+    public int EffectiveApproachFlaps1SpeedKnots =>
+        IsIniBuildsA321Lr ? 230 : ApproachFlaps1SpeedKnots;
+    public int EffectiveApproachFlaps2SpeedKnots =>
+        IsIniBuildsA321Lr ? 215 : ApproachFlaps2SpeedKnots;
+    public int EffectiveApproachFlaps3SpeedKnots =>
+        IsIniBuildsA321Lr ? 195 : ApproachLandingConfigSpeedKnots;
+    public int EffectiveApproachFlapsFullSpeedKnots =>
+        IsIniBuildsA321Lr ? 186 : ApproachLandingConfigSpeedKnots;
     public double VerticalSpeedFeetPerMinute { get; set; }
     public double GForce { get; set; }
     public double RadioHeightFeet { get; set; }
@@ -200,6 +208,16 @@ internal sealed class AircraftState
 
     public bool FlapsAtDetent(int detent)
     {
+        if (IsIniBuildsA321Lr)
+        {
+            return A321FlapsAtDetent(detent);
+        }
+
+        return LegacyA320FlapsAtDetent(detent);
+    }
+
+    private bool LegacyA320FlapsAtDetent(int detent)
+    {
         if (Math.Abs(FlapsHandleIndex - detent) < 0.1)
         {
             return true;
@@ -209,11 +227,24 @@ internal sealed class AircraftState
         // while the physical flap surfaces have already reached the requested
         // position. In the landing test it reported handle detent 1 with the
         // surfaces clean, and also used 5 for FULL while our flow model uses 4.
-        // Only apply that fallback to FBW. The iniBuilds A320-family aircraft
-        // can report clean surfaces while the cockpit lever is still at detent
-        // 1, so for those aircraft the handle position remains the authority.
-        if (IsFlyByWireA320Neo
-            && (!FlapReadbackSane || detent == 4 && FlapsHandleIndex > 4.1))
+        // When the handle readback is flagged as suspicious, use the surface
+        // position as the truth source instead of blocking the procedure.
+        if (!FlapReadbackSane || detent == 4 && FlapsHandleIndex > 4.1)
+        {
+            return FlapSurfacesMatchDetent(detent);
+        }
+
+        return false;
+    }
+
+    private bool A321FlapsAtDetent(int detent)
+    {
+        if (Math.Abs(FlapsHandleIndex - detent) < 0.1)
+        {
+            return true;
+        }
+
+        if (!FlapReadbackSane)
         {
             return FlapSurfacesMatchDetent(detent);
         }

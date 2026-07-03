@@ -2833,6 +2833,9 @@ internal sealed class CopilotService : Form
             case "procedure reset":
                 ResetFlightProgress();
                 break;
+            case var value when value.StartsWith("debug jump ", StringComparison.Ordinal):
+                DebugJumpToFlowById(normalized.Substring("debug jump ".Length));
+                break;
             case "external-power on":
                 SetExternalPower(true);
                 break;
@@ -3146,6 +3149,48 @@ internal sealed class CopilotService : Form
             "New flight started: all saved flow progress was reset.");
         UpdateDashboard();
         FinishOneShot();
+    }
+
+    private void DebugJumpToFlowById(string id)
+    {
+        var flows = A320ProcedureLibrary.GateToGate;
+        var indexedFlow = flows
+            .Select((definition, index) => new { definition, index })
+            .FirstOrDefault(item =>
+                string.Equals(item.definition.Id, id, StringComparison.OrdinalIgnoreCase));
+        if (indexedFlow == null)
+        {
+            Console.Error.WriteLine($"Unknown debug flow: {id}");
+            FinishOneShot(2);
+            return;
+        }
+        if (_state == null)
+        {
+            Console.Error.WriteLine("Cannot debug-jump procedure: aircraft state is unavailable.");
+            FinishOneShot(3);
+            return;
+        }
+
+        CancelFuelPumpSequence();
+        _procedureRunner.Cancel();
+        _completedProcedureIds.Clear();
+        for (var i = 0; i < indexedFlow.index; i++)
+        {
+            _completedProcedureIds.Add(flows[i].Id);
+        }
+
+        if (_flowList != null
+            && indexedFlow.index >= 0
+            && indexedFlow.index < _flowList.Items.Count)
+        {
+            _flowList.SelectedIndex = indexedFlow.index;
+        }
+
+        AppendDashboardLog(
+            $"Debug jump: marked flows 1-{indexedFlow.index} complete and starting {indexedFlow.definition.Name}. Aircraft state was not changed.");
+        StartProcedure(indexedFlow.definition);
+        SaveProcedureSession();
+        UpdateDashboard();
     }
 
     private ProcedureDefinition? GetAutomaticNextFlow(string completedId)
@@ -5497,16 +5542,17 @@ internal sealed class CopilotService : Form
             FinishOneShot();
             return;
         }
-        if (_state.FlapsHandleIndex > desiredPosition)
+        if (!_state.IsIniBuildsA321Lr
+            && _state.FlapsHandleIndex > desiredPosition)
         {
             AppendDashboardLog(
-                $"Flaps already beyond CONFIG {desiredPosition} " +
-                $"(handle index {_state.FlapsHandleIndex:F0}); continuing.");
-            FinishOneShot();
+                $"Flap extension blocked: current position {_state.FlapsHandleIndex:F0} exceeds target {desiredPosition}.");
+            FinishOneShot(3);
             return;
         }
         var maximumCommandSpeed = GetFlapCommandMaximumSpeed(desiredPosition);
-        if (_state.IndicatedAirspeedKnots > maximumCommandSpeed)
+        if (_state.IsIniBuildsA321Lr
+            && _state.IndicatedAirspeedKnots > maximumCommandSpeed)
         {
             AppendDashboardLog(
                 $"Flaps CONFIG {desiredPosition} waiting: IAS {_state.IndicatedAirspeedKnots:F0} kt exceeds safe command speed {maximumCommandSpeed} kt.");
@@ -5536,10 +5582,14 @@ internal sealed class CopilotService : Form
     private int GetFlapCommandMaximumSpeed(uint desiredPosition) =>
         desiredPosition switch
         {
-            1 => _settings.ApproachFlaps1SpeedKnots,
-            2 => _settings.ApproachFlaps2SpeedKnots,
-            3 => _settings.ApproachLandingConfigSpeedKnots,
-            4 => _settings.ApproachLandingConfigSpeedKnots,
+            1 => _state?.EffectiveApproachFlaps1SpeedKnots
+                 ?? _settings.ApproachFlaps1SpeedKnots,
+            2 => _state?.EffectiveApproachFlaps2SpeedKnots
+                 ?? _settings.ApproachFlaps2SpeedKnots,
+            3 => _state?.EffectiveApproachFlaps3SpeedKnots
+                 ?? _settings.ApproachLandingConfigSpeedKnots,
+            4 => _state?.EffectiveApproachFlapsFullSpeedKnots
+                 ?? _settings.ApproachLandingConfigSpeedKnots,
             _ => 250
         };
 
@@ -6335,6 +6385,15 @@ internal sealed class CopilotService : Form
         featureSettingsButton.Click += (_, _) => ShowFeatureSettingsDialog();
         settingsPanel.Controls.Add(featureSettingsButton);
 
+        var debugJumpButton = new Button
+        {
+            Text = "Debug jump to flow",
+            AutoSize = true,
+            Margin = new Padding(10, 2, 0, 0)
+        };
+        debugJumpButton.Click += (_, _) => ShowDebugJumpDialog();
+        settingsPanel.Controls.Add(debugJumpButton);
+
         settingsPanel.Controls.Add(new Label
         {
             Text = "Transition altitude:",
@@ -6670,6 +6729,102 @@ internal sealed class CopilotService : Form
         actions.Controls.Add(copyDiagnosticsButton);
         toolsShell.Controls.Add(actions);
         root.Controls.Add(toolsShell);
+    }
+
+    private void ShowDebugJumpDialog()
+    {
+        using var dialog = new Form
+        {
+            Text = "Debug jump to flow",
+            Width = 480,
+            Height = 360,
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false
+        };
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(14),
+            ColumnCount = 1,
+            RowCount = 4
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        dialog.Controls.Add(layout);
+
+        var warning = new Label
+        {
+            Text =
+                "Developer/test shortcut: this marks earlier app flows complete and starts the selected flow. " +
+                "It does not change aircraft systems, position, speed, fuel, or flight-plan state.",
+            AutoSize = true,
+            MaximumSize = new System.Drawing.Size(430, 0),
+            Margin = new Padding(0, 0, 0, 10)
+        };
+        layout.Controls.Add(warning, 0, 0);
+
+        var list = new ListBox
+        {
+            Dock = DockStyle.Fill,
+            IntegralHeight = false,
+            DisplayMember = nameof(ProcedureListItem.DisplayName)
+        };
+        foreach (var procedure in A320ProcedureLibrary.GateToGate)
+        {
+            list.Items.Add(new ProcedureListItem(procedure));
+        }
+        var defaultIndex = A320ProcedureLibrary.GateToGate
+            .Select((definition, index) => new { definition, index })
+            .FirstOrDefault(item =>
+                string.Equals(
+                    item.definition.Id,
+                    "approach-landing",
+                    StringComparison.OrdinalIgnoreCase))
+            ?.index ?? 0;
+        list.SelectedIndex = Math.Max(0, Math.Min(defaultIndex, list.Items.Count - 1));
+        layout.Controls.Add(list, 0, 1);
+
+        var detail = new Label
+        {
+            Text = "Example: select Flow 10 to test approach/landing from an airborne saved position.",
+            AutoSize = true,
+            Margin = new Padding(0, 10, 0, 10)
+        };
+        layout.Controls.Add(detail, 0, 2);
+
+        var buttons = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.RightToLeft,
+            Dock = DockStyle.Fill,
+            AutoSize = true
+        };
+        var jump = new Button
+        {
+            Text = "Jump to selected flow",
+            AutoSize = true,
+            DialogResult = DialogResult.OK
+        };
+        var cancel = new Button
+        {
+            Text = "Cancel",
+            AutoSize = true,
+            DialogResult = DialogResult.Cancel
+        };
+        buttons.Controls.Add(jump);
+        buttons.Controls.Add(cancel);
+        layout.Controls.Add(buttons, 0, 3);
+        dialog.AcceptButton = jump;
+        dialog.CancelButton = cancel;
+
+        if (dialog.ShowDialog(this) == DialogResult.OK
+            && list.SelectedItem is ProcedureListItem item)
+        {
+            _commands.Enqueue($"debug jump {item.Definition.Id}");
+        }
     }
 
     private void ShowFeatureSettingsDialog()
@@ -7301,17 +7456,19 @@ internal sealed class CopilotService : Form
             "approach-config-start" =>
                 $"Flaps 1 gate: distance <= {state.ApproachFlaps1DistanceNm} NM or altitude <= {state.ApproachFlaps1AltitudeFeet:N0} ft.",
             "flaps-one-speed" =>
-                $"Flaps CONFIG 1 speed safe: IAS {state.IndicatedAirspeedKnots:F0} kt <= {state.ApproachFlaps1SpeedKnots} kt.",
+                $"Flaps CONFIG 1 speed safe: IAS {state.IndicatedAirspeedKnots:F0} kt <= {state.EffectiveApproachFlaps1SpeedKnots} kt.",
             "flaps-two-point" =>
                 $"Flaps 2 gate: distance <= {state.ApproachFlaps2DistanceNm} NM or radio altitude <= {state.ApproachFlaps2AltitudeAglFeet:N0} ft.",
             "flaps-two-speed" =>
-                $"Flaps CONFIG 2 speed safe: IAS {state.IndicatedAirspeedKnots:F0} kt <= {state.ApproachFlaps2SpeedKnots} kt.",
+                $"Flaps CONFIG 2 speed safe: IAS {state.IndicatedAirspeedKnots:F0} kt <= {state.EffectiveApproachFlaps2SpeedKnots} kt.",
             "gear-down-point" =>
                 $"gear gate: distance <= {state.ApproachGearDistanceNm} NM or radio altitude <= {state.ApproachGearAltitudeAglFeet:N0} ft.",
             "landing-config-point" =>
                 $"landing-config gate: distance <= {state.ApproachLandingConfigDistanceNm} NM or radio altitude <= {state.ApproachLandingConfigAltitudeAglFeet:N0} ft.",
             "landing-config-speed" =>
-                $"Landing configuration speed safe: IAS {state.IndicatedAirspeedKnots:F0} kt <= {state.ApproachLandingConfigSpeedKnots} kt.",
+                $"Landing configuration speed safe: IAS {state.IndicatedAirspeedKnots:F0} kt <= {state.EffectiveApproachFlaps3SpeedKnots} kt.",
+            "flaps-full-speed" =>
+                $"Flaps FULL speed safe: IAS {state.IndicatedAirspeedKnots:F0} kt <= {state.EffectiveApproachFlapsFullSpeedKnots} kt.",
             "fo-approaching-minimums" =>
                 $"radio altitude at DH + 100 ft. RA {state.RadioHeightFeet:F0} ft, DH {state.DecisionHeightFeet:F0} ft.",
             "fo-minimums" =>
@@ -7338,14 +7495,14 @@ internal sealed class CopilotService : Form
         {
             case "approach-config-start":
                 distanceGate = state.ApproachFlaps1DistanceNm;
-                speedGate = state.ApproachFlaps1SpeedKnots;
+                speedGate = state.EffectiveApproachFlaps1SpeedKnots;
                 fallbackLabel = $"ALT <= {state.ApproachFlaps1AltitudeFeet:N0} ft";
                 fallbackReached =
                     state.IndicatedAltitudeFeet <= state.ApproachFlaps1AltitudeFeet;
                 break;
             case "flaps-two-point":
                 distanceGate = state.ApproachFlaps2DistanceNm;
-                speedGate = state.ApproachFlaps2SpeedKnots;
+                speedGate = state.EffectiveApproachFlaps2SpeedKnots;
                 fallbackLabel = $"AGL <= {state.ApproachFlaps2AltitudeAglFeet:N0} ft";
                 fallbackReached =
                     state.AltitudeAboveGroundFeet <= state.ApproachFlaps2AltitudeAglFeet;
@@ -7359,7 +7516,7 @@ internal sealed class CopilotService : Form
                 break;
             case "landing-config-point":
                 distanceGate = state.ApproachLandingConfigDistanceNm;
-                speedGate = state.ApproachLandingConfigSpeedKnots;
+                speedGate = state.EffectiveApproachFlaps3SpeedKnots;
                 fallbackLabel = $"AGL <= {state.ApproachLandingConfigAltitudeAglFeet:N0} ft";
                 fallbackReached =
                     state.AltitudeAboveGroundFeet <= state.ApproachLandingConfigAltitudeAglFeet;
@@ -7419,15 +7576,17 @@ internal sealed class CopilotService : Form
             "approach-config-start" =>
                 $"{flight} | trigger ≤{state.ApproachFlaps1AltitudeFeet:N0} ft indicated or distance gate",
             "flaps-one-speed" =>
-                $"{flight} | wait IAS ≤{state.ApproachFlaps1SpeedKnots} kt for CONFIG 1",
+                $"{flight} | wait IAS ≤{state.EffectiveApproachFlaps1SpeedKnots} kt for CONFIG 1",
             "flaps-two-speed" =>
-                $"{flight} | wait IAS ≤{state.ApproachFlaps2SpeedKnots} kt for CONFIG 2",
+                $"{flight} | wait IAS ≤{state.EffectiveApproachFlaps2SpeedKnots} kt for CONFIG 2",
             "gear-down-point" =>
                 $"{flight} | trigger ≤{state.ApproachGearAltitudeAglFeet:N0} ft AGL or distance gate",
             "landing-config-point" =>
                 $"{flight} | trigger ≤{state.ApproachLandingConfigAltitudeAglFeet:N0} ft AGL or distance gate",
             "landing-config-speed" =>
-                $"{flight} | wait IAS ≤{state.ApproachLandingConfigSpeedKnots} kt for landing config",
+                $"{flight} | wait IAS ≤{state.EffectiveApproachFlaps3SpeedKnots} kt for CONFIG 3",
+            "flaps-full-speed" =>
+                $"{flight} | wait IAS ≤{state.EffectiveApproachFlapsFullSpeedKnots} kt for FULL",
             "fo-approaching-minimums" or "fo-minimums" =>
                 $"{flight} | RA {state.RadioHeightFeet:F0} ft | DH {state.DecisionHeightFeet:F0} ft",
             "fo-flaps-one" or "fo-flaps-two" or "fo-flaps-three" or "fo-flaps-full"

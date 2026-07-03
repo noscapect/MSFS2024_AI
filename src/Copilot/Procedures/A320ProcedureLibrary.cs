@@ -522,7 +522,7 @@ internal static class A320ProcedureLibrary
                         state.ApproachFlaps1DistanceNm,
                         state.IndicatedAltitudeFeet
                             <= state.ApproachFlaps1AltitudeFeet,
-                        state.ApproachFlaps1SpeedKnots),
+                        state.EffectiveApproachFlaps1SpeedKnots),
                     CrewRole.FirstOfficer),
                 Observe(
                     "fo-cabin-landing-call",
@@ -533,7 +533,7 @@ internal static class A320ProcedureLibrary
                     "flaps-one-speed",
                     "Flaps CONFIG 1 speed safe",
                     state => state.IndicatedAirspeedKnots
-                             <= state.ApproachFlaps1SpeedKnots,
+                             <= state.EffectiveApproachFlaps1SpeedKnots,
                     CrewRole.FirstOfficer),
                 Automatic(
                     "fo-flaps-one",
@@ -548,13 +548,13 @@ internal static class A320ProcedureLibrary
                         state.ApproachFlaps2DistanceNm,
                         state.AltitudeAboveGroundFeet
                             <= state.ApproachFlaps2AltitudeAglFeet,
-                        state.ApproachFlaps2SpeedKnots),
+                        state.EffectiveApproachFlaps2SpeedKnots),
                     CrewRole.FirstOfficer),
                 Observe(
                     "flaps-two-speed",
                     "Flaps CONFIG 2 speed safe",
                     state => state.IndicatedAirspeedKnots
-                             <= state.ApproachFlaps2SpeedKnots,
+                             <= state.EffectiveApproachFlaps2SpeedKnots,
                     CrewRole.FirstOfficer),
                 Automatic(
                     "fo-flaps-two",
@@ -589,19 +589,25 @@ internal static class A320ProcedureLibrary
                         state.ApproachLandingConfigDistanceNm,
                         state.AltitudeAboveGroundFeet
                             <= state.ApproachLandingConfigAltitudeAglFeet,
-                        state.ApproachLandingConfigSpeedKnots),
+                        state.EffectiveApproachFlaps3SpeedKnots),
                     CrewRole.FirstOfficer),
                 Observe(
                     "landing-config-speed",
                     "Landing configuration speed safe",
                     state => state.IndicatedAirspeedKnots
-                             <= state.ApproachLandingConfigSpeedKnots,
+                             <= state.EffectiveApproachFlaps3SpeedKnots,
                     CrewRole.FirstOfficer),
                 Automatic(
                     "fo-flaps-three",
                     "Flaps CONFIG 3",
                     state => state.FlapsAtDetent(3),
                     "flaps config-3"),
+                Observe(
+                    "flaps-full-speed",
+                    "Flaps FULL speed safe",
+                    state => state.IndicatedAirspeedKnots
+                             <= state.EffectiveApproachFlapsFullSpeedKnots,
+                    CrewRole.FirstOfficer),
                 Automatic(
                     "fo-flaps-full",
                     "Flaps FULL",

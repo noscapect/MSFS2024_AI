@@ -101,9 +101,15 @@ internal static class A320ProcedureLibrary
         int maximumDistanceNm,
         bool fallbackReached,
         int maximumSpeedKnots) =>
-        state.IndicatedAirspeedKnots <= maximumSpeedKnots
-        && (ApproachDistanceReached(state, maximumDistanceNm)
-            || fallbackReached);
+        ApproachDistanceReached(state, maximumDistanceNm)
+        || fallbackReached;
+
+    private static bool ApproachGearGateReached(AircraftState state) =>
+        state.IndicatedAirspeedKnots <= state.ApproachGearSpeedKnots
+        && (ApproachDistanceReached(state, state.ApproachGearDistanceNm)
+            || (!state.ApproachDistanceToTouchdownNm.HasValue
+                && state.AltitudeAboveGroundFeet
+                   <= state.ApproachGearAltitudeAglFeet));
 
     public static ProcedureDefinition PowerUpAndInitialSetup { get; } =
         new(
@@ -114,7 +120,7 @@ internal static class A320ProcedureLibrary
                 Observe("aircraft", "Supported A320 loaded", state => state.IsSupportedA320),
                 Observe("stationary", "Aircraft stationary on the ground", state => state.OnGround && state.GroundSpeedKnots <= 0.5),
                 Observe("engines-off", "Engines off", state => state.EnginesOff),
-                Manual("captain-batteries", "BAT 1 and BAT 2 ON", "Captain: turn BAT 1 and BAT 2 ON, then confirm if the app does not detect the FBW switch state.", CrewRole.Captain, state => state.Battery1On && state.Battery2On),
+                Manual("captain-batteries", "BAT 1 and BAT 2 ON", "Captain: turn BAT 1 and BAT 2 ON, then confirm if the app does not detect the battery switch state.", CrewRole.Captain, state => state.Battery1On && state.Battery2On),
                 Manual("captain-external-power", "External power ON when available", "Captain: when EXT PWR shows AVAIL, turn external power ON.", CrewRole.Captain, state => state.ExternalPowerOn),
                 Automatic("fo-adirs-1", "ADIRS 1 set to NAV", state => Math.Abs(state.Adirs1SelectorState - 1) < 0.1, "adirs-1 nav"),
                 Observe("fo-adirs-1-on-bat", "ADIRS ON BAT extinguished after selector 1", state => !state.AdirsOnBattery),
@@ -477,12 +483,6 @@ internal static class A320ProcedureLibrary
             "10. Approach & Landing",
             new[]
             {
-                Automatic(
-                    "fo-landing-autobrake-low",
-                    "Landing auto-brake LOW",
-                    state => state.AutobrakeLevel.HasValue
-                             && Math.Abs(state.AutobrakeLevel.Value - 1) < 0.1,
-                    "autobrake low"),
                 Observe(
                     "captain-descent",
                     "Descent established or below 10,000 feet",
@@ -495,6 +495,12 @@ internal static class A320ProcedureLibrary
                     "Below 10,000 feet",
                     state => state.IndicatedAltitudeFeet <= 10000,
                     CrewRole.FirstOfficer),
+                Automatic(
+                    "fo-landing-autobrake-low",
+                    "Landing auto-brake LOW",
+                    state => state.AutobrakeLevel.HasValue
+                             && Math.Abs(state.AutobrakeLevel.Value - 1) < 0.1,
+                    "autobrake low"),
                 Automatic(
                     "fo-seatbelts-on",
                     "Seatbelt signs ON",
@@ -523,12 +529,18 @@ internal static class A320ProcedureLibrary
                         state.ApproachFlaps1DistanceNm,
                         state.IndicatedAltitudeFeet
                             <= state.ApproachFlaps1AltitudeFeet,
-                        state.ApproachFlaps1SpeedKnots),
+                        state.EffectiveApproachFlaps1SpeedKnots),
                     CrewRole.FirstOfficer),
                 Observe(
                     "fo-cabin-landing-call",
                     "Cabin crew, prepare for landing",
                     _ => true,
+                    CrewRole.FirstOfficer),
+                Observe(
+                    "flaps-one-speed",
+                    "Flaps CONFIG 1 speed safe",
+                    state => state.IndicatedAirspeedKnots
+                             <= state.EffectiveApproachFlaps1SpeedKnots,
                     CrewRole.FirstOfficer),
                 Automatic(
                     "fo-flaps-one",
@@ -543,7 +555,13 @@ internal static class A320ProcedureLibrary
                         state.ApproachFlaps2DistanceNm,
                         state.AltitudeAboveGroundFeet
                             <= state.ApproachFlaps2AltitudeAglFeet,
-                        state.ApproachFlaps2SpeedKnots),
+                        state.EffectiveApproachFlaps2SpeedKnots),
+                    CrewRole.FirstOfficer),
+                Observe(
+                    "flaps-two-speed",
+                    "Flaps CONFIG 2 speed safe",
+                    state => state.IndicatedAirspeedKnots
+                             <= state.EffectiveApproachFlaps2SpeedKnots,
                     CrewRole.FirstOfficer),
                 Automatic(
                     "fo-flaps-two",
@@ -553,12 +571,7 @@ internal static class A320ProcedureLibrary
                 Observe(
                     "gear-down-point",
                     "Gear-down point",
-                    state => ApproachGateReached(
-                        state,
-                        state.ApproachGearDistanceNm,
-                        state.AltitudeAboveGroundFeet
-                            <= state.ApproachGearAltitudeAglFeet,
-                        state.ApproachGearSpeedKnots),
+                    ApproachGearGateReached,
                     CrewRole.FirstOfficer),
                 Automatic(
                     "fo-gear-down",
@@ -578,13 +591,25 @@ internal static class A320ProcedureLibrary
                         state.ApproachLandingConfigDistanceNm,
                         state.AltitudeAboveGroundFeet
                             <= state.ApproachLandingConfigAltitudeAglFeet,
-                        state.ApproachLandingConfigSpeedKnots),
+                        state.EffectiveApproachFlaps3SpeedKnots),
+                    CrewRole.FirstOfficer),
+                Observe(
+                    "landing-config-speed",
+                    "Landing configuration speed safe",
+                    state => state.IndicatedAirspeedKnots
+                             <= state.EffectiveApproachFlaps3SpeedKnots,
                     CrewRole.FirstOfficer),
                 Automatic(
                     "fo-flaps-three",
                     "Flaps CONFIG 3",
                     state => state.FlapsAtDetent(3),
                     "flaps config-3"),
+                Observe(
+                    "flaps-full-speed",
+                    "Flaps FULL speed safe",
+                    state => state.IndicatedAirspeedKnots
+                             <= state.EffectiveApproachFlapsFullSpeedKnots,
+                    CrewRole.FirstOfficer),
                 Automatic(
                     "fo-flaps-full",
                     "Flaps FULL",
@@ -651,13 +676,6 @@ internal static class A320ProcedureLibrary
                     state => state.AutobrakeLevel.HasValue
                              && Math.Abs(state.AutobrakeLevel.Value) < 0.1,
                     "autobrake off"),
-                Automatic(
-                    "fo-apu-master-on",
-                    "APU MASTER ON",
-                    state => state.ApuMasterSwitchOn,
-                    "apu-master on"),
-                Observe("fo-apu-flap-open", "APU intake flap open", state => state.IsFlyByWireA320Neo ? state.ApuMasterSwitchOn : state.ApuFlapPercent >= 0.95),
-                Automatic("fo-apu-start-on", "APU START selected", state => state.ApuStartButtonOn, "apu-start on"),
                 Observe(
                     "captain-runway-exit",
                     "After-landing taxi speed reached",
@@ -700,7 +718,15 @@ internal static class A320ProcedureLibrary
                     state => state.TransponderModeSelectorPosition.HasValue
                              && Math.Abs(state.TransponderModeSelectorPosition.Value) < 0.1,
                     "transponder stby"),
-                Observe("apu-available", "APU AVAIL", state => state.ApuAvailable)
+                Automatic(
+                    "fo-apu-master-on",
+                    "APU MASTER ON",
+                    state => state.ApuMasterSwitchOn,
+                    "apu-master on"),
+                Observe("fo-apu-flap-open", "APU intake flap open", state => state.IsFlyByWireA320Neo ? state.ApuMasterSwitchOn : state.ApuFlapPercent >= 0.95),
+                Automatic("fo-apu-start-on", "APU START selected", state => state.ApuStartButtonOn, "apu-start on"),
+                Observe("apu-available", "APU AVAIL", state => state.ApuAvailable),
+                Automatic("fo-apu-bleed-on", "APU BLEED ON", state => state.ApuBleedOn, "apu-bleed on")
             });
 
     public static ProcedureDefinition ParkingAndShutdown { get; } =

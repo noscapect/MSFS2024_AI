@@ -1,4 +1,4 @@
-using Microsoft.FlightSimulator.SimConnect;
+﻿using Microsoft.FlightSimulator.SimConnect;
 using Msfs2024Ai.Copilot.Checklists;
 using Msfs2024Ai.Copilot.Controls;
 using Msfs2024Ai.Copilot.Diagnostics;
@@ -8,6 +8,7 @@ using Msfs2024Ai.Copilot.Settings;
 using Msfs2024Ai.Copilot.Telemetry;
 using Msfs2024Ai.Copilot.Voice;
 using System.Collections.Concurrent;
+using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
 using System.Reflection;
@@ -241,13 +242,10 @@ internal sealed class CopilotService : Form
     private Label? _versionBadgeLabel;
     private Label? _procedureLabel;
     private Label? _stepLabel;
-    private Label? _messageLabel;
     private Label? _statusBadgeLabel;
-    private Label? _nextActionLabel;
     private Label? _waitingForLabel;
     private ProgressBar? _procedureProgress;
     private ComboBox? _automationPolicyBox;
-    private ComboBox? _pilotFlyingBox;
     private NumericUpDown? _transitionAltitudeBox;
     private NumericUpDown? _takeoffV1Box;
     private NumericUpDown? _takeoffRotateBox;
@@ -255,7 +253,6 @@ internal sealed class CopilotService : Form
     private ComboBox? _replayFlightBox;
     private ListBox? _eventLog;
     private ListBox? _flowList;
-    private ListBox? _checklistList;
 
     private enum Definition
     {
@@ -763,10 +760,10 @@ internal sealed class CopilotService : Form
     private void OnOpen(SimConnect sender, SIMCONNECT_RECV_OPEN data)
     {
         Console.WriteLine(
-            $"Connected — SimConnect {data.dwSimConnectVersionMajor}.{data.dwSimConnectVersionMinor}, " +
+            $"Connected â€” SimConnect {data.dwSimConnectVersionMajor}.{data.dwSimConnectVersionMinor}, " +
             $"simulator {data.dwApplicationVersionMajor}.{data.dwApplicationVersionMinor}.");
         AppendDashboardLog(
-            $"Connected to MSFS — SimConnect {data.dwSimConnectVersionMajor}.{data.dwSimConnectVersionMinor}");
+            $"Connected to MSFS â€” SimConnect {data.dwSimConnectVersionMajor}.{data.dwSimConnectVersionMinor}");
         AppLog.Write(
             $"Connected to MSFS. SimConnect {data.dwSimConnectVersionMajor}.{data.dwSimConnectVersionMinor}; " +
             $"simulator {data.dwApplicationVersionMajor}.{data.dwApplicationVersionMinor}.");
@@ -1620,11 +1617,11 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        if (_state.IsA320NeoV2 && _nativeBattery1On.HasValue)
+        if (_state.IsIniBuildsA320Family && _nativeBattery1On.HasValue)
         {
             _state.Battery1On = _nativeBattery1On.Value;
         }
-        if (_state.IsA320NeoV2 && _nativeBattery2On.HasValue)
+        if (_state.IsIniBuildsA320Family && _nativeBattery2On.HasValue)
         {
             _state.Battery2On = _nativeBattery2On.Value;
         }
@@ -1898,7 +1895,10 @@ internal sealed class CopilotService : Form
 
         var raw = (AircraftData)data.dwData[0];
         var approachDistance = ResolveApproachDistance(raw);
-        var isIniBuildsA320NeoV2 = raw.Title.Equals("A320neo V2", StringComparison.OrdinalIgnoreCase);
+        var isIniBuildsA320Family =
+            raw.Title.Equals("A320neo V2", StringComparison.OrdinalIgnoreCase)
+            || raw.Title.Equals("A321", StringComparison.OrdinalIgnoreCase)
+            || raw.Title.IndexOf("A321", StringComparison.OrdinalIgnoreCase) >= 0;
         var isFlyByWireA320Neo =
             raw.Title.IndexOf("A32NX", StringComparison.OrdinalIgnoreCase) >= 0
             || raw.Title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0;
@@ -1945,7 +1945,7 @@ internal sealed class CopilotService : Form
                 raw.Engine2IgnitionSwitch),
             FbwEngine1State = _fbwEngine1State,
             FbwEngine2State = _fbwEngine2State,
-            Battery1On = isIniBuildsA320NeoV2
+            Battery1On = isIniBuildsA320Family
                 ? _nativeBattery1On ?? raw.Battery1 != 0
                 : isFlyByWireA320Neo
                     ? ResolveFbwBatteryState(
@@ -1954,7 +1954,7 @@ internal sealed class CopilotService : Form
                         _fbwBattery1Auto,
                         raw.Battery1)
                 : raw.Battery1 != 0,
-            Battery2On = isIniBuildsA320NeoV2
+            Battery2On = isIniBuildsA320Family
                 ? _nativeBattery2On ?? raw.Battery2 != 0
                 : isFlyByWireA320Neo
                     ? ResolveFbwBatteryState(
@@ -2222,7 +2222,7 @@ internal sealed class CopilotService : Form
         AppendDashboardLog($"Aircraft detected: {_state.Title}");
         if (!_state.IsSupportedA320)
         {
-            Console.Error.WriteLine("Warning: this build supports the iniBuilds A320neo V2 and FlyByWire A32NX.");
+            Console.Error.WriteLine("Warning: this build supports the iniBuilds A320neo V2, iniBuilds A321LR, and FlyByWire A32NX.");
         }
 
         if (_oneShotCommand == null)
@@ -2830,6 +2830,9 @@ internal sealed class CopilotService : Form
             case "procedure reset":
                 ResetFlightProgress();
                 break;
+            case var value when value.StartsWith("debug jump ", StringComparison.Ordinal):
+                DebugJumpToFlowById(normalized.Substring("debug jump ".Length));
+                break;
             case "external-power on":
                 SetExternalPower(true);
                 break;
@@ -3080,7 +3083,7 @@ internal sealed class CopilotService : Form
     {
         if (_procedureSessionRestoreAttempted
             || _state == null
-            || !_state.IsA320NeoV2
+            || !_state.IsIniBuildsA320Family
             || !NativeStateReady)
         {
             return;
@@ -3145,6 +3148,48 @@ internal sealed class CopilotService : Form
         FinishOneShot();
     }
 
+    private void DebugJumpToFlowById(string id)
+    {
+        var flows = A320ProcedureLibrary.GateToGate;
+        var indexedFlow = flows
+            .Select((definition, index) => new { definition, index })
+            .FirstOrDefault(item =>
+                string.Equals(item.definition.Id, id, StringComparison.OrdinalIgnoreCase));
+        if (indexedFlow == null)
+        {
+            Console.Error.WriteLine($"Unknown debug flow: {id}");
+            FinishOneShot(2);
+            return;
+        }
+        if (_state == null)
+        {
+            Console.Error.WriteLine("Cannot debug-jump procedure: aircraft state is unavailable.");
+            FinishOneShot(3);
+            return;
+        }
+
+        CancelFuelPumpSequence();
+        _procedureRunner.Cancel();
+        _completedProcedureIds.Clear();
+        for (var i = 0; i < indexedFlow.index; i++)
+        {
+            _completedProcedureIds.Add(flows[i].Id);
+        }
+
+        if (_flowList != null
+            && indexedFlow.index >= 0
+            && indexedFlow.index < _flowList.Items.Count)
+        {
+            _flowList.SelectedIndex = indexedFlow.index;
+        }
+
+        AppendDashboardLog(
+            $"Debug jump: marked flows 1-{indexedFlow.index} complete and starting {indexedFlow.definition.Name}. Aircraft state was not changed.");
+        StartProcedure(indexedFlow.definition);
+        SaveProcedureSession();
+        UpdateDashboard();
+    }
+
     private ProcedureDefinition? GetAutomaticNextFlow(string completedId)
     {
         var flows = A320ProcedureLibrary.GateToGate;
@@ -3163,6 +3208,7 @@ internal sealed class CopilotService : Form
 
         var enabled = completedId switch
         {
+            "before-takeoff" => _settings.AutoChainFlow6To7,
             "approach-landing" => _settings.AutoChainFlow10To11,
             "after-landing-taxi" => _settings.AutoChainFlow11To12,
             _ => _settings.AutoChainEarlierFlows
@@ -3254,6 +3300,13 @@ internal sealed class CopilotService : Form
         {
             Console.WriteLine(procedureMessage);
             AppendDashboardLog(procedureMessage!);
+        }
+        if (_state != null
+            && _procedureRunner.Status == ProcedureStatus.WaitingForVerification
+            && step != null
+            && TryDescribeApproachGateStatus(step.Id, _state, out var gateStatus))
+        {
+            AppendDashboardLog(gateStatus);
         }
         UpdateDashboard();
     }
@@ -3397,7 +3450,7 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        if (!_state.IsA320NeoV2 || !_mobiFlightReady)
+        if (!_state.IsIniBuildsA320Family || !_mobiFlightReady)
         {
             Console.Error.WriteLine("NAV & LOGO procedure blocked: iniBuilds adapter is unavailable.");
             FinishOneShot(4);
@@ -3694,7 +3747,8 @@ internal sealed class CopilotService : Form
             "INI_APU_BLEED_BUTTON",
             "__APU_BLEEDIsPressed",
             desiredOn,
-            state => state.ApuBleedOn == desiredOn);
+            state => state.ApuBleedOn == desiredOn,
+            requireStationary: false);
     }
 
     private void SetApuGenerator(bool desiredOn)
@@ -3923,9 +3977,10 @@ internal sealed class CopilotService : Form
         string selectorLVar,
         string pressLVar,
         bool desiredOn,
-        Func<AircraftState, bool> verify)
+        Func<AircraftState, bool> verify,
+        bool requireStationary = true)
     {
-        if (!ValidateNativeInputAction(name))
+        if (!ValidateNativeInputAction(name, requireStationary: requireStationary))
         {
             return;
         }
@@ -4755,7 +4810,7 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        if (!ValidateNativeInputAction("TCAS traffic mode"))
+        if (!ValidateNativeInputAction("TCAS traffic mode", requireStationary: false))
         {
             return;
         }
@@ -4817,7 +4872,7 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        if (!ValidateNativeInputAction("TCAS altitude reporting"))
+        if (!ValidateNativeInputAction("TCAS altitude reporting", requireStationary: false))
         {
             return;
         }
@@ -5486,10 +5541,20 @@ internal sealed class CopilotService : Form
             FinishOneShot();
             return;
         }
-        if (_state.FlapsHandleIndex > desiredPosition)
+        if (!_state.IsIniBuildsA321Lr
+            && _state.FlapsHandleIndex > desiredPosition)
         {
             AppendDashboardLog(
                 $"Flap extension blocked: current position {_state.FlapsHandleIndex:F0} exceeds target {desiredPosition}.");
+            FinishOneShot(3);
+            return;
+        }
+        var maximumCommandSpeed = GetFlapCommandMaximumSpeed(desiredPosition);
+        if (_state.IsIniBuildsA321Lr
+            && _state.IndicatedAirspeedKnots > maximumCommandSpeed)
+        {
+            AppendDashboardLog(
+                $"Flaps CONFIG {desiredPosition} waiting: IAS {_state.IndicatedAirspeedKnots:F0} kt exceeds safe command speed {maximumCommandSpeed} kt.");
             FinishOneShot(3);
             return;
         }
@@ -5512,6 +5577,20 @@ internal sealed class CopilotService : Form
             true,
             TimeSpan.FromSeconds(15));
     }
+
+    private int GetFlapCommandMaximumSpeed(uint desiredPosition) =>
+        desiredPosition switch
+        {
+            1 => _state?.EffectiveApproachFlaps1SpeedKnots
+                 ?? _settings.ApproachFlaps1SpeedKnots,
+            2 => _state?.EffectiveApproachFlaps2SpeedKnots
+                 ?? _settings.ApproachFlaps2SpeedKnots,
+            3 => _state?.EffectiveApproachFlaps3SpeedKnots
+                 ?? _settings.ApproachLandingConfigSpeedKnots,
+            4 => _state?.EffectiveApproachFlapsFullSpeedKnots
+                 ?? _settings.ApproachLandingConfigSpeedKnots,
+            _ => 250
+        };
 
     private void SetFlapsClean()
     {
@@ -5630,9 +5709,9 @@ internal sealed class CopilotService : Form
             FinishOneShot(4);
             return false;
         }
-        if (!_state.IsA320NeoV2)
+        if (!_state.IsIniBuildsA320Family)
         {
-            AppendDashboardLog($"{name} blocked: the loaded aircraft is not A320neo V2.");
+            AppendDashboardLog($"{name} blocked: the loaded aircraft is not a supported iniBuilds A320-family aircraft.");
             FinishOneShot(3);
             return false;
         }
@@ -5723,9 +5802,9 @@ internal sealed class CopilotService : Form
 
     private static string? ValidateExternalPowerProcedure(AircraftState state, bool desiredOn)
     {
-        if (!state.IsA320NeoV2)
+        if (!state.IsIniBuildsA320Family)
         {
-            return "the loaded aircraft is not A320neo V2.";
+            return "the loaded aircraft is not a supported iniBuilds A320-family aircraft.";
         }
 
         if (!state.OnGround || state.GroundSpeedKnots > 0.5)
@@ -5981,11 +6060,11 @@ internal sealed class CopilotService : Form
         Console.WriteLine($"Ground: {_state.OnGround}; speed: {_state.GroundSpeedKnots:F1} kt; parking brake: {_state.ParkingBrakeSet.ToSetReleased()}");
         Console.WriteLine($"Engines 1/2: {_state.Engine1Running.ToOnOff()}/{_state.Engine2Running.ToOnOff()}");
         Console.WriteLine(
-            $"Engine start 1 — starter/N1/EGT/fuel: " +
+            $"Engine start 1 â€” starter/N1/EGT/fuel: " +
             $"{_state.Engine1StarterActive.ToOnOff()}/{_state.Engine1N1Percent:F1}%/" +
             $"{_state.Engine1EgtCelsius:F0}C/{_state.Engine1FuelFlowPph:F0} pph");
         Console.WriteLine(
-            $"Engine start 2 — starter/N1/EGT/fuel: " +
+            $"Engine start 2 â€” starter/N1/EGT/fuel: " +
             $"{_state.Engine2StarterActive.ToOnOff()}/{_state.Engine2N1Percent:F1}%/" +
             $"{_state.Engine2EgtCelsius:F0}C/{_state.Engine2FuelFlowPph:F0} pph");
         Console.WriteLine($"Batteries 1/2: {_state.Battery1On.ToOnOff()}/{_state.Battery2On.ToOnOff()}");
@@ -6016,7 +6095,7 @@ internal sealed class CopilotService : Form
             $"{FormatOptionalSignPosition(SignSelector.NoSmoking, _state.NoSmokingSelectorPosition)}/" +
             $"{FormatOptionalSignPosition(SignSelector.EmergencyExit, _state.EmergencyExitSelectorPosition)}");
         Console.WriteLine(
-            $"After-start configuration — spoilers/flaps/autobrake: " +
+            $"After-start configuration â€” spoilers/flaps/autobrake: " +
             $"{(_state.GroundSpoilersArmed ? "ARMED" : "DISARMED")}/" +
             $"{_state.FlapsHandleIndex:F0}/" +
             $"{(_state.AutobrakeLevel?.ToString("F0") ?? "UNKNOWN")}");
@@ -6078,7 +6157,7 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        Console.WriteLine("Cockpit preparation — electrical power");
+        Console.WriteLine("Cockpit preparation â€” electrical power");
         foreach (var step in CockpitPreparationProcedure.Evaluate(_state))
         {
             PrintChecklistItem(step.Label, step.Complete, step.ActionHint);
@@ -6087,7 +6166,7 @@ internal sealed class CopilotService : Form
 
     private static void PrintChecklistItem(string label, bool complete, string? note = null)
     {
-        Console.WriteLine($"[{(complete ? "x" : " ")}] {label}{(note == null || complete ? "" : $" — {note}")}");
+        Console.WriteLine($"[{(complete ? "x" : " ")}] {label}{(note == null || complete ? "" : $" â€” {note}")}");
     }
 
     private void PrintFbwBridgeStatus()
@@ -6175,8 +6254,8 @@ internal sealed class CopilotService : Form
     private void BuildDashboard()
     {
         Width = 920;
-        Height = 700;
-        MinimumSize = new System.Drawing.Size(780, 580);
+        Height = 760;
+        MinimumSize = new System.Drawing.Size(820, 680);
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = System.Drawing.Color.FromArgb(242, 245, 248);
 
@@ -6191,9 +6270,9 @@ internal sealed class CopilotService : Form
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 135));
         root.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
         root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         Controls.Add(root);
 
@@ -6247,7 +6326,7 @@ internal sealed class CopilotService : Form
         _versionLabel = AddDashboardRow(
             statusPanel,
             "Version",
-            $"{GetApplicationVersion()} — checking GitHub releases...");
+            $"{GetApplicationVersion()} â€” checking GitHub releases...");
 
         var settingsPanel = new FlowLayoutPanel
         {
@@ -6258,29 +6337,9 @@ internal sealed class CopilotService : Form
         };
         settingsPanel.Controls.Add(new Label
         {
-            Text = "Pilot flying:",
-            AutoSize = true,
-            Margin = new Padding(0, 7, 4, 0)
-        });
-        _pilotFlyingBox = new ComboBox
-        {
-            DropDownStyle = ComboBoxStyle.DropDownList,
-            Width = 120
-        };
-        _pilotFlyingBox.Items.AddRange(new object[] { CrewRole.Captain, CrewRole.FirstOfficer });
-        _pilotFlyingBox.SelectedItem = _settings.PilotFlying;
-        _pilotFlyingBox.SelectedIndexChanged += (_, _) =>
-        {
-            _settings.PilotFlying = (CrewRole)_pilotFlyingBox.SelectedItem;
-            SettingsStore.Save(_settings);
-        };
-        settingsPanel.Controls.Add(_pilotFlyingBox);
-
-        settingsPanel.Controls.Add(new Label
-        {
             Text = "Automation:",
             AutoSize = true,
-            Margin = new Padding(18, 7, 4, 0)
+            Margin = new Padding(0, 7, 4, 0)
         });
         _automationPolicyBox = new ComboBox
         {
@@ -6324,6 +6383,15 @@ internal sealed class CopilotService : Form
         };
         featureSettingsButton.Click += (_, _) => ShowFeatureSettingsDialog();
         settingsPanel.Controls.Add(featureSettingsButton);
+
+        var debugJumpButton = new Button
+        {
+            Text = "Debug jump to flow",
+            AutoSize = true,
+            Margin = new Padding(10, 2, 0, 0)
+        };
+        debugJumpButton.Click += (_, _) => ShowDebugJumpDialog();
+        settingsPanel.Controls.Add(debugJumpButton);
 
         settingsPanel.Controls.Add(new Label
         {
@@ -6440,7 +6508,7 @@ internal sealed class CopilotService : Form
 
         var timelineGroup = new GroupBox
         {
-            Text = "Checklist and assistance flow — gate to gate",
+            Text = "Checklist and assistance flow â€” gate to gate",
             Dock = DockStyle.Fill,
             Padding = new Padding(8)
         };
@@ -6494,45 +6562,29 @@ internal sealed class CopilotService : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 9
+            RowCount = 5
         };
         procedureLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         procedureLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         procedureLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         procedureLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         procedureLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        procedureLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        procedureLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        procedureLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        procedureLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         procedureGroup.Controls.Add(procedureLayout);
 
         _procedureLabel = NewDashboardLabel("None");
         _stepLabel = NewDashboardLabel("No active step");
-        _messageLabel = NewDashboardLabel("");
-        _messageLabel.MaximumSize = new System.Drawing.Size(680, 0);
         _statusBadgeLabel = NewDashboardLabel("Idle");
         _statusBadgeLabel.Font = new System.Drawing.Font(
             SystemFonts.DefaultFont,
             System.Drawing.FontStyle.Bold);
-        _nextActionLabel = NewDashboardLabel("Next action: none");
         _waitingForLabel = NewDashboardLabel("Waiting for: none");
         _waitingForLabel.MaximumSize = new System.Drawing.Size(680, 0);
         _procedureProgress = new ProgressBar { Dock = DockStyle.Top, Height = 22 };
         procedureLayout.Controls.Add(_statusBadgeLabel);
         procedureLayout.Controls.Add(_procedureLabel);
         procedureLayout.Controls.Add(_stepLabel);
-        procedureLayout.Controls.Add(_nextActionLabel);
         procedureLayout.Controls.Add(_waitingForLabel);
-        procedureLayout.Controls.Add(_messageLabel);
         procedureLayout.Controls.Add(_procedureProgress);
-        _checklistList = new ListBox
-        {
-            Dock = DockStyle.Fill,
-            IntegralHeight = false,
-            Font = new System.Drawing.Font("Segoe UI", 9)
-        };
-        procedureLayout.Controls.Add(_checklistList);
 
         var procedureButtons = new FlowLayoutPanel
         {
@@ -6565,7 +6617,7 @@ internal sealed class CopilotService : Form
             }
         };
         procedureButtons.Controls.Add(resetProgressButton);
-        procedureLayout.Controls.Add(procedureButtons);
+        procedureGroup.Controls.Add(procedureButtons);
 
         var logGroup = new GroupBox
         {
@@ -6662,6 +6714,102 @@ internal sealed class CopilotService : Form
         root.Controls.Add(toolsShell);
     }
 
+    private void ShowDebugJumpDialog()
+    {
+        using var dialog = new Form
+        {
+            Text = "Debug jump to flow",
+            Width = 480,
+            Height = 360,
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false
+        };
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(14),
+            ColumnCount = 1,
+            RowCount = 4
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        dialog.Controls.Add(layout);
+
+        var warning = new Label
+        {
+            Text =
+                "Developer/test shortcut: this marks earlier app flows complete and starts the selected flow. " +
+                "It does not change aircraft systems, position, speed, fuel, or flight-plan state.",
+            AutoSize = true,
+            MaximumSize = new System.Drawing.Size(430, 0),
+            Margin = new Padding(0, 0, 0, 10)
+        };
+        layout.Controls.Add(warning, 0, 0);
+
+        var list = new ListBox
+        {
+            Dock = DockStyle.Fill,
+            IntegralHeight = false,
+            DisplayMember = nameof(ProcedureListItem.DisplayName)
+        };
+        foreach (var procedure in A320ProcedureLibrary.GateToGate)
+        {
+            list.Items.Add(new ProcedureListItem(procedure));
+        }
+        var defaultIndex = A320ProcedureLibrary.GateToGate
+            .Select((definition, index) => new { definition, index })
+            .FirstOrDefault(item =>
+                string.Equals(
+                    item.definition.Id,
+                    "approach-landing",
+                    StringComparison.OrdinalIgnoreCase))
+            ?.index ?? 0;
+        list.SelectedIndex = Math.Max(0, Math.Min(defaultIndex, list.Items.Count - 1));
+        layout.Controls.Add(list, 0, 1);
+
+        var detail = new Label
+        {
+            Text = "Example: select Flow 10 to test approach/landing from an airborne saved position.",
+            AutoSize = true,
+            Margin = new Padding(0, 10, 0, 10)
+        };
+        layout.Controls.Add(detail, 0, 2);
+
+        var buttons = new FlowLayoutPanel
+        {
+            FlowDirection = FlowDirection.RightToLeft,
+            Dock = DockStyle.Fill,
+            AutoSize = true
+        };
+        var jump = new Button
+        {
+            Text = "Jump to selected flow",
+            AutoSize = true,
+            DialogResult = DialogResult.OK
+        };
+        var cancel = new Button
+        {
+            Text = "Cancel",
+            AutoSize = true,
+            DialogResult = DialogResult.Cancel
+        };
+        buttons.Controls.Add(jump);
+        buttons.Controls.Add(cancel);
+        layout.Controls.Add(buttons, 0, 3);
+        dialog.AcceptButton = jump;
+        dialog.CancelButton = cancel;
+
+        if (dialog.ShowDialog(this) == DialogResult.OK
+            && list.SelectedItem is ProcedureListItem item)
+        {
+            _commands.Enqueue($"debug jump {item.Definition.Id}");
+        }
+    }
+
     private void ShowFeatureSettingsDialog()
     {
         using var dialog = new Form
@@ -6721,7 +6869,7 @@ internal sealed class CopilotService : Form
             "Flaps 1 maximum indicated altitude",
             _settings.ApproachFlaps1AltitudeFeet, 1000, 20000, "ft");
         var flapSpeed = AddNumber(
-            "Flaps 1 target speed",
+            "Flaps 1 max command speed",
             _settings.ApproachFlaps1SpeedKnots, 100, 250, "kt");
         var flap2Distance = AddNumber(
             "Flaps 2 target distance",
@@ -6730,7 +6878,7 @@ internal sealed class CopilotService : Form
             "Flaps 2 maximum radio altitude",
             _settings.ApproachFlaps2AltitudeAglFeet, 1000, 8000, "ft");
         var flap2Speed = AddNumber(
-            "Flaps 2 target speed",
+            "Flaps 2 max command speed",
             _settings.ApproachFlaps2SpeedKnots, 100, 230, "kt");
         var gearDistance = AddNumber(
             "Gear-down target distance",
@@ -6748,7 +6896,7 @@ internal sealed class CopilotService : Form
             "Landing configuration maximum radio altitude",
             _settings.ApproachLandingConfigAltitudeAglFeet, 300, 3000, "ft");
         var landingSpeed = AddNumber(
-            "Landing configuration target speed",
+            "Landing config max command speed",
             _settings.ApproachLandingConfigSpeedKnots, 100, 220, "kt");
 
         CheckBox AddCheck(string text, bool value)
@@ -6768,8 +6916,11 @@ internal sealed class CopilotService : Form
         }
 
         var earlierChains = AddCheck(
-            "Automatically chain Flows 1 through 9",
+            "Automatically chain other early flows",
             _settings.AutoChainEarlierFlows);
+        var flow6Chain = AddCheck(
+            "Automatically start Flow 7 after Flow 6",
+            _settings.AutoChainFlow6To7);
         var flow10Chain = AddCheck(
             "Automatically start Flow 11 after Flow 10",
             _settings.AutoChainFlow10To11);
@@ -6789,7 +6940,7 @@ internal sealed class CopilotService : Form
         {
             flapDistance.Value = 15;
             flapAltitude.Value = 10000;
-            flapSpeed.Value = 220;
+            flapSpeed.Value = 230;
             flap2Distance.Value = 10;
             flap2Altitude.Value = 4000;
             flap2Speed.Value = 200;
@@ -6800,8 +6951,9 @@ internal sealed class CopilotService : Form
             landingAltitude.Value = 1800;
             landingSpeed.Value = 185;
             earlierChains.Checked = false;
+            flow6Chain.Checked = true;
             flow10Chain.Checked = true;
-            flow11Chain.Checked = false;
+            flow11Chain.Checked = true;
         };
         buttons.Controls.Add(save);
         buttons.Controls.Add(defaults);
@@ -6828,6 +6980,7 @@ internal sealed class CopilotService : Form
         _settings.ApproachLandingConfigAltitudeAglFeet = (int)landingAltitude.Value;
         _settings.ApproachLandingConfigSpeedKnots = (int)landingSpeed.Value;
         _settings.AutoChainEarlierFlows = earlierChains.Checked;
+        _settings.AutoChainFlow6To7 = flow6Chain.Checked;
         _settings.AutoChainFlow10To11 = flow10Chain.Checked;
         _settings.AutoChainFlow11To12 = flow11Chain.Checked;
         SettingsStore.Save(_settings);
@@ -7085,7 +7238,9 @@ internal sealed class CopilotService : Form
             _aircraftBadgeLabel,
             _state.IsA320NeoV2
                 ? "iniBuilds A320neo V2"
-                : _state.IsFlyByWireA320Neo
+                : _state.IsIniBuildsA321Lr
+                    ? "iniBuilds A321LR"
+                    : _state.IsFlyByWireA320Neo
                     ? "FBW A32NX EXPERIMENTAL"
                     : "AIRCRAFT UNSUPPORTED",
             _state.IsSupportedA320
@@ -7105,7 +7260,7 @@ internal sealed class CopilotService : Form
             $"APU {_state.ApuMasterSwitchOn.ToOnOff()}/{_state.ApuRpmPercent:F0}%";
         _adapterLabel!.Text = _mobiFlightReady
             ? "MobiFlight connected"
-            : "MobiFlight not connected — aircraft controls unavailable";
+            : "MobiFlight not connected â€” aircraft controls unavailable";
         _adapterLabel.ForeColor = _mobiFlightReady
             ? System.Drawing.Color.DarkGreen
             : System.Drawing.Color.DarkRed;
@@ -7139,13 +7294,12 @@ internal sealed class CopilotService : Form
         _procedureLabel!.Text =
             definition == null
                 ? "None"
-                : $"{definition.Name} — {_procedureRunner.Status} — {definition.AutomationSummary}";
+                : $"{definition.Name} â€” {_procedureRunner.Status} â€” {definition.AutomationSummary}";
         _stepLabel!.Text =
             currentStep == null
                 ? "No active step"
                 : $"Current step: {currentStep.Label} " +
                   $"({FormatCrewRole(currentStep.AssignedRole)})";
-        _nextActionLabel!.Text = FormatNextAction(currentStep);
         _waitingForLabel!.Text = FormatWaitingReason(
             currentStep,
             _state,
@@ -7153,18 +7307,16 @@ internal sealed class CopilotService : Form
         _waitingForLabel.ForeColor = _procedureRunner.Status == ProcedureStatus.Failed
             ? System.Drawing.Color.DarkRed
             : System.Drawing.Color.DimGray;
-        _messageLabel!.Text = _procedureRunner.Message ?? "";
         _procedureProgress!.Maximum = Math.Max(1, definition?.Steps.Count ?? 1);
         _procedureProgress.Value = Math.Min(
             _procedureProgress.Maximum,
             _procedureRunner.CompletedStepCount);
-        RefreshChecklist(definition?.Id);
 
         var recommendation = FlowRecommendationEngine.Recommend(
             _state,
             _completedProcedureIds);
         _recommendationLabel!.Text =
-            $"{recommendation.Procedure.Name} — {recommendation.Reason}";
+            $"{recommendation.Procedure.Name} â€” {recommendation.Reason}";
         _recommendationLabel.ForeColor = recommendation.Overdue
             ? System.Drawing.Color.DarkRed
             : System.Drawing.Color.DarkBlue;
@@ -7214,26 +7366,6 @@ internal sealed class CopilotService : Form
             _ => role.ToString()
         };
 
-    private static string FormatNextAction(ProcedureStep? step)
-    {
-        if (step == null)
-        {
-            return "Next action: none";
-        }
-
-        var actor = FormatCrewRole(step.AssignedRole);
-        return step.Kind switch
-        {
-            ProcedureStepKind.AutomaticAction =>
-                $"Next action: {actor} automatic - {step.Label}",
-            ProcedureStepKind.ManualAction =>
-                $"Next action: {actor} manual - {step.Label}",
-            ProcedureStepKind.Observe =>
-                $"Next action: monitor - {step.Label}",
-            _ => $"Next action: {step.Label}"
-        };
-    }
-
     private static string FormatWaitingReason(
         ProcedureStep? step,
         AircraftState state,
@@ -7282,13 +7414,21 @@ internal sealed class CopilotService : Form
             "captain-engine-shutdown" =>
                 $"engine masters OFF. Engines {(state.EnginesOff ? "OFF" : "running")}.",
             "approach-config-start" =>
-                $"Flaps 1 gate: distance <= {state.ApproachFlaps1DistanceNm} NM or altitude <= {state.ApproachFlaps1AltitudeFeet:N0} ft, speed <= {state.ApproachFlaps1SpeedKnots} kt.",
+                $"Flaps 1 gate: distance <= {state.ApproachFlaps1DistanceNm} NM or altitude <= {state.ApproachFlaps1AltitudeFeet:N0} ft.",
+            "flaps-one-speed" =>
+                $"Flaps CONFIG 1 speed safe: IAS {state.IndicatedAirspeedKnots:F0} kt <= {state.EffectiveApproachFlaps1SpeedKnots} kt.",
             "flaps-two-point" =>
-                $"Flaps 2 gate: distance <= {state.ApproachFlaps2DistanceNm} NM or radio altitude <= {state.ApproachFlaps2AltitudeAglFeet:N0} ft, speed <= {state.ApproachFlaps2SpeedKnots} kt.",
+                $"Flaps 2 gate: distance <= {state.ApproachFlaps2DistanceNm} NM or radio altitude <= {state.ApproachFlaps2AltitudeAglFeet:N0} ft.",
+            "flaps-two-speed" =>
+                $"Flaps CONFIG 2 speed safe: IAS {state.IndicatedAirspeedKnots:F0} kt <= {state.EffectiveApproachFlaps2SpeedKnots} kt.",
             "gear-down-point" =>
-                $"gear gate: distance <= {state.ApproachGearDistanceNm} NM or radio altitude <= {state.ApproachGearAltitudeAglFeet:N0} ft, speed <= {state.ApproachGearSpeedKnots} kt.",
+                $"gear gate: distance <= {state.ApproachGearDistanceNm} NM or radio altitude <= {state.ApproachGearAltitudeAglFeet:N0} ft.",
             "landing-config-point" =>
-                $"landing-config gate: distance <= {state.ApproachLandingConfigDistanceNm} NM or radio altitude <= {state.ApproachLandingConfigAltitudeAglFeet:N0} ft, speed <= {state.ApproachLandingConfigSpeedKnots} kt.",
+                $"landing-config gate: distance <= {state.ApproachLandingConfigDistanceNm} NM or radio altitude <= {state.ApproachLandingConfigAltitudeAglFeet:N0} ft.",
+            "landing-config-speed" =>
+                $"Landing configuration speed safe: IAS {state.IndicatedAirspeedKnots:F0} kt <= {state.EffectiveApproachFlaps3SpeedKnots} kt.",
+            "flaps-full-speed" =>
+                $"Flaps FULL speed safe: IAS {state.IndicatedAirspeedKnots:F0} kt <= {state.EffectiveApproachFlapsFullSpeedKnots} kt.",
             "fo-approaching-minimums" =>
                 $"radio altitude at DH + 100 ft. RA {state.RadioHeightFeet:F0} ft, DH {state.DecisionHeightFeet:F0} ft.",
             "fo-minimums" =>
@@ -7301,11 +7441,82 @@ internal sealed class CopilotService : Form
         };
     }
 
+    private static bool TryDescribeApproachGateStatus(
+        string stepId,
+        AircraftState state,
+        out string description)
+    {
+        int distanceGate;
+        int speedGate;
+        string fallbackLabel;
+        bool fallbackReached;
+
+        switch (stepId)
+        {
+            case "approach-config-start":
+                distanceGate = state.ApproachFlaps1DistanceNm;
+                speedGate = state.EffectiveApproachFlaps1SpeedKnots;
+                fallbackLabel = $"ALT <= {state.ApproachFlaps1AltitudeFeet:N0} ft";
+                fallbackReached =
+                    state.IndicatedAltitudeFeet <= state.ApproachFlaps1AltitudeFeet;
+                break;
+            case "flaps-two-point":
+                distanceGate = state.ApproachFlaps2DistanceNm;
+                speedGate = state.EffectiveApproachFlaps2SpeedKnots;
+                fallbackLabel = $"AGL <= {state.ApproachFlaps2AltitudeAglFeet:N0} ft";
+                fallbackReached =
+                    state.AltitudeAboveGroundFeet <= state.ApproachFlaps2AltitudeAglFeet;
+                break;
+            case "gear-down-point":
+                distanceGate = state.ApproachGearDistanceNm;
+                speedGate = state.ApproachGearSpeedKnots;
+                fallbackLabel = $"AGL <= {state.ApproachGearAltitudeAglFeet:N0} ft";
+                fallbackReached =
+                    state.AltitudeAboveGroundFeet <= state.ApproachGearAltitudeAglFeet;
+                break;
+            case "landing-config-point":
+                distanceGate = state.ApproachLandingConfigDistanceNm;
+                speedGate = state.EffectiveApproachFlaps3SpeedKnots;
+                fallbackLabel = $"AGL <= {state.ApproachLandingConfigAltitudeAglFeet:N0} ft";
+                fallbackReached =
+                    state.AltitudeAboveGroundFeet <= state.ApproachLandingConfigAltitudeAglFeet;
+                break;
+            default:
+                description = string.Empty;
+                return false;
+        }
+
+        var distanceReached =
+            state.ApproachDistanceToTouchdownNm.HasValue
+            && state.ApproachDistanceToTouchdownNm.Value > 0
+            && state.ApproachDistanceToTouchdownNm.Value <= distanceGate;
+        var distanceText = state.ApproachDistanceToTouchdownNm.HasValue
+            ? $"{state.ApproachDistanceToTouchdownNm.Value:F1} NM {state.ApproachDistanceSource}"
+            : "n/a";
+        var blockers = new List<string>();
+        if (!distanceReached && !fallbackReached)
+        {
+            blockers.Add($"distance/fallback not reached ({distanceText}, {fallbackLabel})");
+        }
+
+        description =
+            "Approach gate status: " +
+            $"IAS {state.IndicatedAirspeedKnots:F0} kt (speed reference {speedGate} kt), " +
+            $"ALT {state.IndicatedAltitudeFeet:F0} ft, " +
+            $"AGL {state.AltitudeAboveGroundFeet:F0} ft, " +
+            $"DIST {distanceText} <= {distanceGate} NM, " +
+            $"fallback {fallbackLabel} {(fallbackReached ? "met" : "not met")}; " +
+            (blockers.Count == 0
+                ? "gate ready."
+                : "waiting for " + string.Join(" and ", blockers) + ".");
+        return true;
+    }
+
     private string FormatCurrentStepTelemetry(AircraftState state)
     {
         if (state.TelemetryIssues.Count > 0)
         {
-            return "READBACK INCONSISTENT — " +
+            return "READBACK INCONSISTENT â€” " +
                    string.Join(" ", state.TelemetryIssues);
         }
 
@@ -7323,11 +7534,19 @@ internal sealed class CopilotService : Form
             "fo-v1" => $"{flight} | target V1 {state.TakeoffV1SpeedKnots} kt",
             "fo-rotate" => $"{flight} | target VR {state.TakeoffRotateSpeedKnots} kt",
             "approach-config-start" =>
-                $"{flight} | trigger ≤{state.ApproachFlaps1AltitudeFeet:N0} ft indicated and ≤{state.ApproachFlaps1SpeedKnots} kt",
+                $"{flight} | trigger â‰¤{state.ApproachFlaps1AltitudeFeet:N0} ft indicated or distance gate",
+            "flaps-one-speed" =>
+                $"{flight} | wait IAS â‰¤{state.EffectiveApproachFlaps1SpeedKnots} kt for CONFIG 1",
+            "flaps-two-speed" =>
+                $"{flight} | wait IAS â‰¤{state.EffectiveApproachFlaps2SpeedKnots} kt for CONFIG 2",
             "gear-down-point" =>
-                $"{flight} | trigger ≤{state.ApproachGearAltitudeAglFeet:N0} ft AGL and ≤{state.ApproachGearSpeedKnots} kt",
+                $"{flight} | trigger â‰¤{state.ApproachGearAltitudeAglFeet:N0} ft AGL or distance gate",
             "landing-config-point" =>
-                $"{flight} | trigger ≤{state.ApproachLandingConfigAltitudeAglFeet:N0} ft AGL and ≤{state.ApproachLandingConfigSpeedKnots} kt",
+                $"{flight} | trigger â‰¤{state.ApproachLandingConfigAltitudeAglFeet:N0} ft AGL or distance gate",
+            "landing-config-speed" =>
+                $"{flight} | wait IAS â‰¤{state.EffectiveApproachFlaps3SpeedKnots} kt for CONFIG 3",
+            "flaps-full-speed" =>
+                $"{flight} | wait IAS â‰¤{state.EffectiveApproachFlapsFullSpeedKnots} kt for FULL",
             "fo-approaching-minimums" or "fo-minimums" =>
                 $"{flight} | RA {state.RadioHeightFeet:F0} ft | DH {state.DecisionHeightFeet:F0} ft",
             "fo-flaps-one" or "fo-flaps-two" or "fo-flaps-three" or "fo-flaps-full"
@@ -7368,7 +7587,7 @@ internal sealed class CopilotService : Form
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
                 _versionLabel.Text =
-                    $"{GetApplicationVersion()} — no GitHub release published";
+                    $"{GetApplicationVersion()} â€” no GitHub release published";
                 return;
             }
             response.EnsureSuccessStatusCode();
@@ -7380,7 +7599,7 @@ internal sealed class CopilotService : Form
                 || !Version.TryParse(match.Groups["version"].Value, out var latest))
             {
                 _versionLabel.Text =
-                    $"{GetApplicationVersion()} — release status unavailable";
+                    $"{GetApplicationVersion()} â€” release status unavailable";
                 return;
             }
 
@@ -7388,8 +7607,8 @@ internal sealed class CopilotService : Form
                 Assembly.GetExecutingAssembly().GetName().Version
                 ?? new Version();
             _versionLabel.Text = latest > current
-                ? $"{GetApplicationVersion()} — update available: {latest}"
-                : $"{GetApplicationVersion()} — up to date";
+                ? $"{GetApplicationVersion()} â€” update available: {latest}"
+                : $"{GetApplicationVersion()} â€” up to date";
             _versionLabel.ForeColor = latest > current
                 ? System.Drawing.Color.DarkOrange
                 : System.Drawing.Color.DarkGreen;
@@ -7397,39 +7616,9 @@ internal sealed class CopilotService : Form
         catch (Exception ex)
         {
             _versionLabel.Text =
-                $"{GetApplicationVersion()} — update check unavailable";
+                $"{GetApplicationVersion()} â€” update check unavailable";
             AppLog.Write($"GitHub update check failed: {ex.Message}");
         }
-    }
-
-    private void RefreshChecklist(string? procedureId)
-    {
-        if (_checklistList == null || _state == null)
-        {
-            return;
-        }
-
-        _checklistList.BeginUpdate();
-        _checklistList.Items.Clear();
-        var checklist = procedureId == null
-            ? null
-            : A320ChecklistLibrary.FindForProcedure(procedureId);
-        if (checklist == null)
-        {
-            _checklistList.Items.Add("Select or start a flow to view its verification checklist.");
-            _checklistList.EndUpdate();
-            return;
-        }
-
-        _checklistList.Items.Add(checklist.Name);
-        foreach (var item in checklist.Items)
-        {
-            var result = item.Verify(_state);
-            var marker = result == true ? "✓" : result == false ? "✗" : "?";
-            _checklistList.Items.Add(
-                $"{marker}  {item.Challenge,-24} {item.ExpectedResponse}");
-        }
-        _checklistList.EndUpdate();
     }
 
     private void RefreshFlowList(string recommendedId, string? activeId)
@@ -7741,8 +7930,8 @@ internal sealed class CopilotService : Form
         }
 
         public override string ToString() =>
-            $"{(Completed ? "✓" : Active ? "▶" : Recommended ? "→" : " ")} " +
-            $"{Definition.Name} — {Definition.AutomationSummary}";
+            $"{(Completed ? "âœ“" : Active ? "â–¶" : Recommended ? "â†’" : " ")} " +
+            $"{Definition.Name} â€” {Definition.AutomationSummary}";
     }
 }
 

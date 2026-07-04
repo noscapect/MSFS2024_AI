@@ -61,7 +61,7 @@ internal sealed class AircraftState
     public string ApproachDistanceSource { get; set; } = "";
     public int ApproachFlaps1DistanceNm { get; set; } = 15;
     public int ApproachFlaps1AltitudeFeet { get; set; } = 10000;
-    public int ApproachFlaps1SpeedKnots { get; set; } = 220;
+    public int ApproachFlaps1SpeedKnots { get; set; } = 230;
     public int ApproachFlaps2DistanceNm { get; set; } = 10;
     public int ApproachFlaps2AltitudeAglFeet { get; set; } = 4000;
     public int ApproachFlaps2SpeedKnots { get; set; } = 200;
@@ -71,6 +71,14 @@ internal sealed class AircraftState
     public int ApproachLandingConfigDistanceNm { get; set; } = 5;
     public int ApproachLandingConfigAltitudeAglFeet { get; set; } = 1800;
     public int ApproachLandingConfigSpeedKnots { get; set; } = 185;
+    public int EffectiveApproachFlaps1SpeedKnots =>
+        IsIniBuildsA321Lr ? 230 : ApproachFlaps1SpeedKnots;
+    public int EffectiveApproachFlaps2SpeedKnots =>
+        IsIniBuildsA321Lr ? 215 : ApproachFlaps2SpeedKnots;
+    public int EffectiveApproachFlaps3SpeedKnots =>
+        IsIniBuildsA321Lr ? 195 : ApproachLandingConfigSpeedKnots;
+    public int EffectiveApproachFlapsFullSpeedKnots =>
+        IsIniBuildsA321Lr ? 186 : ApproachLandingConfigSpeedKnots;
     public double VerticalSpeedFeetPerMinute { get; set; }
     public double GForce { get; set; }
     public double RadioHeightFeet { get; set; }
@@ -136,12 +144,19 @@ internal sealed class AircraftState
     public bool IsA320NeoV2 =>
         string.Equals(Title, "A320neo V2", StringComparison.OrdinalIgnoreCase);
 
+    public bool IsIniBuildsA321Lr =>
+        string.Equals(Title, "A321", StringComparison.OrdinalIgnoreCase)
+        || Title.IndexOf("A321", StringComparison.OrdinalIgnoreCase) >= 0;
+
+    public bool IsIniBuildsA320Family =>
+        IsA320NeoV2 || IsIniBuildsA321Lr;
+
     public bool IsFlyByWireA320Neo =>
         Title.IndexOf("A32NX", StringComparison.OrdinalIgnoreCase) >= 0
         || Title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0;
 
     public bool IsSupportedA320 =>
-        IsA320NeoV2 || IsFlyByWireA320Neo;
+        IsIniBuildsA320Family || IsFlyByWireA320Neo;
 
     public bool EnginesOff => !Engine1Running && !Engine2Running;
     public bool EngineModeIgnStart =>
@@ -193,6 +208,16 @@ internal sealed class AircraftState
 
     public bool FlapsAtDetent(int detent)
     {
+        if (IsIniBuildsA321Lr)
+        {
+            return A321FlapsAtDetent(detent);
+        }
+
+        return LegacyA320FlapsAtDetent(detent);
+    }
+
+    private bool LegacyA320FlapsAtDetent(int detent)
+    {
         if (Math.Abs(FlapsHandleIndex - detent) < 0.1)
         {
             return true;
@@ -205,6 +230,21 @@ internal sealed class AircraftState
         // When the handle readback is flagged as suspicious, use the surface
         // position as the truth source instead of blocking the procedure.
         if (!FlapReadbackSane || detent == 4 && FlapsHandleIndex > 4.1)
+        {
+            return FlapSurfacesMatchDetent(detent);
+        }
+
+        return false;
+    }
+
+    private bool A321FlapsAtDetent(int detent)
+    {
+        if (Math.Abs(FlapsHandleIndex - detent) < 0.1)
+        {
+            return true;
+        }
+
+        if (!FlapReadbackSane)
         {
             return FlapSurfacesMatchDetent(detent);
         }

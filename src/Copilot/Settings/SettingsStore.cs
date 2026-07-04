@@ -23,8 +23,10 @@ internal static class SettingsStore
 
             using var stream = File.OpenRead(SettingsPath);
             var serializer = new XmlSerializer(typeof(CopilotSettings));
-            return serializer.Deserialize(stream) as CopilotSettings
-                   ?? new CopilotSettings();
+            var settings = serializer.Deserialize(stream) as CopilotSettings
+                           ?? new CopilotSettings();
+            MigrateStandardDefaults(settings);
+            return settings;
         }
         catch
         {
@@ -38,5 +40,13 @@ internal static class SettingsStore
         using var stream = File.Create(SettingsPath);
         var serializer = new XmlSerializer(typeof(CopilotSettings));
         serializer.Serialize(stream, settings);
+    }
+
+    private static void MigrateStandardDefaults(CopilotSettings settings)
+    {
+        if (settings.ApproachFlaps1SpeedKnots == 220)
+        {
+            settings.ApproachFlaps1SpeedKnots = 230;
+        }
     }
 }

@@ -14,7 +14,7 @@ public sealed class CopilotSettings
     public int TakeoffRotateSpeedKnots { get; set; } = 143;
     public int ApproachFlaps1DistanceNm { get; set; } = 15;
     public int ApproachFlaps1AltitudeFeet { get; set; } = 10000;
-    public int ApproachFlaps1SpeedKnots { get; set; } = 220;
+    public int ApproachFlaps1SpeedKnots { get; set; } = 230;
     public int ApproachFlaps2DistanceNm { get; set; } = 10;
     public int ApproachFlaps2AltitudeAglFeet { get; set; } = 4000;
     public int ApproachFlaps2SpeedKnots { get; set; } = 200;
@@ -25,6 +25,7 @@ public sealed class CopilotSettings
     public int ApproachLandingConfigAltitudeAglFeet { get; set; } = 1800;
     public int ApproachLandingConfigSpeedKnots { get; set; } = 185;
     public bool AutoChainEarlierFlows { get; set; }
+    public bool AutoChainFlow6To7 { get; set; } = true;
     public bool AutoChainFlow10To11 { get; set; } = true;
-    public bool AutoChainFlow11To12 { get; set; }
+    public bool AutoChainFlow11To12 { get; set; } = true;
 }

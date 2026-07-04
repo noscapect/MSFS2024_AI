@@ -34,6 +34,11 @@ internal static class AircraftStateSanity
                 $"Flap handle reports detent {state.FlapsHandleIndex:F0} " +
                 "while surfaces remain retracted.");
         }
+        else if (state.FlapsHandleIndex >= 3.9 && maximumSurface < 75)
+        {
+            issues.Add(
+                $"Flap handle reports FULL while surfaces report only {maximumSurface:F1}%.");
+        }
 
         return issues;
     }

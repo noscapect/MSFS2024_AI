@@ -191,13 +191,17 @@ Flow 9 is Captain-only.
 
 ## 10. Approach & Landing
 
+Landing autobrake LOW is selected only after descent/below-10,000-feet
+monitoring has completed; starting Flow 10 early no longer arms it
+immediately.
+
 This flow requires no app confirmations and may be started during descent or
 after the aircraft is already below 10,000 feet.
 
-1. **F/O automatic:** Set landing autobrake LOW.
-2. **Monitor:** Accept an airborne descent below −300 feet per minute or an
+1. **Monitor:** Accept an airborne descent below -300 feet per minute or an
    airborne aircraft already at or below 10,000 feet.
-3. **Monitor:** Wait until indicated altitude is at or below 10,000 feet.
+2. **Monitor:** Wait until indicated altitude is at or below 10,000 feet.
+3. **F/O automatic:** Set landing autobrake LOW.
 4. **F/O automatic:** Turn seatbelt signs ON.
 5. **F/O automatic:** Turn both landing lights ON.
 6. **F/O automatic:** Set nose light to T.O. / landing position.
@@ -210,8 +214,10 @@ after the aircraft is already below 10,000 feet.
     4,000 feet AGL.
 12. **Monitor:** Wait until speed is safe for flaps CONFIG 2.
 13. **F/O automatic:** Set flaps CONFIG 2.
-14. **Monitor:** Gear-down point at or inside 7 NM to touchdown or below
-    2,500 feet AGL.
+14. **Monitor:** Gear-down point at or inside 7 NM to touchdown and at gear
+    speed. If no runway/route distance is available, radio-altitude fallback
+    is allowed; if distance is available, low altitude alone does not trigger
+    gear extension.
 15. **F/O automatic/callout:** Lower landing gear and say “Landing gear down”
     after verified DOWN readback.
 16. **F/O automatic:** Arm ground spoilers.
@@ -233,31 +239,34 @@ after the aircraft is already below 10,000 feet.
 
 Destination QNH remains pilot-managed and is not operated or monitored.
 The approach gates use distance to the selected runway when MSFS exposes it,
-then GPS distance as a backup, and finally altitude fallback gates. Speed no
-longer blocks the distance/altitude gates themselves, but each flap selection
-has its own monitored safe-speed step before the F/O moves the lever. If the
-aircraft is too fast, the flow waits at the relevant speed-safe step instead of
-failing the action. The included standard configuration can be overridden in
-`Approach & chaining settings`. The iniBuilds A321LR uses separate approach
-flap speed limits for Flaps 2/3/FULL so it does not inherit the more
-conservative A320 schedule during landing tests.
+then GPS distance as a backup. Flap gates still have altitude fallbacks, but
+gear extension uses distance as the authority whenever distance is available so
+a low intercept does not drop the gear before the normal approach point. Each
+flap selection has its own monitored safe-speed step before the F/O moves the
+lever. If the aircraft is too fast, the flow waits at the relevant speed-safe
+step instead of failing the action. The included standard configuration can be
+overridden in `Approach & chaining settings`. The iniBuilds A321LR uses
+separate approach flap speed limits for Flaps 2/3/FULL so it does not inherit
+the more conservative A320 schedule during landing tests.
 
 ## 11. After Landing & Taxi
 
 1. **Monitor:** Aircraft on the ground.
 2. **Monitor:** Reverse thrust stowed at or below 70 knots.
 3. **F/O automatic:** Set autobrake OFF.
-4. **F/O automatic:** Turn APU MASTER ON while taxiing after landing.
-5. **Monitor:** Wait for APU intake flap to open.
-6. **F/O automatic:** Select APU START.
-7. **Monitor:** Wait until after-landing taxi speed at or below 30 knots.
-8. **F/O automatic:** Set both landing-light selectors to RETRACT.
-9. **F/O automatic:** Set strobes OFF.
-10. **F/O automatic:** Set nose light to TAXI.
-11. **F/O automatic:** Disarm ground spoilers.
-12. **F/O automatic:** Retract flaps fully to zero.
-13. **F/O automatic:** Set transponder mode to STBY.
-14. **Monitor:** Wait for APU AVAIL before handing off to parking/shutdown.
+4. **Monitor:** Wait until after-landing taxi speed at or below 30 knots.
+5. **F/O automatic:** Set both landing-light selectors to RETRACT.
+6. **F/O automatic:** Set strobes OFF.
+7. **F/O automatic:** Set nose light to TAXI.
+8. **F/O automatic:** Disarm ground spoilers.
+9. **F/O automatic:** Retract flaps fully to zero.
+10. **F/O automatic:** Set transponder mode to STBY.
+11. **F/O automatic:** Turn APU MASTER ON while taxiing after landing.
+12. **Monitor:** Wait for APU intake flap to open.
+13. **F/O automatic:** Select APU START.
+14. **Monitor:** Wait for APU AVAIL.
+15. **F/O automatic:** Turn APU BLEED ON before handing off to
+    parking/shutdown.
 
 The WXR/PWS selector remains at position 1. The unsupported Captain and F/O
 radar display selectors and engine anti-ice are not operated by this flow.
@@ -271,7 +280,7 @@ radar display selectors and engine anti-ice are not operated by this flow.
 2. **Monitor:** Parking brake ON.
 3. **Monitor:** APU available or external power connected.
 4. **Monitor:** Captain switches both engine masters OFF.
-5. **F/O automatic:** Turn APU BLEED ON.
+5. **F/O automatic:** Verify/turn APU BLEED ON.
 6. **F/O automatic:** Set nose taxi light OFF.
 7. **F/O automatic:** Turn beacon OFF after engine shutdown.
 8. **F/O automatic:** Turn all six fuel pumps OFF.

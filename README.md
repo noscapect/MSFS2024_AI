@@ -227,8 +227,7 @@ See [docs/RELEASING.md](docs/RELEASING.md).
 
 The iniBuilds A320neo V2 flow is the mature baseline. FlyByWire A32NX support
 has been added and live-tested across the complete 12-flow sequence. iniBuilds
-A321LR support is implemented through the shared iniBuilds A320-family adapter;
-Flows 1 through 9 have been live-tested on the A321LR, with final
-approach/landing/taxi/shutdown validation still in progress on the feature
-branch. Treat this as active development software and remain ready to operate
-the aircraft manually.
+A321LR support is implemented through the shared iniBuilds A320-family adapter
+with A321-specific approach flap-speed handling and has been live-tested
+through the complete gate-to-gate sequence. Treat this as active development
+software and remain ready to operate the aircraft manually.

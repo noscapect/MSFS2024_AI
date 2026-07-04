@@ -104,6 +104,13 @@ internal static class A320ProcedureLibrary
         ApproachDistanceReached(state, maximumDistanceNm)
         || fallbackReached;
 
+    private static bool ApproachGearGateReached(AircraftState state) =>
+        state.IndicatedAirspeedKnots <= state.ApproachGearSpeedKnots
+        && (ApproachDistanceReached(state, state.ApproachGearDistanceNm)
+            || (!state.ApproachDistanceToTouchdownNm.HasValue
+                && state.AltitudeAboveGroundFeet
+                   <= state.ApproachGearAltitudeAglFeet));
+
     public static ProcedureDefinition PowerUpAndInitialSetup { get; } =
         new(
             "power-up-initial-setup",
@@ -476,12 +483,6 @@ internal static class A320ProcedureLibrary
             "10. Approach & Landing",
             new[]
             {
-                Automatic(
-                    "fo-landing-autobrake-low",
-                    "Landing auto-brake LOW",
-                    state => state.AutobrakeLevel.HasValue
-                             && Math.Abs(state.AutobrakeLevel.Value - 1) < 0.1,
-                    "autobrake low"),
                 Observe(
                     "captain-descent",
                     "Descent established or below 10,000 feet",
@@ -494,6 +495,12 @@ internal static class A320ProcedureLibrary
                     "Below 10,000 feet",
                     state => state.IndicatedAltitudeFeet <= 10000,
                     CrewRole.FirstOfficer),
+                Automatic(
+                    "fo-landing-autobrake-low",
+                    "Landing auto-brake LOW",
+                    state => state.AutobrakeLevel.HasValue
+                             && Math.Abs(state.AutobrakeLevel.Value - 1) < 0.1,
+                    "autobrake low"),
                 Automatic(
                     "fo-seatbelts-on",
                     "Seatbelt signs ON",
@@ -564,12 +571,7 @@ internal static class A320ProcedureLibrary
                 Observe(
                     "gear-down-point",
                     "Gear-down point",
-                    state => ApproachGateReached(
-                        state,
-                        state.ApproachGearDistanceNm,
-                        state.AltitudeAboveGroundFeet
-                            <= state.ApproachGearAltitudeAglFeet,
-                        state.ApproachGearSpeedKnots),
+                    ApproachGearGateReached,
                     CrewRole.FirstOfficer),
                 Automatic(
                     "fo-gear-down",
@@ -674,13 +676,6 @@ internal static class A320ProcedureLibrary
                     state => state.AutobrakeLevel.HasValue
                              && Math.Abs(state.AutobrakeLevel.Value) < 0.1,
                     "autobrake off"),
-                Automatic(
-                    "fo-apu-master-on",
-                    "APU MASTER ON",
-                    state => state.ApuMasterSwitchOn,
-                    "apu-master on"),
-                Observe("fo-apu-flap-open", "APU intake flap open", state => state.IsFlyByWireA320Neo ? state.ApuMasterSwitchOn : state.ApuFlapPercent >= 0.95),
-                Automatic("fo-apu-start-on", "APU START selected", state => state.ApuStartButtonOn, "apu-start on"),
                 Observe(
                     "captain-runway-exit",
                     "After-landing taxi speed reached",
@@ -723,7 +718,15 @@ internal static class A320ProcedureLibrary
                     state => state.TransponderModeSelectorPosition.HasValue
                              && Math.Abs(state.TransponderModeSelectorPosition.Value) < 0.1,
                     "transponder stby"),
-                Observe("apu-available", "APU AVAIL", state => state.ApuAvailable)
+                Automatic(
+                    "fo-apu-master-on",
+                    "APU MASTER ON",
+                    state => state.ApuMasterSwitchOn,
+                    "apu-master on"),
+                Observe("fo-apu-flap-open", "APU intake flap open", state => state.IsFlyByWireA320Neo ? state.ApuMasterSwitchOn : state.ApuFlapPercent >= 0.95),
+                Automatic("fo-apu-start-on", "APU START selected", state => state.ApuStartButtonOn, "apu-start on"),
+                Observe("apu-available", "APU AVAIL", state => state.ApuAvailable),
+                Automatic("fo-apu-bleed-on", "APU BLEED ON", state => state.ApuBleedOn, "apu-bleed on")
             });
 
     public static ProcedureDefinition ParkingAndShutdown { get; } =

@@ -9,7 +9,7 @@ handled as an iniBuilds A320-family aircraft. The branch reuses the verified
 iniBuilds native/MobiFlight control path where the A321LR matches the A320neo
 V2.
 
-Live test results from the first A321LR session:
+Live test results from the A321LR validation sessions:
 
 - Flow 1, Power Up & Initial Setup: passed.
 - Flow 2, Flight Computer & Pre-Flight: passed.
@@ -17,16 +17,17 @@ Live test results from the first A321LR session:
 - Flow 4, Engine Start Sequence: passed.
 - Flow 5, After Start & Taxi: passed.
 - Flow 6, Before Takeoff: passed.
-- Flow 7, Takeoff & Climb: mostly passed. Ground spoilers, gear up, nose light,
-  landing lights and callouts worked. Flap cleanup was falsely completed while
-  the cockpit flap handle remained at CONFIG 1. The branch now restricts the
-  flap-surface fallback to FBW only; iniBuilds A320-family aircraft require the
-  actual flap-handle detent for clean verification. Retest pending.
+- Flow 7, Takeoff & Climb: passed after flap-clean verification was changed to
+  require the actual iniBuilds flap-handle detent.
 - Flow 8, Cruise: passed.
 - Flow 9, Descent Preparation: passed.
-- Flow 10, Approach & Landing: partially tested. The flow successfully reached
-  and completed the nose light T.O. step during approach. The flight was
-  aborted before the rest of Flow 10, Flow 11 and Flow 12 could be verified.
+- Flow 10, Approach & Landing: passed with A321-specific approach flap-speed
+  handling, distance-authoritative gear extension, landing callouts, and
+  automatic handoff to Flow 11.
+- Flow 11, After Landing & Taxi: passed after runway-cleanup ordering was
+  corrected and APU BLEED was allowed while taxiing on the ground.
+- Flow 12, Parking & Shutdown: passed, including gate shutdown and optional
+  cold-and-dark secure.
 
 The branch also changes the default Flow 11-to-12 chaining option to enabled.
 Flow 12 immediately waits for parked-at-gate conditions, so this is safe for

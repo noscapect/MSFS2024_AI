@@ -176,6 +176,38 @@ public sealed class ProcedureRecoveryTests
     }
 
     [TestMethod]
+    public void ApproachFlowDoesNotSetAutobrakeBeforeDescentGate()
+    {
+        var commands = new List<string>();
+        var runner = new ProcedureRunner(
+            commands.Add,
+            () => AutomationPolicy.AutomaticWhenSupported);
+        var state = new AircraftState
+        {
+            Title = "A320neo V2",
+            OnGround = false,
+            VerticalSpeedFeetPerMinute = 0,
+            IndicatedAltitudeFeet = 12000,
+            AutobrakeLevel = 0
+        };
+
+        runner.Start(A320ProcedureLibrary.ApproachAndLanding, state);
+
+        Assert.AreEqual("captain-descent", runner.CurrentStep?.Id);
+        CollectionAssert.AreEqual(Array.Empty<string>(), commands);
+
+        state.VerticalSpeedFeetPerMinute = -800;
+        state.IndicatedAltitudeFeet = 9500;
+        runner.Update(state);
+
+        Assert.AreEqual("fo-landing-autobrake-low", runner.CurrentStep?.Id);
+        Thread.Sleep(1100);
+        runner.Update(state);
+
+        CollectionAssert.AreEqual(new[] { "autobrake low" }, commands);
+    }
+
+    [TestMethod]
     public void ApproachFlapsTwoWaitsForDistanceOrFallbackGate()
     {
         var commands = new List<string>();
@@ -241,6 +273,38 @@ public sealed class ProcedureRecoveryTests
     }
 
     [TestMethod]
+    public void ApproachGearGateIgnoresLowAltitudeFallbackWhenRunwayDistanceIsKnown()
+    {
+        var commands = new List<string>();
+        var runner = new ProcedureRunner(
+            commands.Add,
+            () => AutomationPolicy.AutomaticWhenSupported);
+        var definition = A320ProcedureLibrary.ApproachAndLanding;
+        var gateIndex = definition.Steps
+            .Select((step, index) => new { step.Id, index })
+            .Single(item => item.Id == "gear-down-point")
+            .index;
+        var state = new AircraftState
+        {
+            Title = "A320neo V2",
+            OnGround = false,
+            ApproachDistanceToTouchdownNm = 9.0,
+            ApproachGearDistanceNm = 7,
+            ApproachGearAltitudeAglFeet = 2500,
+            ApproachGearSpeedKnots = 210,
+            AltitudeAboveGroundFeet = 1800,
+            IndicatedAirspeedKnots = 190,
+            GearHandleDown = false
+        };
+
+        runner.Restore(definition, gateIndex, state);
+
+        Assert.AreEqual("gear-down-point", runner.CurrentStep?.Id);
+        Assert.AreEqual(ProcedureStatus.WaitingForVerification, runner.Status);
+        CollectionAssert.AreEqual(Array.Empty<string>(), commands);
+    }
+
+    [TestMethod]
     public void ApproachFlowUsesTakeoffNoseLightBeforeLanding()
     {
         var commands = new List<string>();
@@ -265,7 +329,7 @@ public sealed class ProcedureRecoveryTests
     }
 
     [TestMethod]
-    public void AfterLandingStartsApuBeforeTaxiSpeedCleanup()
+    public void AfterLandingCleanupRunsBeforeApuStart()
     {
         var commands = new List<string>();
         var runner = new ProcedureRunner(
@@ -293,27 +357,31 @@ public sealed class ProcedureRecoveryTests
 
         state.AutobrakeLevel = 0;
         runner.Update(state);
-        Assert.AreEqual("fo-apu-master-on", runner.CurrentStep?.Id);
+        Assert.AreEqual("captain-runway-exit", runner.CurrentStep?.Id);
+
+        state.GroundSpeedKnots = 25;
+        state.LeftLandingLightSelectorPosition = 1;
+        state.RightLandingLightSelectorPosition = 1;
         Thread.Sleep(1100);
         runner.Update(state);
 
         CollectionAssert.AreEqual(
-            new[] { "autobrake off", "apu-master on" },
+            new[] { "autobrake off", "landing-lights retract" },
             commands);
-        Assert.AreNotEqual("captain-runway-exit", runner.CurrentStep?.Id);
+        Assert.AreEqual("fo-landing-lights-retract", runner.CurrentStep?.Id);
     }
 
     [TestMethod]
-    public void AfterLandingCleanupDoesNotWaitForApuAvailable()
+    public void AfterLandingApuBleedTurnsOnAfterApuAvailable()
     {
         var commands = new List<string>();
         var runner = new ProcedureRunner(
             commands.Add,
             () => AutomationPolicy.AutomaticWhenSupported);
         var definition = A320ProcedureLibrary.AfterLandingAndTaxi;
-        var apuStartIndex = definition.Steps
+        var apuAvailableIndex = definition.Steps
             .Select((step, index) => new { step.Id, index })
-            .Single(item => item.Id == "fo-apu-start-on")
+            .Single(item => item.Id == "apu-available")
             .index;
         var state = new AircraftState
         {
@@ -321,25 +389,17 @@ public sealed class ProcedureRecoveryTests
             OnGround = true,
             GroundSpeedKnots = 25,
             ApuStartButtonOn = true,
-            ApuAvailable = false,
-            LeftLandingLightSelectorPosition = 1,
-            RightLandingLightSelectorPosition = 1,
-            StrobeSelectorPosition = 1,
-            NoseLightSelectorPosition = 1,
-            GroundSpoilersArmed = true,
-            FlapsHandleIndex = 4,
-            LeftFlapPositionPercent = 100,
-            RightFlapPositionPercent = 100,
-            TransponderModeSelectorPosition = 1
+            ApuAvailable = true,
+            ApuBleedOn = false
         };
 
-        runner.Restore(definition, apuStartIndex, state);
+        runner.Restore(definition, apuAvailableIndex, state);
 
-        Assert.AreEqual("fo-landing-lights-retract", runner.CurrentStep?.Id);
+        Assert.AreEqual("fo-apu-bleed-on", runner.CurrentStep?.Id);
         Thread.Sleep(1100);
         runner.Update(state);
 
-        CollectionAssert.AreEqual(new[] { "landing-lights retract" }, commands);
+        CollectionAssert.AreEqual(new[] { "apu-bleed on" }, commands);
     }
 
     [TestMethod]

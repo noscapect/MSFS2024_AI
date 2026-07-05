@@ -158,6 +158,27 @@ internal sealed class AircraftState
     public bool IsSupportedA320 =>
         IsIniBuildsA320Family || IsFlyByWireA320Neo;
 
+    public bool IsPmdg737 =>
+        Title.IndexOf("PMDG", StringComparison.OrdinalIgnoreCase) >= 0
+        && Title.IndexOf("737", StringComparison.OrdinalIgnoreCase) >= 0;
+
+    public bool IsPmdg737800 =>
+        IsPmdg737
+        && (Title.IndexOf("737-800", StringComparison.OrdinalIgnoreCase) >= 0
+            || Title.IndexOf("738", StringComparison.OrdinalIgnoreCase) >= 0);
+
+    public bool IsSupportedBoeing737 => IsPmdg737800;
+
+    public bool IsSupportedAircraft =>
+        IsSupportedA320 || IsSupportedBoeing737;
+
+    public string AircraftFamilyLabel =>
+        IsSupportedBoeing737
+            ? "PMDG 737-800"
+            : IsSupportedA320
+                ? "Airbus A320-family"
+                : "Unsupported aircraft";
+
     public bool EnginesOff => !Engine1Running && !Engine2Running;
     public bool EngineModeIgnStart =>
         EngineModeSelectorPosition.HasValue
@@ -208,6 +229,11 @@ internal sealed class AircraftState
 
     public bool FlapsAtDetent(int detent)
     {
+        if (IsSupportedBoeing737)
+        {
+            return Boeing737FlapsAtDetent(detent);
+        }
+
         if (IsIniBuildsA321Lr)
         {
             return A321FlapsAtDetent(detent);
@@ -250,6 +276,36 @@ internal sealed class AircraftState
         }
 
         return false;
+    }
+
+    private bool Boeing737FlapsAtDetent(int detent)
+    {
+        if (detent == 0)
+        {
+            return FlapsHandleIndex <= 0.1 || FlapSurfacesMatchDetent(0);
+        }
+
+        var handleIndex = (int)Math.Round(FlapsHandleIndex);
+        return detent switch
+        {
+            1 => handleIndex >= 1 || FlapSurfacesMatchBoeingFlaps(1),
+            2 => handleIndex >= 3 || FlapSurfacesMatchBoeingFlaps(5),
+            4 => handleIndex >= 7 || FlapSurfacesMatchBoeingFlaps(30),
+            _ => Math.Abs(FlapsHandleIndex - detent) < 0.1
+        };
+    }
+
+    private bool FlapSurfacesMatchBoeingFlaps(int flaps)
+    {
+        var maximumSurface =
+            Math.Max(LeftFlapPositionPercent, RightFlapPositionPercent);
+        return flaps switch
+        {
+            1 => maximumSurface is >= 1 and <= 10,
+            5 => maximumSurface is >= 10 and <= 30,
+            30 => maximumSurface >= 65,
+            _ => false
+        };
     }
 
     private bool FlapSurfacesMatchDetent(int detent)

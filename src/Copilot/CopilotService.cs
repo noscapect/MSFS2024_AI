@@ -22,6 +22,12 @@ internal sealed class CopilotService : Form
 {
     private const int WmUserSimConnect = 0x0402;
     private const double MetersPerNauticalMile = 1852.0;
+    private const uint PmdgNg3DataId = 0x4E473331;
+    private const uint PmdgNg3DataDefinition = 0x4E473332;
+    private const uint PmdgNg3ControlId = 0x4E473333;
+    private const uint PmdgNg3ControlDefinition = 0x4E473334;
+    private const int PmdgNg3DataSize = 916;
+    private const uint ThirdPartyEventIdMin = 0x00011000;
     // Change the schema suffix whenever the ordered runtime LVar list changes.
     // MobiFlight client-data layouts persist for the simulator session.
     private const string MobiFlightRuntimeClientName = "MSFS2024_AI_Copilot_v27";
@@ -54,6 +60,8 @@ internal sealed class CopilotService : Form
     private bool _mobiFlightReady;
     private bool _mobiFlightRuntimeReady;
     private DateTime? _mobiFlightRuntimeInitializedUtc;
+    private bool _pmdgNg3DataReady;
+    private PmdgNg3State? _pmdgNg3State;
     private bool NativeStateReady =>
         _nativeBattery1On.HasValue
         && _nativeBattery2On.HasValue
@@ -353,7 +361,9 @@ internal sealed class CopilotService : Form
         FbwAutobrakeLevel = 197,
         FbwWeatherRadarPwsSelector = 198,
         FbwTcasAltitudeReporting = 199,
-        FbwTcasMode = 200
+        FbwTcasMode = 200,
+        PmdgNg3Data = 300,
+        PmdgNg3Control = 301
     }
 
     private enum ClientDataArea
@@ -362,7 +372,9 @@ internal sealed class CopilotService : Form
         MobiFlightResponse = 101,
         MobiFlightRuntimeLVars = 110,
         MobiFlightRuntimeCommand = 111,
-        MobiFlightRuntimeResponse = 112
+        MobiFlightRuntimeResponse = 112,
+        PmdgNg3Data = unchecked((int)PmdgNg3DataId),
+        PmdgNg3Control = unchecked((int)PmdgNg3ControlId)
     }
 
     private enum ClientDataDefinition
@@ -458,7 +470,9 @@ internal sealed class CopilotService : Form
         FbwAutobrakeLevel = 197,
         FbwWeatherRadarPwsSelector = 198,
         FbwTcasAltitudeReporting = 199,
-        FbwTcasMode = 200
+        FbwTcasMode = 200,
+        PmdgNg3Data = unchecked((int)PmdgNg3DataDefinition),
+        PmdgNg3Control = unchecked((int)PmdgNg3ControlDefinition)
     }
 
     private enum CopilotEvent
@@ -643,6 +657,65 @@ internal sealed class CopilotService : Form
     private struct MobiFlightFloat
     {
         public float Value;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    private struct PmdgNg3RawData
+    {
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = PmdgNg3DataSize)]
+        public byte[] Data;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    private struct PmdgNg3Control
+    {
+        public uint Event;
+        public uint Parameter;
+    }
+
+    private sealed class PmdgNg3State
+    {
+        public byte IrsLeftMode { get; set; }
+        public byte IrsRightMode { get; set; }
+        public bool Engine1StartValveOpen { get; set; }
+        public bool Engine2StartValveOpen { get; set; }
+        public bool LeftForwardFuelPump { get; set; }
+        public bool RightForwardFuelPump { get; set; }
+        public bool LeftAftFuelPump { get; set; }
+        public bool RightAftFuelPump { get; set; }
+        public bool LeftCenterFuelPump { get; set; }
+        public bool RightCenterFuelPump { get; set; }
+        public byte BatterySelector { get; set; }
+        public bool GroundPowerAvailable { get; set; }
+        public bool GroundPowerOn { get; set; }
+        public bool ApuGen1On { get; set; }
+        public bool ApuGen2On { get; set; }
+        public byte EmergencyExitLights { get; set; }
+        public byte NoSmokingSelector { get; set; }
+        public byte FastenBeltsSelector { get; set; }
+        public bool ApuBleedOn { get; set; }
+        public byte LeftLandingLight { get; set; }
+        public byte RightLandingLight { get; set; }
+        public bool TaxiLightOn { get; set; }
+        public byte ApuSelector { get; set; }
+        public bool LogoLightOn { get; set; }
+        public byte PositionStrobeSelector { get; set; }
+        public bool AntiCollisionOn { get; set; }
+        public bool SpeedbrakeArmed { get; set; }
+        public byte AutobrakeSelector { get; set; }
+        public byte GearLever { get; set; }
+        public bool ParkingBrakeAnnunciated { get; set; }
+        public byte FireDetectionTestSwitch { get; set; }
+        public bool FireExtinguisherTestLeft { get; set; }
+        public bool FireExtinguisherTestRight { get; set; }
+        public bool FireExtinguisherTestApu { get; set; }
+        public byte TransponderMode { get; set; }
+        public byte TakeoffFlaps { get; set; }
+        public byte V1 { get; set; }
+        public byte Vr { get; set; }
+        public byte LandingFlaps { get; set; }
+        public bool FmcPerfInputComplete { get; set; }
+        public bool GroundConnectionAvailable { get; set; }
     }
 
     public CopilotService(string? oneShotCommand, bool showUi)
@@ -867,6 +940,7 @@ internal sealed class CopilotService : Form
         sender.MapClientEventToSimEvent(CopilotEvent.FuelSystemValveClose, "FUELSYSTEM_VALVE_CLOSE");
         sender.MapClientEventToSimEvent(CopilotEvent.CabinSeatbeltsToggle, "CABIN_SEATBELTS_ALERT_SWITCH_TOGGLE");
         InitializeMobiFlight(sender);
+        InitializePmdgNg3Sdk(sender);
 
         sender.RequestDataOnSimObject(
             Request.AircraftState,
@@ -944,6 +1018,55 @@ internal sealed class CopilotService : Form
             new MobiFlightMessage(command));
     }
 
+    private void InitializePmdgNg3Sdk(SimConnect sender)
+    {
+        try
+        {
+            sender.MapClientDataNameToID("PMDG_NG3_Data", ClientDataArea.PmdgNg3Data);
+            sender.AddToClientDataDefinition(
+                ClientDataDefinition.PmdgNg3Data,
+                0,
+                PmdgNg3DataSize,
+                0,
+                0);
+            sender.RegisterStruct<SIMCONNECT_RECV_CLIENT_DATA, PmdgNg3RawData>(
+                ClientDataDefinition.PmdgNg3Data);
+            sender.RequestClientData(
+                ClientDataArea.PmdgNg3Data,
+                Request.PmdgNg3Data,
+                ClientDataDefinition.PmdgNg3Data,
+                SIMCONNECT_CLIENT_DATA_PERIOD.VISUAL_FRAME,
+                SIMCONNECT_CLIENT_DATA_REQUEST_FLAG.CHANGED,
+                0,
+                0,
+                0);
+
+            sender.MapClientDataNameToID("PMDG_NG3_Control", ClientDataArea.PmdgNg3Control);
+            sender.AddToClientDataDefinition(
+                ClientDataDefinition.PmdgNg3Control,
+                0,
+                (uint)Marshal.SizeOf<PmdgNg3Control>(),
+                0,
+                0);
+            sender.RegisterStruct<SIMCONNECT_RECV_CLIENT_DATA, PmdgNg3Control>(
+                ClientDataDefinition.PmdgNg3Control);
+            sender.RequestClientData(
+                ClientDataArea.PmdgNg3Control,
+                Request.PmdgNg3Control,
+                ClientDataDefinition.PmdgNg3Control,
+                SIMCONNECT_CLIENT_DATA_PERIOD.VISUAL_FRAME,
+                SIMCONNECT_CLIENT_DATA_REQUEST_FLAG.CHANGED,
+                0,
+                0,
+                0);
+            AppLog.Write("PMDG NG3 SDK client-data connection initialized.");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"PMDG NG3 SDK initialization failed: {ex.Message}");
+        }
+    }
+
     private void OnClientData(SimConnect sender, SIMCONNECT_RECV_CLIENT_DATA data)
     {
         if (data.dwData.Length == 0)
@@ -952,6 +1075,24 @@ internal sealed class CopilotService : Form
         }
 
         var request = (Request)data.dwRequestID;
+        if (request == Request.PmdgNg3Data)
+        {
+            var raw = (PmdgNg3RawData)data.dwData[0];
+            _pmdgNg3State = ParsePmdgNg3State(raw.Data);
+            if (!_pmdgNg3DataReady)
+            {
+                _pmdgNg3DataReady = true;
+                AppendDashboardLog("PMDG 737 NG3 SDK data broadcast received.");
+                AppLog.Write("PMDG 737 NG3 SDK data broadcast received.");
+            }
+            return;
+        }
+
+        if (request == Request.PmdgNg3Control)
+        {
+            return;
+        }
+
         if (request is >= Request.NativeBattery1 and <= Request.FbwTcasMode)
         {
             var value = ((MobiFlightFloat)data.dwData[0]).Value;
@@ -1902,6 +2043,10 @@ internal sealed class CopilotService : Form
         var isFlyByWireA320Neo =
             raw.Title.IndexOf("A32NX", StringComparison.OrdinalIgnoreCase) >= 0
             || raw.Title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0;
+        var isPmdg737 =
+            raw.Title.IndexOf("PMDG", StringComparison.OrdinalIgnoreCase) >= 0
+            && raw.Title.IndexOf("737", StringComparison.OrdinalIgnoreCase) >= 0;
+        var pmdg = _pmdgNg3State;
         if (isFlyByWireA320Neo)
         {
             LogChangedVoltage("FBW generic BAT 1 voltage", raw.Battery1Voltage, ref _lastLoggedBattery1Voltage);
@@ -1914,21 +2059,29 @@ internal sealed class CopilotService : Form
             GroundSpeedKnots = raw.GroundSpeed,
             Engine1Running = isFlyByWireA320Neo
                 ? _fbwEngine1State == 1 || (_fbwEngine1N1 ?? (float)raw.Engine1N1) >= 15
+                : isPmdg737
+                    ? raw.Engine1Combustion != 0 || raw.Engine1N1 >= 15
                 : raw.Engine1Combustion != 0,
             Engine2Running = isFlyByWireA320Neo
                 ? _fbwEngine2State == 1 || (_fbwEngine2N1 ?? (float)raw.Engine2N1) >= 15
+                : isPmdg737
+                    ? raw.Engine2Combustion != 0 || raw.Engine2N1 >= 15
                 : raw.Engine2Combustion != 0,
             Engine1StarterActive = isFlyByWireA320Neo
                 ? _fbwEngine1StarterValveOpen == true
                   || _fbwEngine1State == 2
                   || _fbwEngine1State == 3
                   || raw.Engine1Starter != 0
+                : isPmdg737
+                    ? pmdg?.Engine1StartValveOpen == true || raw.Engine1Starter != 0
                 : raw.Engine1Starter != 0,
             Engine2StarterActive = isFlyByWireA320Neo
                 ? _fbwEngine2StarterValveOpen == true
                   || _fbwEngine2State == 2
                   || _fbwEngine2State == 3
                   || raw.Engine2Starter != 0
+                : isPmdg737
+                    ? pmdg?.Engine2StartValveOpen == true || raw.Engine2Starter != 0
                 : raw.Engine2Starter != 0,
             Engine1N1Percent = isFlyByWireA320Neo
                 ? _fbwEngine1N1 ?? raw.Engine1N1
@@ -1953,6 +2106,8 @@ internal sealed class CopilotService : Form
                         _fbwBattery1AutoTyped,
                         _fbwBattery1Auto,
                         raw.Battery1)
+                : isPmdg737
+                    ? pmdg?.BatterySelector == 2 || raw.Battery1 != 0
                 : raw.Battery1 != 0,
             Battery2On = isIniBuildsA320Family
                 ? _nativeBattery2On ?? raw.Battery2 != 0
@@ -1962,6 +2117,8 @@ internal sealed class CopilotService : Form
                         _fbwBattery2AutoTyped,
                         _fbwBattery2Auto,
                         raw.Battery2)
+                : isPmdg737
+                    ? pmdg?.BatterySelector == 2 || raw.Battery1 != 0
                 : raw.Battery2 != 0,
             Battery1Voltage = raw.Battery1Voltage,
             Battery2Voltage = raw.Battery2Voltage,
@@ -1971,6 +2128,8 @@ internal sealed class CopilotService : Form
                     _fbwExternalPowerAvailable,
                     raw.ExternalPowerAvailableUnindexed,
                     raw.ExternalPowerAvailable)
+                : isPmdg737
+                    ? pmdg?.GroundPowerAvailable == true || raw.ExternalPowerAvailable != 0
                 : raw.ExternalPowerAvailable != 0,
             ExternalPowerOn = isFlyByWireA320Neo
                 ? ResolveFbwAnyTrueState(
@@ -1978,39 +2137,60 @@ internal sealed class CopilotService : Form
                     _fbwExternalPowerOn,
                     raw.ExternalPowerOnUnindexed,
                     raw.ExternalPowerOn)
+                : isPmdg737
+                    ? pmdg?.GroundPowerOn == true || raw.ExternalPowerOn != 0
                 : raw.ExternalPowerOn != 0,
             ExternalPowerAvailableUnindexed = raw.ExternalPowerAvailableUnindexed != 0,
             ExternalPowerOnUnindexed = raw.ExternalPowerOnUnindexed != 0,
             ParkingBrakeSet = isFlyByWireA320Neo
                 ? _fbwParkingBrake == true
+                : isPmdg737 && pmdg != null
+                    ? pmdg.ParkingBrakeAnnunciated || raw.ParkingBrake != 0
                 : raw.ParkingBrake != 0,
-            BeaconOn = raw.Beacon != 0,
+            BeaconOn = isPmdg737 && pmdg != null
+                ? pmdg.AntiCollisionOn
+                : raw.Beacon != 0,
             NavigationLightsOn = raw.NavigationLights != 0,
-            LogoLightsOn = raw.LogoLights != 0,
+            LogoLightsOn = isPmdg737 && pmdg != null
+                ? pmdg.LogoLightOn
+                : raw.LogoLights != 0,
             NavLogoSelectorPosition = isFlyByWireA320Neo
                 ? ResolveFbwNavLogoSelectorPosition(_fbwNavLogoSelectorTyped, _fbwNavLogoSelector)
+                : isPmdg737 && pmdg != null
+                    ? pmdg.LogoLightOn ? 0 : 2
                 : _nativeNavLogoSelectorPosition,
             ApuRpmPercent = raw.ApuRpm,
             ApuStarterPercent = raw.ApuStarter,
             ApuMasterSwitchOn = isFlyByWireA320Neo
                 ? _fbwApuMasterSwitch == true
+                : isPmdg737 && pmdg != null
+                    ? pmdg.ApuSelector >= 1
                 : _nativeApuMasterSwitch.HasValue
                     ? _nativeApuMasterSwitch.Value != 0
                     : raw.ApuMasterSwitch != 0,
             ApuAvailable = isFlyByWireA320Neo
                 ? _fbwApuStartAvailable == true
+                : isPmdg737
+                    ? raw.ApuRpm >= 95 || raw.ApuGeneratorActive != 0
                 : _nativeApuAvailable.HasValue && _nativeApuAvailable.Value != 0,
             ApuStartButtonOn = isFlyByWireA320Neo
                 ? _fbwApuStartButton == true || _fbwApuStartAvailable == true
+                : isPmdg737 && pmdg != null
+                    ? pmdg.ApuSelector == 2 || raw.ApuStarter > 0
                 : _nativeApuStartButton.HasValue && _nativeApuStartButton.Value != 0,
             ApuBleedOn = isFlyByWireA320Neo
                 ? _fbwApuBleedButton == true
+                : isPmdg737 && pmdg != null
+                    ? pmdg.ApuBleedOn
                 : _nativeApuBleedButton.HasValue && _nativeApuBleedButton.Value != 0,
             ApuFlapPercent = _nativeApuFlapPercent ?? 0,
             ApuGeneratorActive = raw.ApuGeneratorActive != 0,
             ApuGeneratorSwitchOn = _nativeApuGeneratorOn.HasValue
+                                   && !isPmdg737
                                    ? _nativeApuGeneratorOn.Value != 0
-                                   : raw.ApuGeneratorSwitch != 0,
+                                   : isPmdg737 && pmdg != null
+                                       ? pmdg.ApuGen1On && pmdg.ApuGen2On
+                                       : raw.ApuGeneratorSwitch != 0,
             ApuVolts = raw.ApuVolts,
             FuelPumpsConfigured = isFlyByWireA320Neo
                 ? raw.FuelPump2 != 0
@@ -2019,18 +2199,23 @@ internal sealed class CopilotService : Form
                   && raw.FbwFuelValve10 != 0
                   && raw.FuelPump3 != 0
                   && raw.FbwFuelPump6 != 0
+                : isPmdg737 && pmdg != null
+                    ? pmdg.LeftAftFuelPump
+                      && pmdg.LeftForwardFuelPump
+                      && pmdg.RightForwardFuelPump
+                      && pmdg.RightAftFuelPump
                 : (_nativeFuelPump1 ?? (float)raw.FuelPump1) != 0
                   && (_nativeFuelPump2 ?? (float)raw.FuelPump2) != 0
                   && (_nativeFuelPump3 ?? (float)raw.FuelPump3) != 0
                   && (_nativeFuelPump4 ?? (float)raw.FuelPump4) != 0
                   && (_nativeFuelPump5 ?? 0) != 0
                   && (_nativeFuelPump6 ?? 0) != 0,
-            FuelPump1State = isFlyByWireA320Neo ? raw.FuelPump2 : _nativeFuelPump1 ?? raw.FuelPump1,
-            FuelPump2State = isFlyByWireA320Neo ? raw.FbwFuelPump5 : _nativeFuelPump2 ?? raw.FuelPump2,
-            FuelPump3State = isFlyByWireA320Neo ? raw.FbwFuelValve9 : _nativeFuelPump3 ?? raw.FuelPump3,
-            FuelPump4State = isFlyByWireA320Neo ? raw.FbwFuelValve10 : _nativeFuelPump4 ?? raw.FuelPump4,
-            FuelPump5State = isFlyByWireA320Neo ? raw.FuelPump3 : _nativeFuelPump5 ?? 0,
-            FuelPump6State = isFlyByWireA320Neo ? raw.FbwFuelPump6 : _nativeFuelPump6 ?? 0,
+            FuelPump1State = isFlyByWireA320Neo ? raw.FuelPump2 : isPmdg737 && pmdg != null ? (pmdg.LeftAftFuelPump ? 1 : 0) : _nativeFuelPump1 ?? raw.FuelPump1,
+            FuelPump2State = isFlyByWireA320Neo ? raw.FbwFuelPump5 : isPmdg737 && pmdg != null ? (pmdg.LeftForwardFuelPump ? 1 : 0) : _nativeFuelPump2 ?? raw.FuelPump2,
+            FuelPump3State = isFlyByWireA320Neo ? raw.FbwFuelValve9 : isPmdg737 && pmdg != null ? (pmdg.RightForwardFuelPump ? 1 : 0) : _nativeFuelPump3 ?? raw.FuelPump3,
+            FuelPump4State = isFlyByWireA320Neo ? raw.FbwFuelValve10 : isPmdg737 && pmdg != null ? (pmdg.RightAftFuelPump ? 1 : 0) : _nativeFuelPump4 ?? raw.FuelPump4,
+            FuelPump5State = isFlyByWireA320Neo ? raw.FuelPump3 : isPmdg737 && pmdg != null ? (pmdg.LeftCenterFuelPump ? 1 : 0) : _nativeFuelPump5 ?? 0,
+            FuelPump6State = isFlyByWireA320Neo ? raw.FbwFuelPump6 : isPmdg737 && pmdg != null ? (pmdg.RightCenterFuelPump ? 1 : 0) : _nativeFuelPump6 ?? 0,
             AltitudeAboveGroundFeet = raw.AltitudeAboveGround,
             IndicatedAltitudeFeet = raw.IndicatedAltitude,
             TransitionAltitudeFeet = _settings.TransitionAltitudeFeet,
@@ -2069,6 +2254,8 @@ internal sealed class CopilotService : Form
             RightFlapPositionPercent = raw.RightFlapPosition,
             GearHandleDown = isFlyByWireA320Neo
                 ? raw.GearHandle != 0
+                : isPmdg737 && pmdg != null
+                    ? pmdg.GearLever == 2
                 : _nativeGearHandlePosition.HasValue
                     ? _nativeGearHandlePosition.Value >= 0.5
                     : raw.GearHandle != 0,
@@ -2076,12 +2263,18 @@ internal sealed class CopilotService : Form
             AutopilotMasterOn = raw.AutopilotMaster != 0,
             Adirs1SelectorState = isFlyByWireA320Neo
                 ? ResolveFbwSelectorState(_fbwCommandedAdirs1Selector, _fbwCommandedAdirs1SelectorUtc, _fbwAdirs1SelectorTyped, _fbwAdirs1Selector)
+                : isPmdg737 && pmdg != null
+                    ? pmdg.IrsLeftMode
                 : _nativeAdirs1State ?? 0,
             Adirs2SelectorState = isFlyByWireA320Neo
                 ? ResolveFbwSelectorState(_fbwCommandedAdirs2Selector, _fbwCommandedAdirs2SelectorUtc, _fbwAdirs2SelectorTyped, _fbwAdirs2Selector)
+                : isPmdg737 && pmdg != null
+                    ? pmdg.IrsRightMode
                 : _nativeAdirs2State ?? 0,
             Adirs3SelectorState = isFlyByWireA320Neo
                 ? ResolveFbwSelectorState(_fbwCommandedAdirs3Selector, _fbwCommandedAdirs3SelectorUtc, _fbwAdirs3SelectorTyped, _fbwAdirs3Selector)
+                : isPmdg737
+                    ? 2
                 : _nativeAdirs3State ?? 0,
             AdirsOnBattery = isFlyByWireA320Neo
                 ? _fbwAdirsOnBattery == true
@@ -2091,32 +2284,56 @@ internal sealed class CopilotService : Form
                 : _nativeCrewOxygen.HasValue && _nativeCrewOxygen.Value != 0,
             StrobeSelectorPosition = isFlyByWireA320Neo
                 ? ResolveFbwStrobeSelectorPosition(_fbwStrobeAuto, _fbwStrobeLightState)
+                : isPmdg737 && pmdg != null
+                    ? pmdg.PositionStrobeSelector == 2 ? 0 : pmdg.PositionStrobeSelector == 0 ? 1 : 2
                 : _nativeStrobeSelector,
-            ApuFireTestActive = _nativeApuFireTest.HasValue && _nativeApuFireTest.Value != 0,
-            ApuFireWarningLit = _nativeApuFireWarningLit.HasValue && _nativeApuFireWarningLit.Value != 0,
+            ApuFireTestActive = isPmdg737 && pmdg != null
+                ? pmdg.FireDetectionTestSwitch == 2 || pmdg.FireExtinguisherTestApu
+                : _nativeApuFireTest.HasValue && _nativeApuFireTest.Value != 0,
+            ApuFireWarningLit = isPmdg737 && pmdg != null
+                ? pmdg.FireExtinguisherTestApu
+                : _nativeApuFireWarningLit.HasValue && _nativeApuFireWarningLit.Value != 0,
             ApuFireSoundActive = _nativeApuFireSound.HasValue && _nativeApuFireSound.Value != 0,
-            Engine1FireTestActive = _nativeEngine1FireTest.HasValue && _nativeEngine1FireTest.Value != 0,
-            Engine1FireWarningLit = _nativeEngine1FireWarningLit.HasValue && _nativeEngine1FireWarningLit.Value != 0,
+            Engine1FireTestActive = isPmdg737 && pmdg != null
+                ? pmdg.FireDetectionTestSwitch == 2 || pmdg.FireExtinguisherTestLeft
+                : _nativeEngine1FireTest.HasValue && _nativeEngine1FireTest.Value != 0,
+            Engine1FireWarningLit = isPmdg737 && pmdg != null
+                ? pmdg.FireExtinguisherTestLeft
+                : _nativeEngine1FireWarningLit.HasValue && _nativeEngine1FireWarningLit.Value != 0,
             Engine1FireSoundActive = _nativeEngine1FireSound.HasValue && _nativeEngine1FireSound.Value != 0,
-            Engine2FireTestActive = _nativeEngine2FireTest.HasValue && _nativeEngine2FireTest.Value != 0,
-            Engine2FireWarningLit = _nativeEngine2FireWarningLit.HasValue && _nativeEngine2FireWarningLit.Value != 0,
+            Engine2FireTestActive = isPmdg737 && pmdg != null
+                ? pmdg.FireDetectionTestSwitch == 2 || pmdg.FireExtinguisherTestRight
+                : _nativeEngine2FireTest.HasValue && _nativeEngine2FireTest.Value != 0,
+            Engine2FireWarningLit = isPmdg737 && pmdg != null
+                ? pmdg.FireExtinguisherTestRight
+                : _nativeEngine2FireWarningLit.HasValue && _nativeEngine2FireWarningLit.Value != 0,
             Engine2FireSoundActive = _nativeEngine2FireSound.HasValue && _nativeEngine2FireSound.Value != 0,
             SeatbeltSelectorPosition = isFlyByWireA320Neo
                 ? ResolveFbwSeatbeltSelectorPosition(
                     _fbwSeatbeltSelector,
                     raw.CabinSeatbeltsAlert != 0)
+                : isPmdg737 && pmdg != null
+                    ? pmdg.FastenBeltsSelector
                 : _nativeSeatbeltSelector,
             SeatbeltSignsOn = isFlyByWireA320Neo
                 ? raw.CabinSeatbeltsAlert != 0
+                : isPmdg737 && pmdg != null
+                    ? pmdg.FastenBeltsSelector == 2
                 : _nativeSeatbeltSignsOn.HasValue && _nativeSeatbeltSignsOn.Value != 0,
             NoSmokingSelectorPosition = isFlyByWireA320Neo
                 ? _fbwNoSmokingSelector
+                : isPmdg737 && pmdg != null
+                    ? pmdg.NoSmokingSelector
                 : _nativeNoSmokingSelector,
             NoSmokingSignsOn = isFlyByWireA320Neo
                 ? _fbwNoSmokingSelector.HasValue && Math.Abs(_fbwNoSmokingSelector.Value) < 0.1
+                : isPmdg737 && pmdg != null
+                    ? pmdg.NoSmokingSelector == 2
                 : _nativeNoSmokingSignsOn.HasValue && _nativeNoSmokingSignsOn.Value != 0,
             EmergencyExitSelectorPosition = isFlyByWireA320Neo
                 ? _fbwEmergencyExitSelector
+                : isPmdg737 && pmdg != null
+                    ? pmdg.EmergencyExitLights
                 : _nativeEmergencyExitSelector,
             GroundSpoilersArmed = isFlyByWireA320Neo
                 ? ResolveFbwSpoilersArmedState(
@@ -2124,6 +2341,8 @@ internal sealed class CopilotService : Form
                     _fbwCommandedSpoilersArmedUtc,
                     _fbwSpoilersArmed,
                     raw.SpoilersArmed)
+                : isPmdg737 && pmdg != null
+                    ? pmdg.SpeedbrakeArmed
                 : _nativeSpoilersArmed.HasValue
                     ? _nativeSpoilersArmed.Value != 0
                     : raw.SpoilersArmed != 0,
@@ -2132,6 +2351,8 @@ internal sealed class CopilotService : Form
                     _fbwCommandedAutobrakeLevel,
                     _fbwCommandedAutobrakeLevelUtc,
                     _fbwAutobrakeLevel)
+                : isPmdg737 && pmdg != null
+                    ? pmdg.AutobrakeSelector
                 : _nativeAutobrakeLevel,
             WeatherRadarPwsSelectorPosition = isFlyByWireA320Neo
                 ? ResolveFbwWeatherRadarPwsSelector(
@@ -2146,18 +2367,24 @@ internal sealed class CopilotService : Form
                     raw.FbwNoseTakeoffLightCircuit,
                     raw.FbwNoseTaxiLightCircuit,
                     raw.TaxiLight)
+                : isPmdg737 && pmdg != null
+                    ? pmdg.TaxiLightOn ? 1 : 2
                 : _nativeNoseLightSelector,
             LeftLandingLightSelectorPosition = isFlyByWireA320Neo
                 ? ResolveFbwLandingLightSelectorPosition(
                     _fbwCommandedLandingLightSelector,
                     _fbwCommandedLandingLightSelectorUtc,
                     raw.FbwLeftLandingLightCircuit)
+                : isPmdg737 && pmdg != null
+                    ? pmdg.LeftLandingLight == 2 ? 0 : 2
                 : _nativeLeftLandingLightSelector,
             RightLandingLightSelectorPosition = isFlyByWireA320Neo
                 ? ResolveFbwLandingLightSelectorPosition(
                     _fbwCommandedLandingLightSelector,
                     _fbwCommandedLandingLightSelectorUtc,
                     raw.FbwRightLandingLightCircuit)
+                : isPmdg737 && pmdg != null
+                    ? pmdg.RightLandingLight == 2 ? 0 : 2
                 : _nativeRightLandingLightSelector,
             TcasAltitudeReportingOn = isFlyByWireA320Neo
                 ? ResolveFbwTcasAltitudeReporting(
@@ -2173,12 +2400,18 @@ internal sealed class CopilotService : Form
                     _fbwCommandedTcasMode,
                     _fbwCommandedTcasModeUtc,
                     _fbwTcasMode)
+                : isPmdg737 && pmdg != null
+                    ? pmdg.TransponderMode
                 : _nativeTcasMode,
             TransponderModeSelectorPosition = isFlyByWireA320Neo
                 ? _fbwTransponderMode
+                : isPmdg737 && pmdg != null
+                    ? pmdg.TransponderMode
                 : _nativeTransponderStandby,
-            TransponderStandby = _nativeTransponderStandby.HasValue
-                                 && _nativeTransponderStandby.Value != 0,
+            TransponderStandby = isPmdg737 && pmdg != null
+                ? pmdg.TransponderMode == 0
+                : _nativeTransponderStandby.HasValue
+                  && _nativeTransponderStandby.Value != 0,
             AtcClearedIfr = raw.AtcClearedIfr != 0,
             Exits = new[]
             {
@@ -2220,9 +2453,9 @@ internal sealed class CopilotService : Form
         _initialStateReceived = true;
         Console.WriteLine($"Aircraft: {_state.Title}");
         AppendDashboardLog($"Aircraft detected: {_state.Title}");
-        if (!_state.IsSupportedA320)
+        if (!_state.IsSupportedAircraft)
         {
-            Console.Error.WriteLine("Warning: this build supports the iniBuilds A320neo V2, iniBuilds A321LR, and FlyByWire A32NX.");
+            Console.Error.WriteLine("Warning: this build supports the iniBuilds A320neo V2, iniBuilds A321LR, FlyByWire A32NX, and PMDG 737-800.");
         }
 
         if (_oneShotCommand == null)
@@ -2574,6 +2807,78 @@ internal sealed class CopilotService : Form
             AppLog.Write($"{label} changed to {value:F0}.");
         }
         target = value;
+    }
+
+    private static PmdgNg3State ParsePmdgNg3State(byte[] data)
+    {
+        byte ByteAt(int offset) =>
+            data.Length > offset ? data[offset] : (byte)0;
+
+        bool BoolAt(int offset) => ByteAt(offset) != 0;
+
+        return new PmdgNg3State
+        {
+            IrsLeftMode = ByteAt(11),
+            IrsRightMode = ByteAt(12),
+            Engine1StartValveOpen = BoolAt(44),
+            Engine2StartValveOpen = BoolAt(45),
+            LeftForwardFuelPump = BoolAt(89),
+            RightForwardFuelPump = BoolAt(90),
+            LeftAftFuelPump = BoolAt(91),
+            RightAftFuelPump = BoolAt(92),
+            LeftCenterFuelPump = BoolAt(93),
+            RightCenterFuelPump = BoolAt(94),
+            BatterySelector = ByteAt(133),
+            GroundPowerAvailable = BoolAt(142),
+            GroundPowerOn = BoolAt(143),
+            ApuGen1On = BoolAt(147),
+            ApuGen2On = BoolAt(148),
+            EmergencyExitLights = ByteAt(217),
+            NoSmokingSelector = ByteAt(218),
+            FastenBeltsSelector = ByteAt(219),
+            ApuBleedOn = BoolAt(284),
+            LeftLandingLight = ByteAt(372),
+            RightLandingLight = ByteAt(373),
+            TaxiLightOn = BoolAt(378),
+            ApuSelector = ByteAt(379),
+            LogoLightOn = BoolAt(383),
+            PositionStrobeSelector = ByteAt(384),
+            AntiCollisionOn = BoolAt(385),
+            SpeedbrakeArmed = BoolAt(477),
+            AutobrakeSelector = ByteAt(487),
+            GearLever = ByteAt(506),
+            ParkingBrakeAnnunciated = BoolAt(574),
+            FireDetectionTestSwitch = ByteAt(579),
+            FireExtinguisherTestLeft = BoolAt(593),
+            FireExtinguisherTestRight = BoolAt(594),
+            FireExtinguisherTestApu = BoolAt(595),
+            TransponderMode = ByteAt(612),
+            TakeoffFlaps = ByteAt(620),
+            V1 = ByteAt(621),
+            Vr = ByteAt(622),
+            LandingFlaps = ByteAt(624),
+            FmcPerfInputComplete = BoolAt(634),
+            GroundConnectionAvailable = BoolAt(658)
+        };
+    }
+
+    private void SendPmdgNg3Control(uint sdkEventOffset, uint parameter)
+    {
+        if (_simConnect == null)
+        {
+            return;
+        }
+
+        _simConnect.SetClientData(
+            ClientDataArea.PmdgNg3Control,
+            ClientDataDefinition.PmdgNg3Control,
+            SIMCONNECT_CLIENT_DATA_SET_FLAG.DEFAULT,
+            0,
+            new PmdgNg3Control
+            {
+                Event = ThirdPartyEventIdMin + sdkEventOffset,
+                Parameter = parameter
+            });
     }
 
     private static (double? DistanceNm, string Source) ResolveApproachDistance(
@@ -3046,6 +3351,112 @@ internal sealed class CopilotService : Form
             case "autobrake off":
                 SetAutobrake(0, "OFF");
                 break;
+            case "pmdg irs left nav":
+                SetPmdgIrsSelector(left: true, 2);
+                break;
+            case "pmdg irs right nav":
+                SetPmdgIrsSelector(left: false, 2);
+                break;
+            case "pmdg logo on":
+                SetPmdgLogoLight(true);
+                break;
+            case "pmdg position steady":
+                SetPmdgPositionStrobe(0);
+                break;
+            case "pmdg strobes on":
+                SetPmdgPositionStrobe(2);
+                break;
+            case "pmdg strobes off":
+                SetPmdgPositionStrobe(0);
+                break;
+            case "pmdg emergency-exit arm":
+                SetPmdgEmergencyExitLights(1);
+                break;
+            case "pmdg seatbelts on":
+                SetPmdgSeatbelts(2);
+                break;
+            case "pmdg seatbelts auto":
+                SetPmdgSeatbelts(1);
+                break;
+            case "pmdg no-smoking auto":
+                SetPmdgNoSmoking(1);
+                break;
+            case "pmdg fuel-pumps on":
+                SetPmdgFuelPumps(true);
+                break;
+            case "pmdg fuel-pumps off":
+                SetPmdgFuelPumps(false);
+                break;
+            case "pmdg apu on":
+                SetPmdgApuSelector(1);
+                break;
+            case "pmdg apu start":
+                SetPmdgApuSelector(2);
+                break;
+            case "pmdg apu off":
+                SetPmdgApuSelector(0);
+                break;
+            case "pmdg apu-bleed on":
+                SetPmdgApuBleed(true);
+                break;
+            case "pmdg apu-bleed off":
+                SetPmdgApuBleed(false);
+                break;
+            case "pmdg apu-generators on":
+                SetPmdgApuGenerators(true);
+                break;
+            case "pmdg spoilers arm":
+                SetPmdgSpeedbrakeArm();
+                break;
+            case "pmdg spoilers down":
+                SetPmdgSpeedbrakeDown();
+                break;
+            case "pmdg gear up":
+                SetPmdgGear(0);
+                break;
+            case "pmdg gear down":
+                SetPmdgGear(2);
+                break;
+            case "pmdg flaps takeoff":
+            case "pmdg flaps 1":
+                SetPmdgFlapsDetent(1);
+                break;
+            case "pmdg flaps 5":
+                SetPmdgFlapsDetent(5);
+                break;
+            case "pmdg flaps landing":
+                SetPmdgFlapsDetent(30);
+                break;
+            case "pmdg flaps clean":
+                SetPmdgFlapsDetent(0);
+                break;
+            case "pmdg autobrake rto":
+                SetPmdgAutobrake(0);
+                break;
+            case "pmdg autobrake landing":
+                SetPmdgAutobrake(2);
+                break;
+            case "pmdg autobrake off":
+                SetPmdgAutobrake(1);
+                break;
+            case "pmdg taxi-light on":
+                SetPmdgTaxiLight(true);
+                break;
+            case "pmdg landing-lights on":
+                SetPmdgLandingLights(true);
+                break;
+            case "pmdg landing-lights off":
+                SetPmdgLandingLights(false);
+                break;
+            case "pmdg transponder tara":
+                SetPmdgTransponderMode(4);
+                break;
+            case "pmdg transponder stby":
+                SetPmdgTransponderMode(0);
+                break;
+            case "pmdg beacon off":
+                SetPmdgAntiCollision(false);
+                break;
             case "help":
                 PrintHelp();
                 FinishOneShot();
@@ -3079,12 +3490,156 @@ internal sealed class CopilotService : Form
         FinishProcedureOneShotIfTerminal();
     }
 
+    private void SetPmdgIrsSelector(bool left, uint position)
+    {
+        SendPmdgNg3Control(left ? 255u : 256u, position);
+        FinishOneShot();
+    }
+
+    private void SetPmdgLogoLight(bool on)
+    {
+        if (_pmdgNg3State?.LogoLightOn == on)
+        {
+            FinishOneShot();
+            return;
+        }
+
+        SendPmdgNg3Control(122, on ? 1u : 0u);
+        FinishOneShot();
+    }
+
+    private void SetPmdgPositionStrobe(uint position)
+    {
+        SendPmdgNg3Control(123, position);
+        FinishOneShot();
+    }
+
+    private void SetPmdgEmergencyExitLights(uint position)
+    {
+        SendPmdgNg3Control(100, position);
+        FinishOneShot();
+    }
+
+    private void SetPmdgSeatbelts(uint position)
+    {
+        SendPmdgNg3Control(104, position);
+        FinishOneShot();
+    }
+
+    private void SetPmdgNoSmoking(uint position)
+    {
+        SendPmdgNg3Control(103, position);
+        FinishOneShot();
+    }
+
+    private void SetPmdgFuelPumps(bool on)
+    {
+        var parameter = on ? 1u : 0u;
+        foreach (var offset in new[] { 37u, 38u, 39u, 40u })
+        {
+            SendPmdgNg3Control(offset, parameter);
+        }
+        FinishOneShot();
+    }
+
+    private void SetPmdgApuSelector(uint position)
+    {
+        SendPmdgNg3Control(118, position);
+        FinishOneShot();
+    }
+
+    private void SetPmdgApuBleed(bool on)
+    {
+        SendPmdgNg3Control(211, on ? 1u : 0u);
+        FinishOneShot();
+    }
+
+    private void SetPmdgApuGenerators(bool on)
+    {
+        var parameter = on ? 1u : 0u;
+        SendPmdgNg3Control(28, parameter);
+        SendPmdgNg3Control(29, parameter);
+        FinishOneShot();
+    }
+
+    private void SetPmdgAutobrake(uint position)
+    {
+        SendPmdgNg3Control(460, position);
+        FinishOneShot();
+    }
+
+    private void SetPmdgSpeedbrakeArm()
+    {
+        SendPmdgNg3Control(6792, 0);
+        FinishOneShot();
+    }
+
+    private void SetPmdgSpeedbrakeDown()
+    {
+        SendPmdgNg3Control(6791, 0);
+        FinishOneShot();
+    }
+
+    private void SetPmdgGear(uint position)
+    {
+        SendPmdgNg3Control(455, position);
+        FinishOneShot();
+    }
+
+    private void SetPmdgTaxiLight(bool on)
+    {
+        SendPmdgNg3Control(117, on ? 1u : 0u);
+        FinishOneShot();
+    }
+
+    private void SetPmdgLandingLights(bool on)
+    {
+        var position = on ? 2u : 0u;
+        SendPmdgNg3Control(111, position);
+        SendPmdgNg3Control(112, position);
+        SendPmdgNg3Control(113, on ? 1u : 0u);
+        SendPmdgNg3Control(114, on ? 1u : 0u);
+        FinishOneShot();
+    }
+
+    private void SetPmdgTransponderMode(uint mode)
+    {
+        SendPmdgNg3Control(798, mode);
+        FinishOneShot();
+    }
+
+    private void SetPmdgAntiCollision(bool on)
+    {
+        SendPmdgNg3Control(124, on ? 1u : 0u);
+        FinishOneShot();
+    }
+
+    private void SetPmdgFlapsDetent(int detent)
+    {
+        var offset = detent switch
+        {
+            0 => 7141u,
+            1 => 7142u,
+            2 => 7143u,
+            5 => 7144u,
+            10 => 7145u,
+            15 => 7146u,
+            25 => 7147u,
+            30 => 7148u,
+            40 => 7149u,
+            _ => 7141u
+        };
+        SendPmdgNg3Control(offset, 0);
+        FinishOneShot();
+    }
+
     private void TryRestoreProcedureSession()
     {
         if (_procedureSessionRestoreAttempted
             || _state == null
-            || !_state.IsIniBuildsA320Family
-            || !NativeStateReady)
+            || !_state.IsSupportedAircraft
+            || (_state.IsIniBuildsA320Family && !NativeStateReady)
+            || (_state.IsSupportedBoeing737 && !_pmdgNg3DataReady))
         {
             return;
         }
@@ -3097,7 +3652,7 @@ internal sealed class CopilotService : Form
         }
 
         var definition =
-            A320ProcedureLibrary.Find(activeProcedureId!);
+            ProcedureCatalog.Find(_state, activeProcedureId!);
         if (definition == null)
         {
             _procedureSession.ActiveProcedureId = null;
@@ -3117,7 +3672,7 @@ internal sealed class CopilotService : Form
 
     private void StartProcedureById(string id)
     {
-        var definition = A320ProcedureLibrary.Find(id);
+        var definition = ProcedureCatalog.Find(_state, id);
         if (definition == null)
         {
             Console.Error.WriteLine($"Unknown procedure: {id}");
@@ -3150,7 +3705,7 @@ internal sealed class CopilotService : Form
 
     private void DebugJumpToFlowById(string id)
     {
-        var flows = A320ProcedureLibrary.GateToGate;
+        var flows = ProcedureCatalog.ForAircraft(_state);
         var indexedFlow = flows
             .Select((definition, index) => new { definition, index })
             .FirstOrDefault(item =>
@@ -3192,7 +3747,7 @@ internal sealed class CopilotService : Form
 
     private ProcedureDefinition? GetAutomaticNextFlow(string completedId)
     {
-        var flows = A320ProcedureLibrary.GateToGate;
+        var flows = ProcedureCatalog.ForAircraft(_state);
         var index = flows
             .Select((definition, flowIndex) => new { definition, flowIndex })
             .FirstOrDefault(item =>
@@ -6526,7 +7081,7 @@ internal sealed class CopilotService : Form
             IntegralHeight = false,
             DisplayMember = nameof(ProcedureListItem.DisplayName)
         };
-        foreach (var procedure in A320ProcedureLibrary.GateToGate)
+        foreach (var procedure in ProcedureCatalog.ForAircraft(_state))
         {
             _flowList.Items.Add(new ProcedureListItem(procedure));
         }
@@ -6756,11 +7311,11 @@ internal sealed class CopilotService : Form
             IntegralHeight = false,
             DisplayMember = nameof(ProcedureListItem.DisplayName)
         };
-        foreach (var procedure in A320ProcedureLibrary.GateToGate)
+        foreach (var procedure in ProcedureCatalog.ForAircraft(_state))
         {
             list.Items.Add(new ProcedureListItem(procedure));
         }
-        var defaultIndex = A320ProcedureLibrary.GateToGate
+        var defaultIndex = ProcedureCatalog.ForAircraft(_state)
             .Select((definition, index) => new { definition, index })
             .FirstOrDefault(item =>
                 string.Equals(
@@ -7242,14 +7797,24 @@ internal sealed class CopilotService : Form
                     ? "iniBuilds A321LR"
                     : _state.IsFlyByWireA320Neo
                     ? "FBW A32NX EXPERIMENTAL"
+                    : _state.IsPmdg737800
+                    ? "PMDG 737-800"
                     : "AIRCRAFT UNSUPPORTED",
-            _state.IsSupportedA320
+            _state.IsSupportedAircraft
                 ? System.Drawing.Color.FromArgb(39, 130, 87)
                 : System.Drawing.Color.FromArgb(172, 113, 37));
         SetStatusBadge(
             _adapterBadgeLabel,
-            _mobiFlightReady ? "MOBIFLIGHT OK" : "ADAPTER OFFLINE",
-            _mobiFlightReady
+            _state.IsSupportedBoeing737
+                ? _pmdgNg3DataReady
+                    ? "PMDG SDK OK"
+                    : "PMDG SDK WAITING"
+                : _mobiFlightReady ? "MOBIFLIGHT OK" : "ADAPTER OFFLINE",
+            _state.IsSupportedBoeing737
+                ? _pmdgNg3DataReady
+                    ? System.Drawing.Color.FromArgb(39, 130, 87)
+                    : System.Drawing.Color.FromArgb(172, 113, 37)
+                : _mobiFlightReady
                 ? System.Drawing.Color.FromArgb(39, 130, 87)
                 : System.Drawing.Color.FromArgb(150, 48, 48));
         _electricalLabel!.Text =
@@ -7258,10 +7823,18 @@ internal sealed class CopilotService : Form
             $"Beacon {_state.BeaconOn.ToOnOff()} | NAV&LOGO " +
             $"{(_state.NavLogoSelectorPosition.HasValue ? FormatNavLogoPosition((int)Math.Round(_state.NavLogoSelectorPosition.Value)) : "UNKNOWN")} | " +
             $"APU {_state.ApuMasterSwitchOn.ToOnOff()}/{_state.ApuRpmPercent:F0}%";
-        _adapterLabel!.Text = _mobiFlightReady
-            ? "MobiFlight connected"
-            : "MobiFlight not connected â€” aircraft controls unavailable";
-        _adapterLabel.ForeColor = _mobiFlightReady
+        _adapterLabel!.Text = _state.IsSupportedBoeing737
+            ? _pmdgNg3DataReady
+                ? "PMDG NG3 SDK data connected"
+                : "PMDG NG3 SDK waiting - enable [SDK] EnableDataBroadcast=1 in 737_Options.ini"
+            : _mobiFlightReady
+                ? "MobiFlight connected"
+                : "MobiFlight not connected â€” aircraft controls unavailable";
+        _adapterLabel.ForeColor = _state.IsSupportedBoeing737
+            ? _pmdgNg3DataReady
+                ? System.Drawing.Color.DarkGreen
+                : System.Drawing.Color.DarkOrange
+            : _mobiFlightReady
             ? System.Drawing.Color.DarkGreen
             : System.Drawing.Color.DarkRed;
         _telemetryLabel!.Text = FormatCurrentStepTelemetry(_state);
@@ -7631,9 +8204,9 @@ internal sealed class CopilotService : Form
         var selectedIndex = _flowList.SelectedIndex;
         var topIndex = _flowList.Items.Count > 0 ? _flowList.TopIndex : 0;
         _flowList.BeginUpdate();
-        for (var index = 0; index < A320ProcedureLibrary.GateToGate.Count; index++)
+        for (var index = 0; index < ProcedureCatalog.ForAircraft(_state).Count; index++)
         {
-            var procedure = A320ProcedureLibrary.GateToGate[index];
+            var procedure = ProcedureCatalog.ForAircraft(_state)[index];
             var item = new ProcedureListItem(
                 procedure,
                 _completedProcedureIds.Contains(procedure.Id),
@@ -7648,7 +8221,7 @@ internal sealed class CopilotService : Form
                 _flowList.Items.Add(item);
             }
         }
-        while (_flowList.Items.Count > A320ProcedureLibrary.GateToGate.Count)
+        while (_flowList.Items.Count > ProcedureCatalog.ForAircraft(_state).Count)
         {
             _flowList.Items.RemoveAt(_flowList.Items.Count - 1);
         }

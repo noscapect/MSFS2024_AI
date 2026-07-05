@@ -22,9 +22,10 @@ conditional steps with:
 
 ### Aircraft domain
 
-Represents normalized A320 state such as electrical power, engines, lights,
+Represents normalized aircraft state such as electrical power, engines, lights,
 flight controls, autoflight modes, navigation, radios, doors, and ground
-services. Procedures depend on this normalized model rather than raw SimVars.
+services. Procedures depend on this normalized model rather than raw SimVars
+or aircraft-specific SDK structures.
 
 ### Aircraft adapters
 
@@ -35,11 +36,12 @@ Maps normalized state and commands to:
 - SimConnect Input Events
 - MobiFlight calculator execution for native command-LVar pulses
 - MobiFlight native-variable monitoring
+- PMDG NG3 SDK client-data monitoring and control events
 
 Every capability is marked as supported, unsupported, read-only, or requiring
 manual confirmation.
 
-The application supports three A320-family aircraft profiles:
+The public release supports three A320-family aircraft profiles:
 
 - iniBuilds A320neo V2
 - iniBuilds A321LR
@@ -50,6 +52,13 @@ defined in `docs/NATIVE_CONTROL_STRATEGY.md`. The A321LR uses the shared
 iniBuilds A320-family adapter where its controls match the A320neo V2.
 FBW-specific mappings were added through the same normalized state/action model
 so procedures can stay shared.
+
+PMDG 737-800 support is being developed as a separate Boeing aircraft family.
+Airbus procedures remain in `A320ProcedureLibrary`; Boeing procedures live in
+`B737ProcedureLibrary`; `ProcedureCatalog` selects the correct catalog from the
+loaded aircraft. PMDG cockpit state is read from the official `PMDG_NG3_Data`
+client-data area and controls are sent through `PMDG_NG3_Control` where SDK
+events have been mapped.
 
 ### SimConnect transport
 

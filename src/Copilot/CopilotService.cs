@@ -699,6 +699,13 @@ internal sealed class CopilotService : Form
     {
         public byte IrsLeftMode { get; set; }
         public byte IrsRightMode { get; set; }
+        public bool IrsLeftAlignLight { get; set; }
+        public bool IrsRightAlignLight { get; set; }
+        public bool IrsLeftOnDcLight { get; set; }
+        public bool IrsRightOnDcLight { get; set; }
+        public bool IrsLeftFault { get; set; }
+        public bool IrsRightFault { get; set; }
+        public bool IrsAligned { get; set; }
         public bool Engine1StartValveOpen { get; set; }
         public bool Engine2StartValveOpen { get; set; }
         public bool LeftForwardFuelPump { get; set; }
@@ -739,6 +746,8 @@ internal sealed class CopilotService : Form
         public float RightDuctPressurePsi { get; set; }
         public byte LeftLandingLight { get; set; }
         public byte RightLandingLight { get; set; }
+        public bool LeftRunwayTurnoffLight { get; set; }
+        public bool RightRunwayTurnoffLight { get; set; }
         public bool TaxiLightOn { get; set; }
         public byte ApuSelector { get; set; }
         public byte Engine1StartSelector { get; set; }
@@ -2434,6 +2443,13 @@ internal sealed class CopilotService : Form
             AdirsOnBattery = isFlyByWireA320Neo
                 ? _fbwAdirsOnBattery == true
                 : _nativeAdirsOnBattery.HasValue && _nativeAdirsOnBattery.Value != 0,
+            IrsLeftAlignLightOn = isPmdg737 && pmdg != null && pmdg.IrsLeftAlignLight,
+            IrsRightAlignLightOn = isPmdg737 && pmdg != null && pmdg.IrsRightAlignLight,
+            IrsLeftOnDcLightOn = isPmdg737 && pmdg != null && pmdg.IrsLeftOnDcLight,
+            IrsRightOnDcLightOn = isPmdg737 && pmdg != null && pmdg.IrsRightOnDcLight,
+            IrsLeftFault = isPmdg737 && pmdg != null && pmdg.IrsLeftFault,
+            IrsRightFault = isPmdg737 && pmdg != null && pmdg.IrsRightFault,
+            IrsAligned = !isPmdg737 || pmdg?.IrsAligned == true,
             CrewOxygenOn = isFlyByWireA320Neo
                 ? ResolveFbwInvertedBoolState(_fbwCommandedCrewOxygen, _fbwCrewOxygenTyped, _fbwCrewOxygen)
                 : _nativeCrewOxygen.HasValue && _nativeCrewOxygen.Value != 0,
@@ -2537,7 +2553,7 @@ internal sealed class CopilotService : Form
                     _fbwCommandedLandingLightSelectorUtc,
                     raw.FbwLeftLandingLightCircuit)
                 : isPmdg737 && pmdg != null
-                    ? pmdg.LeftLandingLight == 2 ? 0 : 2
+                    ? pmdg.LeftLandingLight
                 : _nativeLeftLandingLightSelector,
             RightLandingLightSelectorPosition = isFlyByWireA320Neo
                 ? ResolveFbwLandingLightSelectorPosition(
@@ -2545,8 +2561,11 @@ internal sealed class CopilotService : Form
                     _fbwCommandedLandingLightSelectorUtc,
                     raw.FbwRightLandingLightCircuit)
                 : isPmdg737 && pmdg != null
-                    ? pmdg.RightLandingLight == 2 ? 0 : 2
+                    ? pmdg.RightLandingLight
                 : _nativeRightLandingLightSelector,
+            RunwayTurnoffLightsOn = isPmdg737 && pmdg != null
+                && pmdg.LeftRunwayTurnoffLight
+                && pmdg.RightRunwayTurnoffLight,
             TcasAltitudeReportingOn = isFlyByWireA320Neo
                 ? ResolveFbwTcasAltitudeReporting(
                     _fbwCommandedTcasAltitudeReporting,
@@ -3113,6 +3132,12 @@ internal sealed class CopilotService : Form
         {
             IrsLeftMode = ByteAt(11),
             IrsRightMode = ByteAt(12),
+            IrsLeftAlignLight = BoolAt(3),
+            IrsRightAlignLight = BoolAt(4),
+            IrsLeftOnDcLight = BoolAt(5),
+            IrsRightOnDcLight = BoolAt(6),
+            IrsLeftFault = BoolAt(7),
+            IrsRightFault = BoolAt(8),
             Engine1StartValveOpen = BoolAt(44),
             Engine2StartValveOpen = BoolAt(45),
             LeftForwardFuelPump = BoolAt(89),
@@ -3152,6 +3177,8 @@ internal sealed class CopilotService : Form
             RightDuctPressurePsi = FloatAt(300),
             LeftLandingLight = ByteAt(372),
             RightLandingLight = ByteAt(373),
+            LeftRunwayTurnoffLight = BoolAt(376),
+            RightRunwayTurnoffLight = BoolAt(377),
             TaxiLightOn = BoolAt(378),
             ApuSelector = ByteAt(379),
             Engine1StartSelector = ByteAt(380),
@@ -3173,6 +3200,7 @@ internal sealed class CopilotService : Form
             Vr = ByteAt(622),
             LandingFlaps = ByteAt(624),
             FmcPerfInputComplete = BoolAt(634),
+            IrsAligned = BoolAt(654),
             GroundConnectionAvailable = BoolAt(658)
         };
     }
@@ -3720,6 +3748,9 @@ internal sealed class CopilotService : Form
             case "pmdg apu-generators on":
                 SetPmdgApuGenerators(true);
                 break;
+            case "pmdg ground-power off":
+                SetPmdgGroundPower(false);
+                break;
             case "pmdg engine-generators on":
                 SetPmdgEngineGenerators(true);
                 break;
@@ -3779,6 +3810,12 @@ internal sealed class CopilotService : Form
                 break;
             case "pmdg taxi-light off":
                 SetPmdgTaxiLight(false);
+                break;
+            case "pmdg runway-turnoff on":
+                SetPmdgRunwayTurnoffLights(true);
+                break;
+            case "pmdg runway-turnoff off":
+                SetPmdgRunwayTurnoffLights(false);
                 break;
             case "pmdg landing-lights on":
                 SetPmdgLandingLights(true);
@@ -3988,6 +4025,13 @@ internal sealed class CopilotService : Form
         FinishOneShot();
     }
 
+    private void SetPmdgGroundPower(bool on)
+    {
+        SendPmdgNg3Control(17, on ? PmdgMouseLeftSingle : PmdgMouseRightSingle);
+        AppLog.Write($"Executed PMDG ground power switch command: {(on ? "ON" : "OFF")}.");
+        FinishOneShot();
+    }
+
     private void SetPmdgEngineGenerators(bool on)
     {
         var parameter = on ? PmdgMouseLeftSingle : PmdgMouseRightSingle;
@@ -4035,6 +4079,24 @@ internal sealed class CopilotService : Form
     private void SetPmdgGear(uint position)
     {
         var current = _pmdgNg3State?.GearLever;
+        if (position == 2 && _state?.GearHandleDown != true)
+        {
+            SendPmdgNg3Control(455, PmdgMouseLeftSingle);
+            SchedulePmdgNg3Control(455, PmdgMouseLeftSingle, 350);
+            AppLog.Write("Executed PMDG gear lever command: forced staged DOWN.");
+            FinishOneShot();
+            return;
+        }
+
+        if (position == 0 && _state?.GearHandleUp != true)
+        {
+            SendPmdgNg3Control(455, PmdgMouseRightSingle);
+            SchedulePmdgNg3Control(455, PmdgMouseRightSingle, 350);
+            AppLog.Write("Executed PMDG gear lever command: forced staged UP.");
+            FinishOneShot();
+            return;
+        }
+
         var clicks = current.HasValue
             ? Math.Abs((int)position - current.Value)
             : position == 1 ? 1 : 2;
@@ -4048,9 +4110,10 @@ internal sealed class CopilotService : Form
         var parameter = position > (current ?? 1)
             ? PmdgMouseLeftSingle
             : PmdgMouseRightSingle;
-        for (var i = 0; i < clicks; i++)
+        SendPmdgNg3Control(455, parameter);
+        for (var i = 1; i < clicks; i++)
         {
-            SendPmdgNg3Control(455, parameter);
+            SchedulePmdgNg3Control(455, parameter, 350 * i);
         }
 
         AppLog.Write($"Executed PMDG gear lever command: target position {position}.");
@@ -4063,14 +4126,58 @@ internal sealed class CopilotService : Form
         FinishOneShot();
     }
 
+    private void SetPmdgRunwayTurnoffLights(bool on)
+    {
+        SendPmdgNg3Control(115, on ? 1u : 0u);
+        SendPmdgNg3Control(116, on ? 1u : 0u);
+        AppLog.Write($"Executed PMDG runway turnoff light command: {(on ? "ON" : "OFF")}.");
+        FinishOneShot();
+    }
+
     private void SetPmdgLandingLights(bool on)
     {
-        var position = on ? 2u : 0u;
-        SendPmdgNg3Control(111, position);
-        SendPmdgNg3Control(112, position);
+        var parameter = on ? PmdgMouseLeftSingle : PmdgMouseRightSingle;
+        SendPmdgNg3Control(111, parameter);
+        SendPmdgNg3Control(112, parameter);
+        SchedulePmdgNg3Control(111, parameter, 350);
+        SchedulePmdgNg3Control(112, parameter, 350);
         SendPmdgNg3Control(113, on ? 1u : 0u);
         SendPmdgNg3Control(114, on ? 1u : 0u);
+        AppLog.Write(
+            $"Executed PMDG landing light command: retractable staged double-click {(on ? "up to ON" : "down to RETRACT")}, fixed lights {(on ? "ON" : "OFF")}.");
         FinishOneShot();
+    }
+
+    private void SchedulePmdgNg3Control(uint sdkEventOffset, uint parameter, int delayMs)
+    {
+        var timer = new System.Windows.Forms.Timer { Interval = delayMs };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            SendPmdgNg3Control(sdkEventOffset, parameter);
+            _nativePulseTimers.Remove(timer);
+            timer.Dispose();
+        };
+        _nativePulseTimers.Add(timer);
+        timer.Start();
+    }
+
+    private void SetPmdgThreePositionSwitch(uint eventOffset, byte? currentPosition, int targetPosition)
+    {
+        var current = currentPosition ?? 1;
+        var clicks = Math.Abs(targetPosition - current);
+        if (clicks <= 0)
+        {
+            return;
+        }
+
+        var parameter = targetPosition > current
+            ? PmdgMouseLeftSingle
+            : PmdgMouseRightSingle;
+        for (var i = 0; i < clicks; i++)
+        {
+            SendPmdgNg3Control(eventOffset, parameter);
+        }
     }
 
     private void SetPmdgTransponderMode(uint mode)
@@ -4084,9 +4191,17 @@ internal sealed class CopilotService : Form
             _state.TransponderStandby = mode == 0;
         }
 
-        SendPmdgNg3Control(798, mode == 0 ? 0u : 1u);
-        SendPmdgNg3Control(800, mode);
-        AppLog.Write($"Executed PMDG transponder/TCAS command: mode {mode}.");
+        var parameter = mode == 0
+            ? PmdgMouseRightSingle
+            : PmdgMouseLeftSingle;
+        var clicks = mode == 0 ? 4 : 4;
+        SendPmdgNg3Control(800, parameter);
+        for (var i = 1; i < clicks; i++)
+        {
+            SchedulePmdgNg3Control(800, parameter, 250 * i);
+        }
+
+        AppLog.Write($"Executed PMDG TCAS mode command: staged clicks toward mode {mode}.");
         FinishOneShot();
     }
 
@@ -8506,6 +8621,10 @@ internal sealed class CopilotService : Form
                 $"APU AVAIL or external power. APU {state.ApuRpmPercent:F0}%, external power {state.ExternalPowerOn.ToOnOff()}.",
             "apu-bleed-warmup" =>
                 "APU available; waiting briefly before applying APU bleed load.",
+            "irs-on-dc-extinguished" =>
+                $"IRS ON DC lights. Left {state.IrsLeftOnDcLightOn.ToOnOff()}, right {state.IrsRightOnDcLightOn.ToOnOff()}.",
+            "irs-aligned" =>
+                $"IRS ready: aligned {state.IrsAligned.ToYesNo()}, ALIGN L/R {state.IrsLeftAlignLightOn.ToOnOff()}/{state.IrsRightAlignLightOn.ToOnOff()}, ON DC L/R {state.IrsLeftOnDcLightOn.ToOnOff()}/{state.IrsRightOnDcLightOn.ToOnOff()}.",
             "captain-engine-shutdown" =>
                 $"engine masters OFF. Engines {(state.EnginesOff ? "OFF" : "running")}.",
             "approach-config-start" =>

@@ -117,6 +117,7 @@ internal sealed class AircraftState
     public double? NoseLightSelectorPosition { get; set; }
     public double? LeftLandingLightSelectorPosition { get; set; }
     public double? RightLandingLightSelectorPosition { get; set; }
+    public bool RunwayTurnoffLightsOn { get; set; }
     public double? GearHandlePosition { get; set; }
     public bool GearHandleDown { get; set; }
     public double PitchDegrees { get; set; }
@@ -125,6 +126,13 @@ internal sealed class AircraftState
     public double Adirs2SelectorState { get; set; }
     public double Adirs3SelectorState { get; set; }
     public bool AdirsOnBattery { get; set; }
+    public bool IrsLeftAlignLightOn { get; set; }
+    public bool IrsRightAlignLightOn { get; set; }
+    public bool IrsLeftOnDcLightOn { get; set; }
+    public bool IrsRightOnDcLightOn { get; set; }
+    public bool IrsLeftFault { get; set; }
+    public bool IrsRightFault { get; set; }
+    public bool IrsAligned { get; set; } = true;
     public bool CrewOxygenOn { get; set; }
     public double? StrobeSelectorPosition { get; set; }
     public bool ApuFireTestActive { get; set; }
@@ -302,6 +310,26 @@ internal sealed class AircraftState
         Math.Abs(Adirs1SelectorState - 1) < 0.1
         && Math.Abs(Adirs2SelectorState - 1) < 0.1
         && Math.Abs(Adirs3SelectorState - 1) < 0.1;
+
+    public bool PmdgIrsSelectorsNav =>
+        !IsSupportedBoeing737
+        || Math.Abs(Adirs1SelectorState - 2) < 0.1
+        && Math.Abs(Adirs2SelectorState - 2) < 0.1;
+
+    public bool PmdgIrsOnDcExtinguished =>
+        !IsSupportedBoeing737
+        || !IrsLeftOnDcLightOn
+        && !IrsRightOnDcLightOn;
+
+    public bool PmdgIrsReady =>
+        !IsSupportedBoeing737
+        || PmdgIrsSelectorsNav
+        && IrsAligned
+        && PmdgIrsOnDcExtinguished
+        && !IrsLeftAlignLightOn
+        && !IrsRightAlignLightOn
+        && !IrsLeftFault
+        && !IrsRightFault;
 
     public bool FlapsAtDetent(int detent)
     {

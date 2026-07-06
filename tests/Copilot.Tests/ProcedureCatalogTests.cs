@@ -18,6 +18,17 @@ public sealed class ProcedureCatalogTests
     }
 
     [TestMethod]
+    public void Pmdg737PackageTitleUsesBoeingProcedureCatalog()
+    {
+        var state = new AircraftState { Title = "737-800 PAX BW TC" };
+
+        var flows = ProcedureCatalog.ForAircraft(state);
+
+        Assert.IsTrue(state.IsSupportedBoeing737);
+        Assert.AreEqual("1. 737 Power Up & Initial Setup", flows[0].Name);
+    }
+
+    [TestMethod]
     public void AirbusStillUsesA320ProcedureCatalog()
     {
         var state = new AircraftState { Title = "A320neo V2" };

@@ -201,7 +201,7 @@ public sealed class ProcedureRecoveryTests
         runner.Update(state);
 
         Assert.AreEqual("fo-landing-autobrake-low", runner.CurrentStep?.Id);
-        Thread.Sleep(1100);
+        Thread.Sleep(2600);
         runner.Update(state);
 
         CollectionAssert.AreEqual(new[] { "autobrake low" }, commands);
@@ -362,7 +362,7 @@ public sealed class ProcedureRecoveryTests
         state.GroundSpeedKnots = 25;
         state.LeftLandingLightSelectorPosition = 1;
         state.RightLandingLightSelectorPosition = 1;
-        Thread.Sleep(1100);
+        Thread.Sleep(2600);
         runner.Update(state);
 
         CollectionAssert.AreEqual(

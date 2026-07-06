@@ -3,7 +3,7 @@ namespace Msfs2024Ai.Copilot.Procedures;
 internal sealed class ProcedureRunner
 {
     private static readonly TimeSpan AutomaticActionCadence =
-        TimeSpan.FromSeconds(1);
+        TimeSpan.FromMilliseconds(2500);
     private readonly Action<string> _executeCommand;
     private readonly Func<Domain.AutomationPolicy> _automationPolicy;
     private ProcedureDefinition? _definition;

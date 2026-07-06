@@ -111,7 +111,8 @@ internal static class B737ProcedureLibrary
                 Observe("engines-off", "Engines off", state => state.EnginesOff),
                 Manual("captain-battery", "BATTERY switch ON", "Captain: set the BATTERY switch ON.", CrewRole.Captain, state => state.Battery1On),
                 Manual("captain-standby-power", "STANDBY POWER AUTO", "Captain: verify STANDBY POWER is AUTO.", CrewRole.Captain),
-                Manual("captain-external-power", "Ground power ON when available", "Captain: when GRD POWER is available, switch ground power ON.", CrewRole.Captain, state => state.ExternalPowerOn),
+                Manual("captain-ground-power-available", "Ground power available", "Captain: connect ground power through PMDG ground services/EFB if GRD POWER AVAILABLE is not shown.", CrewRole.Captain, state => state.ExternalPowerAvailable),
+                Manual("captain-external-power", "Ground power ON", "Captain: switch GRD POWER ON and verify the aircraft is powered.", CrewRole.Captain, state => state.ExternalPowerOn),
                 Automatic("fo-irs-left", "Left IRS selector NAV", state => Math.Abs(state.Adirs1SelectorState - 2) < 0.1, "pmdg irs left nav"),
                 Automatic("fo-irs-right", "Right IRS selector NAV", state => Math.Abs(state.Adirs2SelectorState - 2) < 0.1, "pmdg irs right nav"),
                 Automatic("fo-logo", "Logo light ON", state => state.LogoLightsOn, "pmdg logo on"),
@@ -125,6 +126,7 @@ internal static class B737ProcedureLibrary
             "2. 737 FMC & Pre-Flight",
             new[]
             {
+                Observe("electrical-power", "Electrical power established", state => state.Battery1On && state.ExternalPowerOn && state.CockpitDisplaysReady),
                 Manual("captain-fd-qnh", "Flight Directors ON and local QNH set", "Captain: turn both Flight Directors ON and set local QNH.", CrewRole.Captain),
                 Manual("captain-displays", "PFD/ND/EICAS checked", "Captain: verify displays and annunciations.", CrewRole.Captain),
                 Manual("captain-parking-brake", "Parking brake ON", "Captain: verify parking brake ON.", CrewRole.Captain, state => state.ParkingBrakeSet),
@@ -145,9 +147,12 @@ internal static class B737ProcedureLibrary
                 Manual("captain-apu-on", "APU selector ON", "Captain: move APU selector to ON.", CrewRole.Captain, state => state.ApuMasterSwitchOn),
                 Manual("captain-apu-start", "APU selector START", "Captain: hold APU selector to START, then release to ON.", CrewRole.Captain, state => state.ApuStartButtonOn || state.ApuAvailable),
                 Observe("apu-available", "APU available", state => state.ApuAvailable, CrewRole.Captain),
-                Automatic("fo-apu-generators", "APU generators ON", state => state.ApuGeneratorSwitchOn, "pmdg apu-generators on"),
+                Automatic("fo-apu-generators", "APU generators ON", state => state.ApuGeneratorSwitchOn, "pmdg apu-generators on", requireCommandExecution: true),
+                Observe("apu-bleed-warmup", "APU bleed warm-up complete", state => state.ApuBleedWarmupComplete || state.ApuBleedOn, CrewRole.FirstOfficer),
                 Automatic("fo-apu-bleed", "APU bleed ON", state => state.ApuBleedOn, "pmdg apu-bleed on"),
-                Manual("captain-ground-power-off", "Ground power OFF", "Captain: switch ground power OFF after APU power is established.", CrewRole.Captain, state => !state.ExternalPowerOn),
+                Automatic("fo-isolation-open", "Isolation valve OPEN", state => state.IsolationValveOpen, "pmdg isolation open"),
+                Automatic("fo-packs-auto", "PACK switches AUTO", state => state.PacksAuto, "pmdg packs auto"),
+                Observe("external-power-disconnected", "External power no longer powering buses", state => !state.ExternalPowerOn, CrewRole.FirstOfficer),
                 Manual("captain-beacon", "Anti-collision light ON", "Captain: turn anti-collision light ON.", CrewRole.Captain, state => state.BeaconOn),
                 Manual("captain-ifr-clearance", "IFR clearance received", "Pilot: use the MSFS ATC system to request and acknowledge IFR clearance.", CrewRole.Captain, state => state.AtcClearedIfr),
                 Manual("captain-pushback-clearance", "Pushback and engine-start clearance received", "Pilot: use the MSFS ATC system to request and acknowledge pushback and engine-start clearance.", CrewRole.Captain),
@@ -161,17 +166,20 @@ internal static class B737ProcedureLibrary
             new[]
             {
                 Observe("start-condition", "Aircraft on ground with anti-collision ON", state => state.OnGround && state.BeaconOn),
-                Manual("captain-packs-off", "PACK switches OFF", "Captain: set both PACK switches OFF for engine start.", CrewRole.Captain),
-                Manual("captain-isolation-open", "Isolation valve OPEN", "Captain: set isolation valve OPEN.", CrewRole.Captain),
-                Manual("captain-engine-two-start", "Engine 2 start switch GRD", "Captain: move Engine 2 start switch to GRD.", CrewRole.Captain, state => state.Engine2StarterActive || state.Engine2Running),
+                Automatic("fo-packs-off", "PACK switches OFF", state => state.PacksOffForEngineStart, "pmdg packs off"),
+                Automatic("fo-isolation-open", "Isolation valve OPEN", state => state.IsolationValveOpen, "pmdg isolation open"),
+                Observe("fo-start-air", "Start air available", state => state.EngineStartAirAvailable),
+                Manual("captain-engine-two-start", "Engine 2 start switch GRD", "Captain: move Engine 2 start switch to GRD.", CrewRole.Captain, state => state.Engine2StartSwitchGround || state.Engine2StarterActive || state.Engine2Running),
                 Observe("fo-engine-two-starter", "Engine 2 — Starter Valve Open", state => state.Engine2StarterActive, recoveryComplete: state => state.Engine2StartStabilized),
+                Manual("captain-engine-two-start-lever", "Engine 2 start lever IDLE", "Captain: at 25% N2, move Engine 2 start lever to IDLE.", CrewRole.Captain, state => state.Engine2FuelFlowDetected || state.Engine2Running, recoveryComplete: state => state.Engine2StartStabilized),
                 Observe("fo-engine-two-fuel", "Engine 2 — Fuel Flow", state => state.Engine2FuelFlowDetected, recoveryComplete: state => state.Engine2StartStabilized),
                 Observe("fo-engine-two-stable", "Engine 2 — Stabilized", state => state.Engine2StartStabilized),
-                Manual("captain-engine-one-start", "Engine 1 start switch GRD", "Captain: move Engine 1 start switch to GRD.", CrewRole.Captain, state => state.Engine1StarterActive || state.Engine1Running),
+                Manual("captain-engine-one-start", "Engine 1 start switch GRD", "Captain: move Engine 1 start switch to GRD.", CrewRole.Captain, state => state.Engine1StartSwitchGround || state.Engine1StarterActive || state.Engine1Running),
                 Observe("fo-engine-one-starter", "Engine 1 — Starter Valve Open", state => state.Engine1StarterActive, recoveryComplete: state => state.Engine1StartStabilized),
+                Manual("captain-engine-one-start-lever", "Engine 1 start lever IDLE", "Captain: at 25% N2, move Engine 1 start lever to IDLE.", CrewRole.Captain, state => state.Engine1FuelFlowDetected || state.Engine1Running, recoveryComplete: state => state.Engine1StartStabilized),
                 Observe("fo-engine-one-fuel", "Engine 1 — Fuel Flow", state => state.Engine1FuelFlowDetected, recoveryComplete: state => state.Engine1StartStabilized),
                 Observe("fo-engine-one-stable", "Engine 1 — Stabilized", state => state.Engine1StartStabilized),
-                Manual("captain-start-switches-cont", "Engine start switches CONT", "Captain: set engine start switches CONT as required.", CrewRole.Captain, recoveryComplete: state => state.Engine1Running && state.Engine2Running)
+                Manual("captain-start-switches-cont", "Engine start switches CONT", "Captain: set engine start switches CONT as required.", CrewRole.Captain, state => state.EngineStartSwitchesContinuous, recoveryComplete: state => state.Engine1Running && state.Engine2Running)
             });
 
     public static ProcedureDefinition AfterStartAndTaxi { get; } =
@@ -180,10 +188,14 @@ internal static class B737ProcedureLibrary
             "5. 737 After Start & Taxi",
             new[]
             {
+                Automatic("fo-engine-generators", "Engine generators ON", state => state.EngineGeneratorPowerEstablished, "pmdg engine-generators on", requireCommandExecution: true),
+                Observe("fo-engine-generator-power", "Engine generator power established", state => state.EngineGeneratorPowerEstablished),
                 Automatic("fo-apu-bleed-off", "APU bleed OFF", state => !state.ApuBleedOn, "pmdg apu-bleed off"),
+                Automatic("fo-packs-auto", "PACK switches AUTO", state => state.PacksAuto, "pmdg packs auto"),
+                Automatic("fo-isolation-auto", "Isolation valve AUTO", state => state.IsolationValveAuto, "pmdg isolation auto"),
                 Automatic("fo-apu-off", "APU selector OFF", state => !state.ApuMasterSwitchOn, "pmdg apu off"),
                 Automatic("fo-ground-spoilers-arm", "Speedbrake armed", state => state.GroundSpoilersArmed, "pmdg spoilers arm"),
-                Automatic("fo-flaps-takeoff", "Flaps takeoff setting", state => state.FlapsHandleIndex > 0, "pmdg flaps takeoff"),
+                Automatic("fo-flaps-takeoff", "Flaps takeoff setting", state => state.BoeingTakeoffFlapsSet, "pmdg flaps takeoff"),
                 Automatic("fo-autobrake-rto", "Autobrake RTO", state => state.AutobrakeLevel.HasValue && Math.Abs(state.AutobrakeLevel.Value) < 0.1, "pmdg autobrake rto"),
                 Automatic("fo-taxi-light", "Taxi light ON", state => state.NoseLightSelectorPosition.HasValue && state.NoseLightSelectorPosition.Value < 1.5, "pmdg taxi-light on"),
                 Observe("captain-taxi-started", "Captain started taxi", state => state.OnGround && state.GroundSpeedKnots > 1)
@@ -197,9 +209,14 @@ internal static class B737ProcedureLibrary
             {
                 Observe("holding-short", "Aircraft stopped near runway", state => state.OnGround && state.GroundSpeedKnots <= 1),
                 Manual("captain-takeoff-briefing", "Takeoff briefing complete", "Captain: complete takeoff briefing.", CrewRole.Captain),
+                Automatic("fo-autothrottle-arm", "Autothrottle ARM", _ => true, "pmdg mcp autothrottle arm", requireCommandExecution: true),
+                Automatic("fo-lnav-arm", "LNAV armed", _ => true, "pmdg mcp lnav arm", requireCommandExecution: true),
+                Automatic("fo-vnav-arm", "VNAV armed", _ => true, "pmdg mcp vnav arm", requireCommandExecution: true),
                 Automatic("fo-landing-lights", "Landing lights ON", state => state.LeftLandingLightSelectorPosition == 0 && state.RightLandingLightSelectorPosition == 0, "pmdg landing-lights on"),
+                Automatic("fo-taxi-light-off", "Taxi light OFF", state => state.NoseLightSelectorPosition.HasValue && state.NoseLightSelectorPosition.Value >= 1.5, "pmdg taxi-light off"),
                 Automatic("fo-strobes", "Position/strobe STROBE & STEADY", state => state.StrobeSelectorPosition.HasValue && Math.Abs(state.StrobeSelectorPosition.Value) < 0.1, "pmdg strobes on"),
                 Automatic("fo-transponder-tara", "Transponder TA/RA", state => state.TcasMode.HasValue && state.TcasMode.Value >= 4, "pmdg transponder tara"),
+                Automatic("fo-tcas-traffic", "TCAS traffic displayed", _ => true, "pmdg tcas traffic", requireCommandExecution: true),
                 Observe("cabin-ready", "Cabin crew, prepare for takeoff", _ => true)
             });
 
@@ -214,10 +231,13 @@ internal static class B737ProcedureLibrary
                 Observe("v1", "V1", state => state.IndicatedAirspeedKnots >= state.TakeoffV1SpeedKnots),
                 Observe("rotate", "Rotate", state => state.IndicatedAirspeedKnots >= state.TakeoffRotateSpeedKnots),
                 Observe("airborne", "Positive climb", state => !state.OnGround && state.AltitudeAboveGroundFeet >= 35),
-                Automatic("fo-gear-up", "Landing gear UP", state => !state.GearHandleDown, "pmdg gear up"),
+                Automatic("fo-gear-up", "Landing gear UP", state => state.GearHandleUp, "pmdg gear up"),
+                Automatic("fo-taxi-light-off", "Taxi light OFF", state => state.NoseLightSelectorPosition.HasValue && state.NoseLightSelectorPosition.Value >= 1.5, "pmdg taxi-light off"),
+                Automatic("fo-spoilers-down", "Speedbrake down", state => !state.GroundSpoilersArmed, "pmdg spoilers down"),
                 Observe("acceleration-altitude", "Acceleration altitude passed", state => !state.OnGround && state.AltitudeAboveGroundFeet >= 1000),
                 Automatic("fo-flaps-up", "Flaps retracted on schedule", state => state.FlapsHandleIndex <= 0, "pmdg flaps clean"),
-                Automatic("fo-landing-lights-off", "Landing lights OFF above 10,000 feet", state => state.IndicatedAltitudeFeet < 10000 || state.LeftLandingLightSelectorPosition == 2 && state.RightLandingLightSelectorPosition == 2, "pmdg landing-lights off")
+                Observe("ten-thousand-feet", "10,000 feet passed", state => state.IndicatedAltitudeFeet >= 10000),
+                Automatic("fo-landing-lights-off", "Landing lights OFF above 10,000 feet", state => state.LeftLandingLightSelectorPosition == 2 && state.RightLandingLightSelectorPosition == 2, "pmdg landing-lights off")
             });
 
     public static ProcedureDefinition Cruise { get; } =
@@ -254,14 +274,15 @@ internal static class B737ProcedureLibrary
                 Automatic("fo-landing-lights-on", "Landing lights ON", state => state.LeftLandingLightSelectorPosition == 0 && state.RightLandingLightSelectorPosition == 0, "pmdg landing-lights on"),
                 Observe("cabin-landing", "Cabin crew, prepare for landing", _ => true),
                 Observe("flaps-one-gate", "Flaps 1 point reached", state => ApproachDistanceReached(state, state.ApproachFlaps1DistanceNm) || state.IndicatedAltitudeFeet <= state.ApproachFlaps1AltitudeFeet),
-                Automatic("fo-flaps-one", "Flaps 1", state => state.FlapsAtDetent(1), "pmdg flaps 1"),
+                Automatic("fo-flaps-one", "Flaps 1", state => state.BoeingFlapsAtSetting(1), "pmdg flaps 1"),
                 Observe("flaps-five-speed", "Safe speed for flaps 5", state => state.IndicatedAirspeedKnots <= state.EffectiveApproachFlaps2SpeedKnots),
-                Automatic("fo-flaps-five", "Flaps 5", state => state.FlapsAtDetent(2), "pmdg flaps 5"),
+                Automatic("fo-flaps-five", "Flaps 5", state => state.BoeingFlapsAtSetting(5), "pmdg flaps 5"),
                 Observe("gear-gate", "Gear-down point reached", ApproachGearGateReached),
                 Automatic("fo-gear-down", "Landing gear DOWN", state => state.GearHandleDown, "pmdg gear down"),
+                Automatic("fo-flaps-fifteen", "Flaps 15", state => state.BoeingFlapsAtSetting(15), "pmdg flaps 15"),
                 Automatic("fo-spoilers-arm", "Speedbrake armed", state => state.GroundSpoilersArmed, "pmdg spoilers arm"),
                 Observe("landing-config-speed", "Safe speed for landing flaps", state => state.IndicatedAirspeedKnots <= state.EffectiveApproachFlapsFullSpeedKnots),
-                Automatic("fo-flaps-landing", "Landing flaps set", state => state.FlapsAtDetent(4), "pmdg flaps landing"),
+                Automatic("fo-flaps-landing", "Landing flaps set", state => state.BoeingLandingFlapsSet, "pmdg flaps landing"),
                 Observe("approaching-minimums", "Approaching Minimums", state => state.RadioHeightFeet > 0 && state.RadioHeightFeet <= state.DecisionHeightFeet + 100),
                 Observe("minimums", "Minimums", state => state.RadioHeightFeet > 0 && state.RadioHeightFeet <= state.DecisionHeightFeet),
                 Observe("touchdown", "Touchdown", state => state.OnGround && state.GroundSpeedKnots > 30),

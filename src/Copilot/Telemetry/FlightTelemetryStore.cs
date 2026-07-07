@@ -50,7 +50,7 @@ internal sealed class FlightTelemetryStore : IDisposable
                 || state.Engine1Running
                 || state.Engine2Running
                 || !state.OnGround;
-            if (!state.IsSupportedA320 || !powered)
+            if (!state.IsSupportedAircraft || !powered)
             {
                 return;
             }

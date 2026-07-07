@@ -63,6 +63,22 @@ internal sealed class ProcedureRunner
         Advance(state);
     }
 
+    public void RestorePaused(
+        ProcedureDefinition definition,
+        int stepIndex)
+    {
+        _definition = definition;
+        _stepIndex = Math.Max(0, Math.Min(stepIndex, definition.Steps.Count));
+        _manualConfirmationReceived = false;
+        _lastAutomaticStepId = null;
+        _nextAutomaticActionUtc = DateTime.MinValue;
+        _recovering = true;
+        Status = ProcedureStatus.Paused;
+        Message =
+            $"Restored {definition.Name} from saved step {_stepIndex + 1}. Press Resume when the cockpit is in the expected state.";
+        Changed?.Invoke();
+    }
+
     public void Update(AircraftState state)
     {
         if (Status is ProcedureStatus.Running

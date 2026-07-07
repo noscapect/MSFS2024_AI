@@ -9,6 +9,35 @@ namespace Msfs2024Ai.Copilot.Tests;
 public sealed class ProcedureRecoveryTests
 {
     [TestMethod]
+    public void SavedSessionRestoreIsPausedUntilPilotResumes()
+    {
+        var commands = new List<string>();
+        var runner = new ProcedureRunner(
+            commands.Add,
+            () => AutomationPolicy.AutomaticWhenSupported);
+        var definition = A320ProcedureLibrary.AfterStartAndTaxi;
+        var automaticIndex = definition.Steps
+            .Select((step, index) => new { step.Id, index })
+            .Single(item => item.Id == "fo-apu-bleed-off")
+            .index;
+        var state = new AircraftState
+        {
+            Title = "A320neo V2",
+            ApuBleedOn = true
+        };
+
+        runner.RestorePaused(definition, automaticIndex);
+        runner.Update(state);
+
+        Assert.AreEqual(ProcedureStatus.Paused, runner.Status);
+        Assert.AreEqual(0, commands.Count);
+
+        runner.Resume(state);
+
+        CollectionAssert.AreEqual(new[] { "apu-bleed off" }, commands);
+    }
+
+    [TestMethod]
     public void PowerUpFlowAcceptsFlyByWireA32NxForDiscovery()
     {
         var commands = new List<string>();

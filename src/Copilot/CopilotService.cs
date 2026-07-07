@@ -1,4 +1,5 @@
 ﻿using Microsoft.FlightSimulator.SimConnect;
+using Msfs2024Ai.Copilot.AircraftIdentity;
 using Msfs2024Ai.Copilot.Checklists;
 using Msfs2024Ai.Copilot.Controls;
 using Msfs2024Ai.Copilot.Diagnostics;
@@ -43,6 +44,7 @@ internal sealed class CopilotService : Form
     private readonly ProcedureRunner _procedureRunner;
     private VoiceCalloutQueue? _voiceCalloutQueue;
     private readonly FlightTelemetryStore _flightTelemetryStore;
+    private readonly AircraftIdentityResolver _aircraftIdentityResolver = new();
     private System.Windows.Forms.Timer? _replayTimer;
     private IReadOnlyList<AircraftState> _replayStates = Array.Empty<AircraftState>();
     private int _replayIndex;
@@ -69,6 +71,7 @@ internal sealed class CopilotService : Form
     private byte? _loggedPmdgBatterySelector;
     private bool? _loggedPmdgGroundPowerAvailable;
     private bool? _loggedPmdgGroundPowerOn;
+    private bool _pmdgApuGenOffBusSeen;
     private string? _loggedPmdgElectricalBytes;
     private string? _loggedPmdgAirStartSignature;
     private DateTime? _pmdgApuAvailableSinceUtc;
@@ -82,8 +85,6 @@ internal sealed class CopilotService : Form
     private DateTime? _pmdgCommandedPositionStrobeUtc;
     private float? _pmdgCommandedEmergencyExitSelector;
     private DateTime? _pmdgCommandedEmergencyExitUtc;
-    private float? _pmdgCommandedTcasMode;
-    private DateTime? _pmdgCommandedTcasModeUtc;
     private bool NativeStateReady =>
         _nativeBattery1On.HasValue
         && _nativeBattery2On.HasValue
@@ -270,6 +271,15 @@ internal sealed class CopilotService : Form
     private Label? _adapterBadgeLabel;
     private Label? _flowBadgeLabel;
     private Label? _versionBadgeLabel;
+    private PictureBox? _aircraftThumbnailBox;
+    private Label? _aircraftCardTitleLabel;
+    private Label? _aircraftCardVariationLabel;
+    private Label? _aircraftCardSourceLabel;
+    private string? _aircraftCardTitle;
+    private string? _aircraftCardResolvedTitle;
+    private IReadOnlyList<string> _aircraftCardImagePaths = Array.Empty<string>();
+    private int _aircraftCardImageIndex;
+    private CancellationTokenSource? _aircraftIdentityLookupCancellation;
     private Label? _procedureLabel;
     private Label? _stepLabel;
     private Label? _statusBadgeLabel;
@@ -509,7 +519,8 @@ internal sealed class CopilotService : Form
         FuelSystemPumpOff,
         FuelSystemValveOpen,
         FuelSystemValveClose,
-        CabinSeatbeltsToggle
+        CabinSeatbeltsToggle,
+        RotorBrake
     }
 
     private enum Priority
@@ -734,7 +745,7 @@ internal sealed class CopilotService : Form
         public bool GenBus2Off { get; set; }
         public bool ApuGenOffBus { get; set; }
         public float ApuEgtNeedle { get; set; }
-        public bool ApuAvailableForTransfer => ApuGenOffBus || ApuEgtNeedle > 0;
+        public bool ApuAvailableForTransfer => ApuGenOffBus;
         public byte EmergencyExitLights { get; set; }
         public byte NoSmokingSelector { get; set; }
         public byte FastenBeltsSelector { get; set; }
@@ -768,6 +779,7 @@ internal sealed class CopilotService : Form
         public byte V1 { get; set; }
         public byte Vr { get; set; }
         public byte LandingFlaps { get; set; }
+        public byte LandingVref { get; set; }
         public bool FmcPerfInputComplete { get; set; }
         public bool GroundConnectionAvailable { get; set; }
     }
@@ -887,10 +899,10 @@ internal sealed class CopilotService : Form
     private void OnOpen(SimConnect sender, SIMCONNECT_RECV_OPEN data)
     {
         Console.WriteLine(
-            $"Connected â€” SimConnect {data.dwSimConnectVersionMajor}.{data.dwSimConnectVersionMinor}, " +
+            $"Connected - SimConnect {data.dwSimConnectVersionMajor}.{data.dwSimConnectVersionMinor}, " +
             $"simulator {data.dwApplicationVersionMajor}.{data.dwApplicationVersionMinor}.");
         AppendDashboardLog(
-            $"Connected to MSFS â€” SimConnect {data.dwSimConnectVersionMajor}.{data.dwSimConnectVersionMinor}");
+            $"Connected to MSFS - SimConnect {data.dwSimConnectVersionMajor}.{data.dwSimConnectVersionMinor}");
         AppLog.Write(
             $"Connected to MSFS. SimConnect {data.dwSimConnectVersionMajor}.{data.dwSimConnectVersionMinor}; " +
             $"simulator {data.dwApplicationVersionMajor}.{data.dwApplicationVersionMinor}.");
@@ -993,6 +1005,7 @@ internal sealed class CopilotService : Form
         sender.MapClientEventToSimEvent(CopilotEvent.FuelSystemValveOpen, "FUELSYSTEM_VALVE_OPEN");
         sender.MapClientEventToSimEvent(CopilotEvent.FuelSystemValveClose, "FUELSYSTEM_VALVE_CLOSE");
         sender.MapClientEventToSimEvent(CopilotEvent.CabinSeatbeltsToggle, "CABIN_SEATBELTS_ALERT_SWITCH_TOGGLE");
+        sender.MapClientEventToSimEvent(CopilotEvent.RotorBrake, "ROTOR_BRAKE");
         InitializeMobiFlight(sender);
         InitializePmdgNg3Sdk(sender);
 
@@ -2111,10 +2124,28 @@ internal sealed class CopilotService : Form
             LogChangedVoltage("FBW generic BAT 1 voltage", raw.Battery1Voltage, ref _lastLoggedBattery1Voltage);
             LogChangedVoltage("FBW generic BAT 2 voltage", raw.Battery2Voltage, ref _lastLoggedBattery2Voltage);
         }
+        if (isPmdg737 && pmdg != null)
+        {
+            if (pmdg.ApuGenOffBus)
+            {
+                _pmdgApuGenOffBusSeen = true;
+            }
+            else if (pmdg.ApuEgtNeedle <= 0)
+            {
+                _pmdgApuGenOffBusSeen = false;
+            }
+        }
+        else
+        {
+            _pmdgApuGenOffBusSeen = false;
+        }
         var pmdgApuPowerEstablished =
             isPmdg737
             && pmdg != null
-            && pmdg.ApuAvailableForTransfer
+            && pmdg.ApuEgtNeedle > 0
+            && _pmdgApuGenOffBusSeen
+            && pmdg.ApuGen1On
+            && pmdg.ApuGen2On
             && !pmdg.ApuGenOffBus
             && !pmdg.TransferBus1Off
             && !pmdg.TransferBus2Off
@@ -2318,8 +2349,11 @@ internal sealed class CopilotService : Form
                                    && !isPmdg737
                                    ? _nativeApuGeneratorOn.Value != 0
                                    : isPmdg737 && pmdg != null
-                    ? pmdgApuPowerEstablished
+                                       ? pmdg.ApuGen1On && pmdg.ApuGen2On
                                        : raw.ApuGeneratorSwitch != 0,
+            ApuGeneratorPowerEstablished = isPmdg737
+                ? pmdgApuPowerEstablished
+                : raw.ApuGeneratorActive != 0,
             EngineGeneratorsOn = isPmdg737 && pmdg != null
                 ? pmdg.EngineGen1On
                   && pmdg.EngineGen2On
@@ -2400,6 +2434,9 @@ internal sealed class CopilotService : Form
                 : null,
             BoeingLandingFlaps = isPmdg737 && pmdg != null && pmdg.LandingFlaps > 0
                 ? pmdg.LandingFlaps
+                : null,
+            BoeingLandingVrefKnots = isPmdg737 && pmdg != null && pmdg.LandingVref > 0
+                ? pmdg.LandingVref
                 : null,
             LeftFlapPositionPercent = raw.LeftFlapPosition,
             RightFlapPositionPercent = raw.RightFlapPosition,
@@ -2581,10 +2618,7 @@ internal sealed class CopilotService : Form
                     _fbwCommandedTcasModeUtc,
                     _fbwTcasMode)
                 : isPmdg737 && pmdg != null
-                    ? ResolvePmdgCommandedSelectorState(
-                        _pmdgCommandedTcasMode,
-                        _pmdgCommandedTcasModeUtc,
-                        pmdg.TransponderMode)
+                    ? pmdg.TransponderMode
                 : _nativeTcasMode,
             TransponderModeSelectorPosition = isFlyByWireA320Neo
                 ? _fbwTransponderMode
@@ -3199,6 +3233,7 @@ internal sealed class CopilotService : Form
             V1 = ByteAt(621),
             Vr = ByteAt(622),
             LandingFlaps = ByteAt(624),
+            LandingVref = ByteAt(625),
             FmcPerfInputComplete = BoolAt(634),
             IrsAligned = BoolAt(654),
             GroundConnectionAvailable = BoolAt(658)
@@ -4022,6 +4057,11 @@ internal sealed class CopilotService : Form
         var parameter = on ? PmdgMouseLeftSingle : PmdgMouseRightSingle;
         SendPmdgNg3Control(28, parameter);
         SendPmdgNg3Control(29, parameter);
+        SchedulePmdgNg3Control(28, parameter, 500);
+        SchedulePmdgNg3Control(29, parameter, 500);
+        SchedulePmdgNg3Control(28, parameter, 1000);
+        SchedulePmdgNg3Control(29, parameter, 1000);
+        AppLog.Write($"Executed PMDG APU generator switch command: {(on ? "ON/transfer" : "OFF")}.");
         FinishOneShot();
     }
 
@@ -4079,44 +4119,44 @@ internal sealed class CopilotService : Form
     private void SetPmdgGear(uint position)
     {
         var current = _pmdgNg3State?.GearLever;
-        if (position == 2 && _state?.GearHandleDown != true)
-        {
-            SendPmdgNg3Control(455, PmdgMouseLeftSingle);
-            SchedulePmdgNg3Control(455, PmdgMouseLeftSingle, 350);
-            AppLog.Write("Executed PMDG gear lever command: forced staged DOWN.");
-            FinishOneShot();
-            return;
-        }
-
-        if (position == 0 && _state?.GearHandleUp != true)
-        {
-            SendPmdgNg3Control(455, PmdgMouseRightSingle);
-            SchedulePmdgNg3Control(455, PmdgMouseRightSingle, 350);
-            AppLog.Write("Executed PMDG gear lever command: forced staged UP.");
-            FinishOneShot();
-            return;
-        }
-
-        var clicks = current.HasValue
-            ? Math.Abs((int)position - current.Value)
-            : position == 1 ? 1 : 2;
-        if (clicks <= 0)
+        if (current.HasValue && current.Value == position)
         {
             AppLog.Write($"PMDG gear lever already at target position {position}.");
             FinishOneShot();
             return;
         }
 
-        var parameter = position > (current ?? 1)
-            ? PmdgMouseLeftSingle
-            : PmdgMouseRightSingle;
-        SendPmdgNg3Control(455, parameter);
-        for (var i = 1; i < clicks; i++)
+        // PMDG SDK readback:
+        // MAIN_GearLever = 0 UP, 1 OFF, 2 DOWN.
+        //
+        // PMDG's actual cockpit behavior drives the lever through K:ROTOR_BRAKE
+        // switch id 455. The SDK event-offset/direct target path can be ignored
+        // or can leave the lever in OFF, so drive the real detents instead:
+        // action 7 = WheelUp/toward UP, action 8 = WheelDown/toward DOWN.
+        var actionCode = position == 0 ? 7u : 8u;
+        var clicks = current.HasValue
+            ? Math.Max(1, Math.Abs((int)position - current.Value))
+            : 3;
+
+        // Add one extra bounded click as insurance against the OFF detent. The
+        // PMDG lever clamps at UP/DOWN, so this is safe and prevents a one-notch
+        // move from DOWN -> OFF or UP -> OFF.
+        clicks = Math.Min(3, clicks + 1);
+
+        for (var i = 0; i < clicks; i++)
         {
-            SchedulePmdgNg3Control(455, parameter, 350 * i);
+            if (i == 0)
+            {
+                SendPmdgRotorBrakeSwitch(455, actionCode);
+            }
+            else
+            {
+                SchedulePmdgRotorBrakeSwitch(455, actionCode, 300 * i);
+            }
         }
 
-        AppLog.Write($"Executed PMDG gear lever command: target position {position}.");
+        AppLog.Write(
+            $"Executed PMDG gear lever ROTOR_BRAKE command: switch id 455 action {actionCode}, {clicks} click(s) toward position {position}.");
         FinishOneShot();
     }
 
@@ -4136,16 +4176,60 @@ internal sealed class CopilotService : Form
 
     private void SetPmdgLandingLights(bool on)
     {
-        var parameter = on ? PmdgMouseLeftSingle : PmdgMouseRightSingle;
-        SendPmdgNg3Control(111, parameter);
-        SendPmdgNg3Control(112, parameter);
-        SchedulePmdgNg3Control(111, parameter, 350);
-        SchedulePmdgNg3Control(112, parameter, 350);
-        SendPmdgNg3Control(113, on ? 1u : 0u);
-        SendPmdgNg3Control(114, on ? 1u : 0u);
-        AppLog.Write(
-            $"Executed PMDG landing light command: retractable staged double-click {(on ? "up to ON" : "down to RETRACT")}, fixed lights {(on ? "ON" : "OFF")}.");
+        if (on)
+        {
+            SendPmdgRotorBrakeSwitch(113, 1);
+            SendPmdgRotorBrakeSwitch(114, 1);
+            SchedulePmdgRotorBrakeSwitch(113, 1, 350);
+            SchedulePmdgRotorBrakeSwitch(114, 1, 350);
+            SchedulePmdgRotorBrakeSwitch(113, 1, 700);
+            SchedulePmdgRotorBrakeSwitch(114, 1, 700);
+            SendPmdgNg3Control(113, 1);
+            SendPmdgNg3Control(114, 1);
+            AppLog.Write(
+                "Executed PMDG landing light ROTOR_BRAKE command: retractable switch ids 113/114 left-single toward ON; fixed lights ON.");
+        }
+        else
+        {
+            SendPmdgNg3Control(111, 0);
+            SendPmdgNg3Control(112, 0);
+            SchedulePmdgNg3Control(111, 0, 500);
+            SchedulePmdgNg3Control(112, 0, 500);
+            SendPmdgNg3Control(113, 0);
+            SendPmdgNg3Control(114, 0);
+            AppLog.Write(
+                "Executed PMDG landing light command: retractable target RETRACT (0), fixed lights OFF.");
+        }
         FinishOneShot();
+    }
+
+    private void SendPmdgRotorBrakeSwitch(uint switchId, uint actionCode)
+    {
+        if (_simConnect == null)
+        {
+            return;
+        }
+
+        _simConnect.TransmitClientEvent(
+            SimConnect.SIMCONNECT_OBJECT_ID_USER,
+            CopilotEvent.RotorBrake,
+            switchId * 100u + actionCode,
+            Priority.Highest,
+            SIMCONNECT_EVENT_FLAG.GROUPID_IS_PRIORITY);
+    }
+
+    private void SchedulePmdgRotorBrakeSwitch(uint switchId, uint actionCode, int delayMs)
+    {
+        var timer = new System.Windows.Forms.Timer { Interval = delayMs };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            SendPmdgRotorBrakeSwitch(switchId, actionCode);
+            _nativePulseTimers.Remove(timer);
+            timer.Dispose();
+        };
+        _nativePulseTimers.Add(timer);
+        timer.Start();
     }
 
     private void SchedulePmdgNg3Control(uint sdkEventOffset, uint parameter, int delayMs)
@@ -4182,26 +4266,36 @@ internal sealed class CopilotService : Form
 
     private void SetPmdgTransponderMode(uint mode)
     {
-        _pmdgCommandedTcasMode = mode;
-        _pmdgCommandedTcasModeUtc = DateTime.UtcNow;
-        if (_state != null)
+        var current = _pmdgNg3State?.TransponderMode;
+        if (current.HasValue && current.Value == mode)
         {
-            _state.TcasMode = mode;
-            _state.TransponderModeSelectorPosition = mode;
-            _state.TransponderStandby = mode == 0;
+            AppLog.Write($"PMDG transponder mode already at target {mode}.");
+            FinishOneShot();
+            return;
         }
 
-        var parameter = mode == 0
-            ? PmdgMouseRightSingle
-            : PmdgMouseLeftSingle;
-        var clicks = mode == 0 ? 4 : 4;
-        SendPmdgNg3Control(800, parameter);
-        for (var i = 1; i < clicks; i++)
+        var actionCode = mode >= (current ?? 0) ? 7u : 8u;
+        var clicks = current.HasValue
+            ? Math.Max(1, Math.Abs((int)mode - current.Value))
+            : 4;
+
+        // PMDG's TCAS mode selector is not driven reliably through the SDK
+        // mouse flags. The aircraft behavior sends K:ROTOR_BRAKE with
+        // switch id 800 and wheel action codes 7/8, so use that path directly.
+        for (var i = 0; i < clicks; i++)
         {
-            SchedulePmdgNg3Control(800, parameter, 250 * i);
+            if (i == 0)
+            {
+                SendPmdgRotorBrakeSwitch(800, actionCode);
+            }
+            else
+            {
+                SchedulePmdgRotorBrakeSwitch(800, actionCode, 300 * i);
+            }
         }
 
-        AppLog.Write($"Executed PMDG TCAS mode command: staged clicks toward mode {mode}.");
+        AppLog.Write(
+            $"Executed PMDG TCAS ROTOR_BRAKE command: switch id 800 action {actionCode}, {clicks} click(s) toward mode {mode}.");
         FinishOneShot();
     }
 
@@ -4297,12 +4391,11 @@ internal sealed class CopilotService : Form
 
         _cruiseSeatbeltMonitoring =
             string.Equals(definition.Id, "cruise", StringComparison.OrdinalIgnoreCase);
-        _procedureRunner.Restore(
+        _procedureRunner.RestorePaused(
             definition,
-            _procedureSession.ActiveStepIndex,
-            _state);
+            _procedureSession.ActiveStepIndex);
         AppendDashboardLog(
-            $"Restored saved procedure session: {definition.Name}.");
+            $"Restored saved procedure session paused: {definition.Name}. Press Resume only after confirming the aircraft is in the correct state.");
     }
 
     private void StartProcedureById(string id)
@@ -7250,11 +7343,11 @@ internal sealed class CopilotService : Form
         Console.WriteLine($"Ground: {_state.OnGround}; speed: {_state.GroundSpeedKnots:F1} kt; parking brake: {_state.ParkingBrakeSet.ToSetReleased()}");
         Console.WriteLine($"Engines 1/2: {_state.Engine1Running.ToOnOff()}/{_state.Engine2Running.ToOnOff()}");
         Console.WriteLine(
-            $"Engine start 1 â€” starter/N1/EGT/fuel: " +
+            $"Engine start 1 - starter/N1/EGT/fuel: " +
             $"{_state.Engine1StarterActive.ToOnOff()}/{_state.Engine1N1Percent:F1}%/" +
             $"{_state.Engine1EgtCelsius:F0}C/{_state.Engine1FuelFlowPph:F0} pph");
         Console.WriteLine(
-            $"Engine start 2 â€” starter/N1/EGT/fuel: " +
+            $"Engine start 2 - starter/N1/EGT/fuel: " +
             $"{_state.Engine2StarterActive.ToOnOff()}/{_state.Engine2N1Percent:F1}%/" +
             $"{_state.Engine2EgtCelsius:F0}C/{_state.Engine2FuelFlowPph:F0} pph");
         Console.WriteLine($"Batteries 1/2: {_state.Battery1On.ToOnOff()}/{_state.Battery2On.ToOnOff()}");
@@ -7285,7 +7378,7 @@ internal sealed class CopilotService : Form
             $"{FormatOptionalSignPosition(SignSelector.NoSmoking, _state.NoSmokingSelectorPosition)}/" +
             $"{FormatOptionalSignPosition(SignSelector.EmergencyExit, _state.EmergencyExitSelectorPosition)}");
         Console.WriteLine(
-            $"After-start configuration â€” spoilers/flaps/autobrake: " +
+            $"After-start configuration - spoilers/flaps/autobrake: " +
             $"{(_state.GroundSpoilersArmed ? "ARMED" : "DISARMED")}/" +
             $"{_state.FlapsHandleIndex:F0}/" +
             $"{(_state.AutobrakeLevel?.ToString("F0") ?? "UNKNOWN")}");
@@ -7347,7 +7440,7 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        Console.WriteLine("Cockpit preparation â€” electrical power");
+        Console.WriteLine("Cockpit preparation - electrical power");
         foreach (var step in CockpitPreparationProcedure.Evaluate(_state))
         {
             PrintChecklistItem(step.Label, step.Complete, step.ActionHint);
@@ -7356,7 +7449,7 @@ internal sealed class CopilotService : Form
 
     private static void PrintChecklistItem(string label, bool complete, string? note = null)
     {
-        Console.WriteLine($"[{(complete ? "x" : " ")}] {label}{(note == null || complete ? "" : $" â€” {note}")}");
+        Console.WriteLine($"[{(complete ? "x" : " ")}] {label}{(note == null || complete ? "" : $" - {note}")}");
     }
 
     private void PrintFbwBridgeStatus()
@@ -7495,16 +7588,28 @@ internal sealed class CopilotService : Form
         topStatusBar.Controls.Add(_versionBadgeLabel);
         root.Controls.Add(topStatusBar);
 
-        var statusPanel = new TableLayoutPanel
+        var statusShell = new TableLayoutPanel
         {
             Dock = DockStyle.Top,
             AutoSize = true,
             ColumnCount = 2,
             Margin = new Padding(0, 0, 0, 14)
         };
+        statusShell.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        statusShell.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 260));
+        root.Controls.Add(statusShell);
+
+        var statusPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 2,
+            Margin = new Padding(0, 0, 12, 0)
+        };
         statusPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
         statusPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        root.Controls.Add(statusPanel);
+        statusShell.Controls.Add(statusPanel, 0, 0);
+        statusShell.Controls.Add(BuildAircraftCard(), 1, 0);
 
         _connectionLabel = AddDashboardRow(statusPanel, "Simulator", "Connecting...");
         _aircraftLabel = AddDashboardRow(statusPanel, "Aircraft", "Waiting for state...");
@@ -7516,7 +7621,7 @@ internal sealed class CopilotService : Form
         _versionLabel = AddDashboardRow(
             statusPanel,
             "Version",
-            $"{GetApplicationVersion()} â€” checking GitHub releases...");
+            $"{GetApplicationVersion()} - checking GitHub releases...");
 
         var settingsPanel = new FlowLayoutPanel
         {
@@ -7698,7 +7803,7 @@ internal sealed class CopilotService : Form
 
         var timelineGroup = new GroupBox
         {
-            Text = "Checklist and assistance flow â€” gate to gate",
+            Text = "Checklist and assistance flow - gate to gate",
             Dock = DockStyle.Fill,
             Padding = new Padding(8)
         };
@@ -7722,13 +7827,33 @@ internal sealed class CopilotService : Form
         }
         _flowList.SelectedIndex = 0;
         timelineLayout.Controls.Add(_flowList, 0, 0);
+        var startPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            ColumnCount = 1,
+            RowCount = 1,
+            Margin = new Padding(12, 0, 0, 0)
+        };
+        startPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
         var startSelectedFlow = new Button
         {
-            Text = "Start selected flow",
-            AutoSize = true,
-            Anchor = AnchorStyles.Top,
-            Margin = new Padding(10, 4, 0, 0)
+            Text = "▶ Start selected flow",
+            Width = 190,
+            Height = 58,
+            Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
+            Margin = new Padding(0, 4, 0, 6),
+            BackColor = System.Drawing.Color.FromArgb(39, 130, 87),
+            ForeColor = System.Drawing.Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Font = new System.Drawing.Font(
+                Font.FontFamily,
+                10,
+                System.Drawing.FontStyle.Bold),
+            UseVisualStyleBackColor = false
         };
+        startSelectedFlow.FlatAppearance.BorderSize = 0;
         startSelectedFlow.Click += (_, _) =>
         {
             if (_flowList.SelectedItem is ProcedureListItem item)
@@ -7736,7 +7861,8 @@ internal sealed class CopilotService : Form
                 _commands.Enqueue($"procedure start {item.Definition.Id}");
             }
         };
-        timelineLayout.Controls.Add(startSelectedFlow, 1, 0);
+        startPanel.Controls.Add(startSelectedFlow, 0, 0);
+        timelineLayout.Controls.Add(startPanel, 1, 0);
         timelineGroup.Controls.Add(timelineLayout);
         root.Controls.Add(timelineGroup);
 
@@ -8360,6 +8486,55 @@ internal sealed class CopilotService : Form
         return valueLabel;
     }
 
+    private Control BuildAircraftCard()
+    {
+        var card = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 1,
+            RowCount = 4,
+            Padding = new Padding(8),
+            BackColor = System.Drawing.Color.White,
+            Margin = new Padding(0, 0, 0, 0)
+        };
+        card.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        card.RowStyles.Add(new RowStyle(SizeType.Absolute, 92));
+        card.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        card.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        card.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
+        _aircraftThumbnailBox = new PictureBox
+        {
+            Dock = DockStyle.Fill,
+            BackColor = System.Drawing.Color.FromArgb(226, 232, 240),
+            SizeMode = PictureBoxSizeMode.Zoom,
+            Cursor = Cursors.Hand,
+            Margin = new Padding(0, 0, 0, 8)
+        };
+        _aircraftThumbnailBox.Click += (_, _) => CycleAircraftCardImage();
+        card.Controls.Add(_aircraftThumbnailBox, 0, 0);
+
+        _aircraftCardTitleLabel = NewDashboardLabel("Aircraft loading...");
+        _aircraftCardTitleLabel.Font = new System.Drawing.Font(
+            Font.FontFamily,
+            9,
+            System.Drawing.FontStyle.Bold);
+        _aircraftCardTitleLabel.MaximumSize = new System.Drawing.Size(235, 0);
+        card.Controls.Add(_aircraftCardTitleLabel, 0, 1);
+
+        _aircraftCardVariationLabel = NewDashboardLabel("");
+        _aircraftCardVariationLabel.MaximumSize = new System.Drawing.Size(235, 0);
+        card.Controls.Add(_aircraftCardVariationLabel, 0, 2);
+
+        _aircraftCardSourceLabel = NewDashboardLabel("Waiting for simulator aircraft");
+        _aircraftCardSourceLabel.ForeColor = System.Drawing.Color.DimGray;
+        _aircraftCardSourceLabel.MaximumSize = new System.Drawing.Size(235, 0);
+        card.Controls.Add(_aircraftCardSourceLabel, 0, 3);
+
+        return card;
+    }
+
     private static Label NewDashboardLabel(string text) =>
         new()
         {
@@ -8417,6 +8592,7 @@ internal sealed class CopilotService : Form
         }
 
         _aircraftLabel!.Text = _state.Title;
+        UpdateAircraftCard(_state);
         _phaseLabel!.Text = OperationalPhaseDetector.Detect(_state).ToString();
         SetStatusBadge(
             _simBadgeLabel,
@@ -8464,7 +8640,7 @@ internal sealed class CopilotService : Form
                 : "PMDG NG3 SDK waiting - enable [SDK] EnableDataBroadcast=1 in 737_Options.ini"
             : _mobiFlightReady
                 ? "MobiFlight connected"
-                : "MobiFlight not connected â€” aircraft controls unavailable";
+                : "MobiFlight not connected - aircraft controls unavailable";
         _adapterLabel.ForeColor = _state.IsSupportedBoeing737
             ? _pmdgNg3DataReady
                 ? System.Drawing.Color.DarkGreen
@@ -8502,7 +8678,7 @@ internal sealed class CopilotService : Form
         _procedureLabel!.Text =
             definition == null
                 ? "None"
-                : $"{definition.Name} â€” {_procedureRunner.Status} â€” {definition.AutomationSummary}";
+                : $"{definition.Name} - {_procedureRunner.Status} - {definition.AutomationSummary}";
         _stepLabel!.Text =
             currentStep == null
                 ? "No active step"
@@ -8524,11 +8700,172 @@ internal sealed class CopilotService : Form
             _state,
             _completedProcedureIds);
         _recommendationLabel!.Text =
-            $"{recommendation.Procedure.Name} â€” {recommendation.Reason}";
+            $"{recommendation.Procedure.Name} - {recommendation.Reason}";
         _recommendationLabel.ForeColor = recommendation.Overdue
             ? System.Drawing.Color.DarkRed
             : System.Drawing.Color.DarkBlue;
         RefreshFlowList(recommendation.Procedure.Id, definition?.Id);
+    }
+
+    private void UpdateAircraftCard(AircraftState state)
+    {
+        if (_aircraftCardTitleLabel == null
+            || _aircraftCardVariationLabel == null
+            || _aircraftCardSourceLabel == null
+            || _aircraftThumbnailBox == null
+            || string.Equals(_aircraftCardTitle, state.Title, StringComparison.Ordinal)
+            && string.Equals(_aircraftCardResolvedTitle, state.Title, StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _aircraftCardTitle = state.Title;
+        _aircraftCardResolvedTitle = null;
+        _aircraftCardImagePaths = Array.Empty<string>();
+        _aircraftCardImageIndex = 0;
+        _aircraftIdentityLookupCancellation?.Cancel();
+        _aircraftIdentityLookupCancellation?.Dispose();
+        _aircraftIdentityLookupCancellation = new CancellationTokenSource();
+        var cancellation = _aircraftIdentityLookupCancellation.Token;
+        var requestedTitle = state.Title;
+
+        SetAircraftThumbnail(null);
+        _aircraftCardTitleLabel.Text = state.AircraftFamilyLabel;
+        _aircraftCardVariationLabel.Text = state.Title;
+        _aircraftCardSourceLabel.Text = "Searching aircraft thumbnail...";
+
+        Task.Run(
+            () =>
+            {
+                var identity = _aircraftIdentityResolver.Resolve(requestedTitle);
+                System.Drawing.Image? image = null;
+                var imagePaths = identity?.ThumbnailPaths ?? Array.Empty<string>();
+                if (imagePaths.FirstOrDefault() is { Length: > 0 } thumbnailPath
+                    && File.Exists(thumbnailPath))
+                {
+                    image = LoadImageWithoutLocking(thumbnailPath);
+                }
+
+                return new AircraftCardLookupResult(requestedTitle, identity, imagePaths, image);
+            },
+            cancellation).ContinueWith(
+            task =>
+            {
+                if (task.IsCanceled || cancellation.IsCancellationRequested)
+                {
+                    return;
+                }
+                if (task.IsFaulted)
+                {
+                    ApplyAircraftCardResult(new AircraftCardLookupResult(requestedTitle, null, Array.Empty<string>(), null));
+                    return;
+                }
+
+                ApplyAircraftCardResult(task.Result);
+            },
+            CancellationToken.None,
+            TaskContinuationOptions.None,
+            TaskScheduler.FromCurrentSynchronizationContext());
+    }
+
+    private void ApplyAircraftCardResult(AircraftCardLookupResult result)
+    {
+        if (_aircraftCardTitleLabel == null
+            || _aircraftCardVariationLabel == null
+            || _aircraftCardSourceLabel == null
+            || !string.Equals(_aircraftCardTitle, result.Title, StringComparison.Ordinal))
+        {
+            result.Image?.Dispose();
+            return;
+        }
+
+        _aircraftCardResolvedTitle = result.Title;
+        _aircraftCardImagePaths = result.ImagePaths;
+        _aircraftCardImageIndex = 0;
+        var identity = result.Identity;
+        if (identity == null)
+        {
+            SetAircraftThumbnail(result.Image);
+            _aircraftCardSourceLabel.Text = "No package thumbnail found";
+            return;
+        }
+
+        _aircraftCardTitleLabel.Text = identity.DisplayName;
+        _aircraftCardVariationLabel.Text =
+            string.IsNullOrWhiteSpace(identity.DisplayVariation)
+                ? identity.Title
+                : identity.DisplayVariation;
+
+        if (result.Image != null)
+        {
+            SetAircraftThumbnail(result.Image);
+            _aircraftCardSourceLabel.Text = result.ImagePaths.Count > 1
+                ? $"Aircraft package image 1/{result.ImagePaths.Count} - click to cycle"
+                : "Aircraft package thumbnail";
+        }
+        else
+        {
+            SetAircraftThumbnail(null);
+            _aircraftCardSourceLabel.Text = "Package matched, no thumbnail";
+        }
+    }
+
+    private void SetAircraftThumbnail(System.Drawing.Image? image)
+    {
+        if (_aircraftThumbnailBox == null)
+        {
+            image?.Dispose();
+            return;
+        }
+
+        var previous = _aircraftThumbnailBox.Image;
+        _aircraftThumbnailBox.Image = image;
+        previous?.Dispose();
+    }
+
+    private void CycleAircraftCardImage()
+    {
+        if (_aircraftCardImagePaths.Count <= 1
+            || _aircraftCardSourceLabel == null)
+        {
+            return;
+        }
+
+        for (var attempt = 0; attempt < _aircraftCardImagePaths.Count; attempt++)
+        {
+            _aircraftCardImageIndex =
+                (_aircraftCardImageIndex + 1) % _aircraftCardImagePaths.Count;
+            var path = _aircraftCardImagePaths[_aircraftCardImageIndex];
+            if (!File.Exists(path))
+            {
+                continue;
+            }
+
+            var image = LoadImageWithoutLocking(path);
+            if (image == null)
+            {
+                continue;
+            }
+
+            SetAircraftThumbnail(image);
+            _aircraftCardSourceLabel.Text =
+                $"Aircraft package image {_aircraftCardImageIndex + 1}/{_aircraftCardImagePaths.Count} - click to cycle";
+            return;
+        }
+    }
+
+    private static System.Drawing.Image? LoadImageWithoutLocking(string path)
+    {
+        try
+        {
+            using var stream = File.OpenRead(path);
+            using var image = System.Drawing.Image.FromStream(stream);
+            return new System.Drawing.Bitmap(image);
+        }
+        catch
+        {
+            return null;
+        }
     }
 
     private void UpdateProcedureStatusBadge()
@@ -8640,9 +8977,15 @@ internal sealed class CopilotService : Form
             "landing-config-point" =>
                 $"landing-config gate: distance <= {state.ApproachLandingConfigDistanceNm} NM or radio altitude <= {state.ApproachLandingConfigAltitudeAglFeet:N0} ft.",
             "landing-config-speed" =>
-                $"Landing configuration speed safe: IAS {state.IndicatedAirspeedKnots:F0} kt <= {state.EffectiveApproachFlaps3SpeedKnots} kt.",
+                state.IsSupportedBoeing737
+                    ? $"landing flaps speed safe: IAS {state.IndicatedAirspeedKnots:F0} kt <= 195 kt; landing target VREF+5 {state.EffectiveBoeingApproachTargetSpeedKnots} kt."
+                    : $"Landing configuration speed safe: IAS {state.IndicatedAirspeedKnots:F0} kt <= {state.EffectiveApproachFlaps3SpeedKnots} kt.",
             "flaps-full-speed" =>
                 $"Flaps FULL speed safe: IAS {state.IndicatedAirspeedKnots:F0} kt <= {state.EffectiveApproachFlapsFullSpeedKnots} kt.",
+            "landing-data-set" =>
+                $"FMC landing data: flaps {(state.BoeingLandingFlaps.HasValue ? state.BoeingLandingFlaps.Value.ToString() : "not set")}, VREF {(state.BoeingLandingVrefKnots.HasValue ? state.BoeingLandingVrefKnots.Value.ToString() : "not set")}.",
+            "stable-approach" =>
+                $"stable by 1,000 ft AGL: RA {state.RadioHeightFeet:F0} ft, IAS {state.IndicatedAirspeedKnots:F0} kt, target {state.EffectiveBoeingApproachTargetSpeedKnots} kt, gear {(state.GearHandleDown ? "DOWN" : "not down")}, flaps {(state.BoeingLandingFlapsSet ? "landing" : "not landing")}, speedbrake {(state.GroundSpoilersArmed ? "ARMED" : "not armed")}.",
             "fo-approaching-minimums" =>
                 $"radio altitude at DH + 100 ft. RA {state.RadioHeightFeet:F0} ft, DH {state.DecisionHeightFeet:F0} ft.",
             "fo-minimums" =>
@@ -8730,7 +9073,7 @@ internal sealed class CopilotService : Form
     {
         if (state.TelemetryIssues.Count > 0)
         {
-            return "READBACK INCONSISTENT â€” " +
+            return "READBACK INCONSISTENT - " +
                    string.Join(" ", state.TelemetryIssues);
         }
 
@@ -8748,19 +9091,25 @@ internal sealed class CopilotService : Form
             "fo-v1" => $"{flight} | target V1 {state.TakeoffV1SpeedKnots} kt",
             "fo-rotate" => $"{flight} | target VR {state.TakeoffRotateSpeedKnots} kt",
             "approach-config-start" =>
-                $"{flight} | trigger â‰¤{state.ApproachFlaps1AltitudeFeet:N0} ft indicated or distance gate",
+                $"{flight} | trigger <={state.ApproachFlaps1AltitudeFeet:N0} ft indicated or distance gate",
             "flaps-one-speed" =>
-                $"{flight} | wait IAS â‰¤{state.EffectiveApproachFlaps1SpeedKnots} kt for CONFIG 1",
+                $"{flight} | wait IAS <={state.EffectiveApproachFlaps1SpeedKnots} kt for CONFIG 1",
             "flaps-two-speed" =>
-                $"{flight} | wait IAS â‰¤{state.EffectiveApproachFlaps2SpeedKnots} kt for CONFIG 2",
+                $"{flight} | wait IAS <={state.EffectiveApproachFlaps2SpeedKnots} kt for CONFIG 2",
             "gear-down-point" =>
-                $"{flight} | trigger â‰¤{state.ApproachGearAltitudeAglFeet:N0} ft AGL or distance gate",
+                $"{flight} | trigger <={state.ApproachGearAltitudeAglFeet:N0} ft AGL or distance gate",
             "landing-config-point" =>
-                $"{flight} | trigger â‰¤{state.ApproachLandingConfigAltitudeAglFeet:N0} ft AGL or distance gate",
+                $"{flight} | trigger <={state.ApproachLandingConfigAltitudeAglFeet:N0} ft AGL or distance gate",
             "landing-config-speed" =>
-                $"{flight} | wait IAS â‰¤{state.EffectiveApproachFlaps3SpeedKnots} kt for CONFIG 3",
+                state.IsSupportedBoeing737
+                    ? $"{flight} | wait IAS <=195 kt for landing flaps | target VREF+5 {state.EffectiveBoeingApproachTargetSpeedKnots} kt"
+                    : $"{flight} | wait IAS <={state.EffectiveApproachFlaps3SpeedKnots} kt for CONFIG 3",
             "flaps-full-speed" =>
-                $"{flight} | wait IAS â‰¤{state.EffectiveApproachFlapsFullSpeedKnots} kt for FULL",
+                $"{flight} | wait IAS <={state.EffectiveApproachFlapsFullSpeedKnots} kt for FULL",
+            "landing-data-set" =>
+                $"{flight} | FMC landing flaps {(state.BoeingLandingFlaps.HasValue ? state.BoeingLandingFlaps.Value.ToString() : "not set")} | VREF {(state.BoeingLandingVrefKnots.HasValue ? state.BoeingLandingVrefKnots.Value.ToString() : "not set")}",
+            "stable-approach" =>
+                $"{flight} | RA {state.RadioHeightFeet:F0} ft | target {state.EffectiveBoeingApproachTargetSpeedKnots} kt | stable {(state.BoeingApproachStable ? "YES" : "NO")}",
             "fo-approaching-minimums" or "fo-minimums" =>
                 $"{flight} | RA {state.RadioHeightFeet:F0} ft | DH {state.DecisionHeightFeet:F0} ft",
             "fo-flaps-one" or "fo-flaps-two" or "fo-flaps-three" or "fo-flaps-full"
@@ -8801,7 +9150,7 @@ internal sealed class CopilotService : Form
             if (response.StatusCode == HttpStatusCode.NotFound)
             {
                 _versionLabel.Text =
-                    $"{GetApplicationVersion()} â€” no GitHub release published";
+                    $"{GetApplicationVersion()} - no GitHub release published";
                 return;
             }
             response.EnsureSuccessStatusCode();
@@ -8813,7 +9162,7 @@ internal sealed class CopilotService : Form
                 || !Version.TryParse(match.Groups["version"].Value, out var latest))
             {
                 _versionLabel.Text =
-                    $"{GetApplicationVersion()} â€” release status unavailable";
+                    $"{GetApplicationVersion()} - release status unavailable";
                 return;
             }
 
@@ -8821,8 +9170,8 @@ internal sealed class CopilotService : Form
                 Assembly.GetExecutingAssembly().GetName().Version
                 ?? new Version();
             _versionLabel.Text = latest > current
-                ? $"{GetApplicationVersion()} â€” update available: {latest}"
-                : $"{GetApplicationVersion()} â€” up to date";
+                ? $"{GetApplicationVersion()} - update available: {latest}"
+                : $"{GetApplicationVersion()} - up to date";
             _versionLabel.ForeColor = latest > current
                 ? System.Drawing.Color.DarkOrange
                 : System.Drawing.Color.DarkGreen;
@@ -8830,7 +9179,7 @@ internal sealed class CopilotService : Form
         catch (Exception ex)
         {
             _versionLabel.Text =
-                $"{GetApplicationVersion()} â€” update check unavailable";
+                $"{GetApplicationVersion()} - update check unavailable";
             AppLog.Write($"GitHub update check failed: {ex.Message}");
         }
     }
@@ -8963,6 +9312,10 @@ internal sealed class CopilotService : Form
             }
             _nativePulseTimers.Clear();
             StopReplay();
+            _aircraftIdentityLookupCancellation?.Cancel();
+            _aircraftIdentityLookupCancellation?.Dispose();
+            _aircraftIdentityLookupCancellation = null;
+            SetAircraftThumbnail(null);
             _flightTelemetryStore.Dispose();
             _voiceCalloutQueue?.Dispose();
             _voiceCalloutQueue = null;
@@ -8996,6 +9349,26 @@ internal sealed class CopilotService : Form
         public override string ToString() =>
             System.IO.Path.GetFileNameWithoutExtension(Path)
                 .Replace("flight-", "Flight ");
+    }
+
+    private sealed class AircraftCardLookupResult
+    {
+        public AircraftCardLookupResult(
+            string title,
+            Msfs2024Ai.Copilot.AircraftIdentity.AircraftIdentity? identity,
+            IReadOnlyList<string> imagePaths,
+            System.Drawing.Image? image)
+        {
+            Title = title;
+            Identity = identity;
+            ImagePaths = imagePaths;
+            Image = image;
+        }
+
+        public string Title { get; }
+        public Msfs2024Ai.Copilot.AircraftIdentity.AircraftIdentity? Identity { get; }
+        public IReadOnlyList<string> ImagePaths { get; }
+        public System.Drawing.Image? Image { get; }
     }
 
     private sealed class PendingBeaconProcedure
@@ -9144,8 +9517,8 @@ internal sealed class CopilotService : Form
         }
 
         public override string ToString() =>
-            $"{(Completed ? "âœ“" : Active ? "â–¶" : Recommended ? "â†’" : " ")} " +
-            $"{Definition.Name} â€” {Definition.AutomationSummary}";
+            $"{(Completed ? "[DONE]" : Active ? "[ACTIVE]" : Recommended ? "[NEXT]" : " ")} " +
+            $"{Definition.Name} - {Definition.AutomationSummary}";
     }
 }
 
@@ -9155,3 +9528,4 @@ internal static class DisplayExtensions
     public static string ToYesNo(this bool value) => value ? "YES" : "NO";
     public static string ToSetReleased(this bool value) => value ? "SET" : "RELEASED";
 }
+

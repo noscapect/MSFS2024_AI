@@ -49,6 +49,7 @@ internal sealed class AircraftState
     public double ApuFlapPercent { get; set; }
     public bool ApuGeneratorActive { get; set; }
     public bool ApuGeneratorSwitchOn { get; set; }
+    public bool ApuGeneratorPowerEstablished { get; set; }
     public bool EngineGeneratorsOn { get; set; }
     public bool ApuGenOffBus { get; set; }
     public bool AcTransferBus1Powered { get; set; }
@@ -106,6 +107,7 @@ internal sealed class AircraftState
     public double FlapsHandleIndex { get; set; }
     public int? BoeingTakeoffFlaps { get; set; }
     public int? BoeingLandingFlaps { get; set; }
+    public int? BoeingLandingVrefKnots { get; set; }
     public double LeftFlapPositionPercent { get; set; }
     public double RightFlapPositionPercent { get; set; }
     public bool FlapReadbackSane { get; set; } = true;
@@ -262,6 +264,25 @@ internal sealed class AircraftState
     public bool BoeingLandingFlapsSet =>
         !IsPmdg737
         || FlapsAtBoeingSetting(BoeingLandingFlaps.GetValueOrDefault(30));
+    public bool BoeingLandingDataSet =>
+        !IsPmdg737
+        || BoeingLandingFlaps.GetValueOrDefault() > 0
+        && BoeingLandingVrefKnots.GetValueOrDefault() > 0;
+    public int EffectiveBoeingApproachTargetSpeedKnots =>
+        IsPmdg737 && BoeingLandingVrefKnots.GetValueOrDefault() > 0
+            ? BoeingLandingVrefKnots.GetValueOrDefault() + 5
+            : ApproachLandingConfigSpeedKnots;
+    public bool BoeingLandingSpeedStable =>
+        !IsPmdg737
+        || IndicatedAirspeedKnots > 0
+        && IndicatedAirspeedKnots <= EffectiveBoeingApproachTargetSpeedKnots + 10;
+    public bool BoeingApproachStable =>
+        !IsPmdg737
+        || BoeingLandingDataSet
+        && GearHandleDown
+        && BoeingLandingFlapsSet
+        && GroundSpoilersArmed
+        && BoeingLandingSpeedStable;
     public bool GearHandleUp =>
         GearHandlePosition.HasValue
             ? GearHandlePosition.Value <= 0.1

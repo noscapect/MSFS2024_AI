@@ -83,6 +83,8 @@ internal sealed class CopilotService : Form
     private DateTime? _pmdgCommandedLogoLightUtc;
     private float? _pmdgCommandedPositionStrobeSelector;
     private DateTime? _pmdgCommandedPositionStrobeUtc;
+    private float? _pmdgCommandedLandingLightSelector;
+    private DateTime? _pmdgCommandedLandingLightUtc;
     private float? _pmdgCommandedEmergencyExitSelector;
     private DateTime? _pmdgCommandedEmergencyExitUtc;
     private bool NativeStateReady =>
@@ -290,9 +292,12 @@ internal sealed class CopilotService : Form
     private NumericUpDown? _takeoffV1Box;
     private NumericUpDown? _takeoffRotateBox;
     private CheckBox? _voiceCalloutsBox;
+    private CheckBox? _autolandAssistBox;
     private ComboBox? _replayFlightBox;
     private ListBox? _eventLog;
     private ListBox? _flowList;
+    private Button? _startSelectedFlowButton;
+    private Button? _confirmCompletedButton;
 
     private enum Definition
     {
@@ -520,6 +525,8 @@ internal sealed class CopilotService : Form
         FuelSystemValveOpen,
         FuelSystemValveClose,
         CabinSeatbeltsToggle,
+        GearUp,
+        GearDown,
         RotorBrake
     }
 
@@ -610,6 +617,14 @@ internal sealed class CopilotService : Form
         public double GearHandle;
         public double PitchDegrees;
         public double AutopilotMaster;
+        public double AutopilotApproachHold;
+        public double AutopilotGlideslopeHold;
+        public double Nav1HasLocalizer;
+        public double Nav1HasGlideslope;
+        public double Nav1ActiveFrequency;
+        public double Nav2ActiveFrequency;
+        public double Nav1Course;
+        public double Nav2Course;
         public double Exit1Open;
         public double Exit1Type;
         public double Exit1PosX;
@@ -975,6 +990,14 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "GEAR HANDLE POSITION", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "PLANE PITCH DEGREES", "Degrees", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "AUTOPILOT MASTER", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "AUTOPILOT APPROACH HOLD", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "AUTOPILOT GLIDESLOPE HOLD", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "NAV HAS LOCALIZER:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "NAV HAS GLIDE SLOPE:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "NAV ACTIVE FREQUENCY:1", "MHz", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "NAV ACTIVE FREQUENCY:2", "MHz", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "NAV OBS:1", "Degrees", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "NAV OBS:2", "Degrees", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         for (var index = 1; index <= 8; index++)
         {
             sender.AddToDataDefinition(Definition.AircraftState, $"EXIT OPEN:{index}", "Percent", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
@@ -1005,6 +1028,8 @@ internal sealed class CopilotService : Form
         sender.MapClientEventToSimEvent(CopilotEvent.FuelSystemValveOpen, "FUELSYSTEM_VALVE_OPEN");
         sender.MapClientEventToSimEvent(CopilotEvent.FuelSystemValveClose, "FUELSYSTEM_VALVE_CLOSE");
         sender.MapClientEventToSimEvent(CopilotEvent.CabinSeatbeltsToggle, "CABIN_SEATBELTS_ALERT_SWITCH_TOGGLE");
+        sender.MapClientEventToSimEvent(CopilotEvent.GearUp, "GEAR_UP");
+        sender.MapClientEventToSimEvent(CopilotEvent.GearDown, "GEAR_DOWN");
         sender.MapClientEventToSimEvent(CopilotEvent.RotorBrake, "ROTOR_BRAKE");
         InitializeMobiFlight(sender);
         InitializePmdgNg3Sdk(sender);
@@ -2456,6 +2481,14 @@ internal sealed class CopilotService : Form
                     : raw.GearHandle != 0,
             PitchDegrees = raw.PitchDegrees,
             AutopilotMasterOn = raw.AutopilotMaster != 0,
+            AutopilotApproachHoldOn = raw.AutopilotApproachHold != 0,
+            AutopilotGlideslopeHoldOn = raw.AutopilotGlideslopeHold != 0,
+            Nav1HasLocalizer = raw.Nav1HasLocalizer != 0,
+            Nav1HasGlideslope = raw.Nav1HasGlideslope != 0,
+            Nav1ActiveFrequencyMhz = raw.Nav1ActiveFrequency,
+            Nav2ActiveFrequencyMhz = raw.Nav2ActiveFrequency,
+            Nav1CourseDegrees = raw.Nav1Course,
+            Nav2CourseDegrees = raw.Nav2Course,
             Adirs1SelectorState = isFlyByWireA320Neo
                 ? ResolveFbwSelectorState(_fbwCommandedAdirs1Selector, _fbwCommandedAdirs1SelectorUtc, _fbwAdirs1SelectorTyped, _fbwAdirs1Selector)
                 : isPmdg737 && pmdg != null
@@ -2590,7 +2623,10 @@ internal sealed class CopilotService : Form
                     _fbwCommandedLandingLightSelectorUtc,
                     raw.FbwLeftLandingLightCircuit)
                 : isPmdg737 && pmdg != null
-                    ? pmdg.LeftLandingLight
+                    ? ResolvePmdgCommandedSelectorState(
+                        _pmdgCommandedLandingLightSelector,
+                        _pmdgCommandedLandingLightUtc,
+                        pmdg.LeftLandingLight)
                 : _nativeLeftLandingLightSelector,
             RightLandingLightSelectorPosition = isFlyByWireA320Neo
                 ? ResolveFbwLandingLightSelectorPosition(
@@ -2598,7 +2634,10 @@ internal sealed class CopilotService : Form
                     _fbwCommandedLandingLightSelectorUtc,
                     raw.FbwRightLandingLightCircuit)
                 : isPmdg737 && pmdg != null
-                    ? pmdg.RightLandingLight
+                    ? ResolvePmdgCommandedSelectorState(
+                        _pmdgCommandedLandingLightSelector,
+                        _pmdgCommandedLandingLightUtc,
+                        pmdg.RightLandingLight)
                 : _nativeRightLandingLightSelector,
             RunwayTurnoffLightsOn = isPmdg737 && pmdg != null
                 && pmdg.LeftRunwayTurnoffLight
@@ -3965,17 +4004,38 @@ internal sealed class CopilotService : Form
 
     private void SetPmdgPositionStrobe(uint position)
     {
-        SendPmdgNg3Control(123, position);
-        _pmdgCommandedPositionStrobeSelector = position;
-        _pmdgCommandedPositionStrobeUtc = DateTime.UtcNow;
-        if (_state != null)
+        var current = _pmdgNg3State?.PositionStrobeSelector;
+        var actionCode = !current.HasValue || position >= current.Value
+            ? 7u
+            : 8u;
+        var clicks = current.HasValue
+            ? Math.Max(1, Math.Abs((int)position - current.Value))
+            : 2;
+
+        clicks = Math.Min(3, clicks + 1);
+
+        for (var i = 0; i < clicks; i++)
         {
-            _state.NavigationLightsOn = position != 1;
-            _state.StrobeSelectorPosition = position == 2 ? 0 : position == 0 ? 1 : 2;
+            if (i == 0)
+            {
+                SendPmdgRotorBrakeSwitch(123, actionCode);
+            }
+            else
+            {
+                SchedulePmdgRotorBrakeSwitch(123, actionCode, 300 * i);
+            }
         }
 
+        // Keep the official SDK control as a fallback, but do not use
+        // optimistic command-backed verification here. The takeoff flow must
+        // wait for PMDG's actual position/strobe selector readback so it cannot
+        // mark strobes complete while the physical cockpit switch stays steady.
+        SchedulePmdgNg3Control(123, position, 1000);
+        _pmdgCommandedPositionStrobeSelector = null;
+        _pmdgCommandedPositionStrobeUtc = null;
+
         AppLog.Write(
-            $"Executed PMDG position/strobe selector command: position {position}; command-backed verification active.");
+            $"Executed PMDG position/strobe ROTOR_BRAKE command: switch id 123 action {actionCode}, {clicks} click(s) toward position {position}.");
         FinishOneShot();
     }
 
@@ -4130,10 +4190,16 @@ internal sealed class CopilotService : Form
         // MAIN_GearLever = 0 UP, 1 OFF, 2 DOWN.
         //
         // PMDG's actual cockpit behavior drives the lever through K:ROTOR_BRAKE
-        // switch id 455. The SDK event-offset/direct target path can be ignored
-        // or can leave the lever in OFF, so drive the real detents instead:
-        // action 7 = WheelUp/toward UP, action 8 = WheelDown/toward DOWN.
-        var actionCode = position == 0 ? 7u : 8u;
+        // switch id 455. The SDK event-offset/direct target path can be ignored.
+        //
+        // The aircraft behavior applies the vertical detent movement through a
+        // drag gesture. Sending only LeftSingle/LeftRelease can be ignored by
+        // the PMDG cockpit, so reproduce the whole sequence:
+        //   upper-half LeftSingle/Move/LeftRelease = actions 1/3/4, toward UP
+        //   lower-half LeftSingle/Move/LeftRelease = actions 2/3/5, toward DOWN
+        var pressAction = position == 0 ? 1u : 2u;
+        var releaseAction = position == 0 ? 4u : 5u;
+        const uint moveAction = 3;
         var clicks = current.HasValue
             ? Math.Max(1, Math.Abs((int)position - current.Value))
             : 3;
@@ -4143,21 +4209,65 @@ internal sealed class CopilotService : Form
         // move from DOWN -> OFF or UP -> OFF.
         clicks = Math.Min(3, clicks + 1);
 
+        SendPmdgGearFallback(position, 0);
+        SendPmdgNg3Control(455, position);
         for (var i = 0; i < clicks; i++)
         {
-            if (i == 0)
+            var baseDelay = 420 * i;
+            if (baseDelay == 0)
             {
-                SendPmdgRotorBrakeSwitch(455, actionCode);
+                SendPmdgRotorBrakeSwitch(455, pressAction);
+                SchedulePmdgRotorBrakeSwitch(455, moveAction, 90);
+                SchedulePmdgRotorBrakeSwitch(455, releaseAction, 180);
+                continue;
             }
-            else
-            {
-                SchedulePmdgRotorBrakeSwitch(455, actionCode, 300 * i);
-            }
+
+            SchedulePmdgRotorBrakeSwitch(455, pressAction, baseDelay);
+            SchedulePmdgRotorBrakeSwitch(455, moveAction, baseDelay + 90);
+            SchedulePmdgRotorBrakeSwitch(455, releaseAction, baseDelay + 180);
         }
+        SendPmdgGearFallback(position, 1150);
+        SchedulePmdgNg3Control(455, position, 1250);
 
         AppLog.Write(
-            $"Executed PMDG gear lever ROTOR_BRAKE command: switch id 455 action {actionCode}, {clicks} click(s) toward position {position}.");
+            $"Executed PMDG gear lever command: switch id 455 press/move/release {pressAction}/{moveAction}/{releaseAction}, {clicks} detent move(s), fallback {(position == 0 ? "GEAR_UP" : "GEAR_DOWN")}.");
         FinishOneShot();
+    }
+
+    private void SendPmdgGearFallback(uint position, int delayMs)
+    {
+        var eventId = position == 0 ? CopilotEvent.GearUp : CopilotEvent.GearDown;
+        if (delayMs <= 0)
+        {
+            TransmitGearEvent(eventId);
+            return;
+        }
+
+        var timer = new System.Windows.Forms.Timer { Interval = delayMs };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            TransmitGearEvent(eventId);
+            _nativePulseTimers.Remove(timer);
+            timer.Dispose();
+        };
+        _nativePulseTimers.Add(timer);
+        timer.Start();
+    }
+
+    private void TransmitGearEvent(CopilotEvent eventId)
+    {
+        if (_simConnect == null)
+        {
+            return;
+        }
+
+        _simConnect.TransmitClientEvent(
+            SimConnect.SIMCONNECT_OBJECT_ID_USER,
+            eventId,
+            0,
+            Priority.Highest,
+            SIMCONNECT_EVENT_FLAG.GROUPID_IS_PRIORITY);
     }
 
     private void SetPmdgTaxiLight(bool on)
@@ -4176,6 +4286,15 @@ internal sealed class CopilotService : Form
 
     private void SetPmdgLandingLights(bool on)
     {
+        var commandedPosition = on ? 2f : 0f;
+        _pmdgCommandedLandingLightSelector = commandedPosition;
+        _pmdgCommandedLandingLightUtc = DateTime.UtcNow;
+        if (_state != null)
+        {
+            _state.LeftLandingLightSelectorPosition = commandedPosition;
+            _state.RightLandingLightSelectorPosition = commandedPosition;
+        }
+
         if (on)
         {
             SendPmdgRotorBrakeSwitch(113, 1);
@@ -4187,7 +4306,7 @@ internal sealed class CopilotService : Form
             SendPmdgNg3Control(113, 1);
             SendPmdgNg3Control(114, 1);
             AppLog.Write(
-                "Executed PMDG landing light ROTOR_BRAKE command: retractable switch ids 113/114 left-single toward ON; fixed lights ON.");
+                "Executed PMDG landing light ROTOR_BRAKE command: retractable switch ids 113/114 left-single toward ON; command-backed verification active.");
         }
         else
         {
@@ -4198,7 +4317,7 @@ internal sealed class CopilotService : Form
             SendPmdgNg3Control(113, 0);
             SendPmdgNg3Control(114, 0);
             AppLog.Write(
-                "Executed PMDG landing light command: retractable target RETRACT (0), fixed lights OFF.");
+                "Executed PMDG landing light command: retractable target RETRACT (0), fixed lights OFF; command-backed verification active.");
         }
         FinishOneShot();
     }
@@ -7670,6 +7789,22 @@ internal sealed class CopilotService : Form
         };
         settingsPanel.Controls.Add(_voiceCalloutsBox);
 
+        _autolandAssistBox = new CheckBox
+        {
+            Text = "Autoland assist",
+            AutoSize = true,
+            Checked = _settings.EnableAutolandAssist,
+            Margin = new Padding(18, 5, 0, 0)
+        };
+        _autolandAssistBox.CheckedChanged += (_, _) =>
+        {
+            _settings.EnableAutolandAssist = _autolandAssistBox.Checked;
+            SettingsStore.Save(_settings);
+            AppendDashboardLog(
+                $"Autoland assist {(_autolandAssistBox.Checked ? "enabled" : "disabled")}.");
+        };
+        settingsPanel.Controls.Add(_autolandAssistBox);
+
         var featureSettingsButton = new Button
         {
             Text = "Approach & chaining settings",
@@ -7837,9 +7972,9 @@ internal sealed class CopilotService : Form
         };
         startPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
 
-        var startSelectedFlow = new Button
+        _startSelectedFlowButton = new Button
         {
-            Text = "▶ Start selected flow",
+            Text = "Start selected flow",
             Width = 190,
             Height = 58,
             Anchor = AnchorStyles.Top | AnchorStyles.Left | AnchorStyles.Right,
@@ -7853,15 +7988,24 @@ internal sealed class CopilotService : Form
                 System.Drawing.FontStyle.Bold),
             UseVisualStyleBackColor = false
         };
-        startSelectedFlow.FlatAppearance.BorderSize = 0;
-        startSelectedFlow.Click += (_, _) =>
+        _startSelectedFlowButton.FlatAppearance.BorderSize = 0;
+        _startSelectedFlowButton.FlatAppearance.MouseDownBackColor =
+            System.Drawing.Color.FromArgb(22, 101, 52);
+        _startSelectedFlowButton.FlatAppearance.MouseOverBackColor =
+            System.Drawing.Color.FromArgb(34, 148, 96);
+        _startSelectedFlowButton.Click += (_, _) =>
         {
+            if (IsProcedureActive(_procedureRunner.Status))
+            {
+                return;
+            }
+
             if (_flowList.SelectedItem is ProcedureListItem item)
             {
                 _commands.Enqueue($"procedure start {item.Definition.Id}");
             }
         };
-        startPanel.Controls.Add(startSelectedFlow, 0, 0);
+        startPanel.Controls.Add(_startSelectedFlowButton, 0, 0);
         timelineLayout.Controls.Add(startPanel, 1, 0);
         timelineGroup.Controls.Add(timelineLayout);
         root.Controls.Add(timelineGroup);
@@ -7906,18 +8050,44 @@ internal sealed class CopilotService : Form
         {
             Dock = DockStyle.Bottom,
             AutoSize = true,
-            FlowDirection = FlowDirection.LeftToRight
+            FlowDirection = FlowDirection.LeftToRight,
+            Padding = new Padding(0, 6, 0, 0)
         };
-        procedureButtons.Controls.Add(NewCommandButton("Start first flow", "procedure start power-up-initial-setup"));
-        procedureButtons.Controls.Add(NewCommandButton("Confirm completed", "procedure confirm"));
-        procedureButtons.Controls.Add(NewCommandButton("Pause", "procedure pause"));
-        procedureButtons.Controls.Add(NewCommandButton("Resume", "procedure resume"));
-        procedureButtons.Controls.Add(NewCommandButton("Cancel", "procedure cancel"));
+        procedureButtons.Controls.Add(NewProcedureButton(
+            "Start first flow",
+            "procedure start power-up-initial-setup",
+            132,
+            System.Drawing.Color.FromArgb(39, 130, 87),
+            System.Drawing.Color.FromArgb(22, 101, 52),
+            System.Drawing.Color.FromArgb(34, 148, 96),
+            emphasize: true));
+        _confirmCompletedButton = NewProcedureButton(
+            "Confirm completed",
+            "procedure confirm",
+            150,
+            System.Drawing.Color.FromArgb(39, 130, 87),
+            System.Drawing.Color.FromArgb(22, 101, 52),
+            System.Drawing.Color.FromArgb(34, 148, 96),
+            emphasize: true);
+        procedureButtons.Controls.Add(_confirmCompletedButton);
+        procedureButtons.Controls.Add(NewProcedureButton("Pause", "procedure pause"));
+        procedureButtons.Controls.Add(NewProcedureButton("Resume", "procedure resume"));
+        procedureButtons.Controls.Add(NewProcedureButton("Cancel", "procedure cancel"));
         var resetProgressButton = new Button
         {
             Text = "New flight / Reset progress",
-            AutoSize = true
+            Width = 170,
+            Height = 34,
+            AutoSize = false,
+            Margin = new Padding(4, 3, 4, 3),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = System.Drawing.Color.FromArgb(243, 244, 246),
+            ForeColor = System.Drawing.Color.FromArgb(31, 41, 55),
+            UseVisualStyleBackColor = false
         };
+        resetProgressButton.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(209, 213, 219);
+        resetProgressButton.FlatAppearance.MouseDownBackColor = System.Drawing.Color.FromArgb(209, 213, 219);
+        resetProgressButton.FlatAppearance.MouseOverBackColor = System.Drawing.Color.FromArgb(229, 231, 235);
         resetProgressButton.Click += (_, _) =>
         {
             var result = MessageBox.Show(
@@ -8584,6 +8754,52 @@ internal sealed class CopilotService : Form
         return button;
     }
 
+    private Button NewProcedureButton(string label, string command) =>
+        NewProcedureButton(
+            label,
+            command,
+            86,
+            System.Drawing.Color.FromArgb(243, 244, 246),
+            System.Drawing.Color.FromArgb(209, 213, 219),
+            System.Drawing.Color.FromArgb(229, 231, 235),
+            emphasize: false);
+
+    private Button NewProcedureButton(
+        string label,
+        string command,
+        int width,
+        System.Drawing.Color backColor,
+        System.Drawing.Color mouseDownColor,
+        System.Drawing.Color mouseOverColor,
+        bool emphasize)
+    {
+        var button = new Button
+        {
+            Text = label,
+            Width = width,
+            Height = 34,
+            AutoSize = false,
+            Margin = new Padding(4, 3, 4, 3),
+            BackColor = backColor,
+            ForeColor = emphasize
+                ? System.Drawing.Color.White
+                : System.Drawing.Color.FromArgb(31, 41, 55),
+            FlatStyle = FlatStyle.Flat,
+            Font = new System.Drawing.Font(
+                Font.FontFamily,
+                emphasize ? 9 : 8.5f,
+                emphasize ? System.Drawing.FontStyle.Bold : System.Drawing.FontStyle.Regular),
+            UseVisualStyleBackColor = false
+        };
+
+        button.FlatAppearance.BorderSize = emphasize ? 0 : 1;
+        button.FlatAppearance.BorderColor = System.Drawing.Color.FromArgb(209, 213, 219);
+        button.FlatAppearance.MouseDownBackColor = mouseDownColor;
+        button.FlatAppearance.MouseOverBackColor = mouseOverColor;
+        button.Click += (_, _) => _commands.Enqueue(command);
+        return button;
+    }
+
     private void UpdateDashboard()
     {
         if (!_showUi || _state == null)
@@ -8648,6 +8864,17 @@ internal sealed class CopilotService : Form
             : _mobiFlightReady
             ? System.Drawing.Color.DarkGreen
             : System.Drawing.Color.DarkRed;
+        if (_autolandAssistBox != null)
+        {
+            var supported = _state.IsSupportedBoeing737;
+            _autolandAssistBox.Enabled = supported;
+            _autolandAssistBox.Text = supported
+                ? "Autoland assist"
+                : "Autoland assist (737 only)";
+            _autolandAssistBox.ForeColor = supported
+                ? System.Drawing.Color.Black
+                : System.Drawing.Color.DimGray;
+        }
         _telemetryLabel!.Text = FormatCurrentStepTelemetry(_state);
         _telemetryLabel.ForeColor = _state.TelemetryIssues.Count == 0
             ? System.Drawing.Color.DarkSlateBlue
@@ -8675,6 +8902,7 @@ internal sealed class CopilotService : Form
             $"v{GetApplicationVersion()}",
             System.Drawing.Color.FromArgb(40, 68, 106));
         UpdateProcedureStatusBadge();
+        UpdateProcedureActionButtons();
         _procedureLabel!.Text =
             definition == null
                 ? "None"
@@ -8889,6 +9117,56 @@ internal sealed class CopilotService : Form
         };
     }
 
+    private void UpdateProcedureActionButtons()
+    {
+        var status = _procedureRunner.Status;
+        var active = IsProcedureActive(status);
+
+        if (_startSelectedFlowButton != null)
+        {
+            _startSelectedFlowButton.Text = status == ProcedureStatus.Paused
+                ? "Flow paused"
+                : active
+                    ? "Flow running"
+                    : "Start selected flow";
+            _startSelectedFlowButton.BackColor = status switch
+            {
+                ProcedureStatus.Paused => System.Drawing.Color.FromArgb(151, 110, 35),
+                ProcedureStatus.Running => System.Drawing.Color.FromArgb(30, 64, 175),
+                ProcedureStatus.WaitingForVerification => System.Drawing.Color.FromArgb(29, 78, 216),
+                ProcedureStatus.WaitingForManualAction => System.Drawing.Color.FromArgb(190, 126, 37),
+                _ => System.Drawing.Color.FromArgb(39, 130, 87)
+            };
+            _startSelectedFlowButton.ForeColor = System.Drawing.Color.White;
+            _startSelectedFlowButton.FlatAppearance.BorderSize = active ? 2 : 0;
+            _startSelectedFlowButton.FlatAppearance.BorderColor =
+                active ? System.Drawing.Color.FromArgb(15, 23, 42) : _startSelectedFlowButton.BackColor;
+        }
+
+        if (_confirmCompletedButton != null)
+        {
+            var waitingForPilot = status == ProcedureStatus.WaitingForManualAction;
+            _confirmCompletedButton.BackColor = waitingForPilot
+                ? System.Drawing.Color.FromArgb(194, 65, 12)
+                : System.Drawing.Color.FromArgb(39, 130, 87);
+            _confirmCompletedButton.FlatAppearance.MouseDownBackColor = waitingForPilot
+                ? System.Drawing.Color.FromArgb(146, 64, 14)
+                : System.Drawing.Color.FromArgb(22, 101, 52);
+            _confirmCompletedButton.FlatAppearance.MouseOverBackColor = waitingForPilot
+                ? System.Drawing.Color.FromArgb(245, 158, 11)
+                : System.Drawing.Color.FromArgb(34, 148, 96);
+            _confirmCompletedButton.Text = waitingForPilot
+                ? "Confirm now"
+                : "Confirm completed";
+        }
+    }
+
+    private static bool IsProcedureActive(ProcedureStatus status) =>
+        status is ProcedureStatus.Running
+            or ProcedureStatus.WaitingForManualAction
+            or ProcedureStatus.WaitingForVerification
+            or ProcedureStatus.Paused;
+
     private static string FormatProcedureStatus(ProcedureStatus status) =>
         status switch
         {
@@ -9086,6 +9364,8 @@ internal sealed class CopilotService : Form
         var distance = state.ApproachDistanceToTouchdownNm.HasValue
             ? $" | DIST {state.ApproachDistanceToTouchdownNm.Value:F1} NM {state.ApproachDistanceSource}"
             : " | DIST n/a";
+        var showAutolandAssist = _settings.EnableAutolandAssist
+            && state.IsSupportedBoeing737;
         return stepId switch
         {
             "fo-v1" => $"{flight} | target V1 {state.TakeoffV1SpeedKnots} kt",
@@ -9108,8 +9388,14 @@ internal sealed class CopilotService : Form
                 $"{flight} | wait IAS <={state.EffectiveApproachFlapsFullSpeedKnots} kt for FULL",
             "landing-data-set" =>
                 $"{flight} | FMC landing flaps {(state.BoeingLandingFlaps.HasValue ? state.BoeingLandingFlaps.Value.ToString() : "not set")} | VREF {(state.BoeingLandingVrefKnots.HasValue ? state.BoeingLandingVrefKnots.Value.ToString() : "not set")}",
+            "captain-ils-autoland" =>
+                showAutolandAssist
+                    ? state.BoeingAutolandReadinessSummary
+                    : "Autoland assist disabled - confirm normal approach setup or enable assist if using dual-channel autoland",
             "stable-approach" =>
-                $"{flight} | RA {state.RadioHeightFeet:F0} ft | target {state.EffectiveBoeingApproachTargetSpeedKnots} kt | stable {(state.BoeingApproachStable ? "YES" : "NO")}",
+                showAutolandAssist
+                    ? $"{flight} | RA {state.RadioHeightFeet:F0} ft | target {state.EffectiveBoeingApproachTargetSpeedKnots} kt | stable {(state.BoeingApproachStable ? "YES" : "NO")} | {state.BoeingAutolandReadinessSummary}"
+                    : $"{flight} | RA {state.RadioHeightFeet:F0} ft | target {state.EffectiveBoeingApproachTargetSpeedKnots} kt | stable {(state.BoeingApproachStable ? "YES" : "NO")}",
             "fo-approaching-minimums" or "fo-minimums" =>
                 $"{flight} | RA {state.RadioHeightFeet:F0} ft | DH {state.DecisionHeightFeet:F0} ft",
             "fo-flaps-one" or "fo-flaps-two" or "fo-flaps-three" or "fo-flaps-full"
@@ -9121,7 +9407,10 @@ internal sealed class CopilotService : Form
             "fo-display-initialization" =>
                 $"BAT 1/2 {state.Battery1On.ToOnOff()}/{state.Battery2On.ToOnOff()} | " +
                 $"EXT PWR {state.ExternalPowerOn.ToOnOff()} | waiting for 45 s stable power",
-            _ => flight
+            _ => showAutolandAssist
+                 && _procedureRunner.Definition?.Id is "descent-preparation" or "approach-landing"
+                ? $"{flight} | {state.BoeingAutolandReadinessSummary}"
+                : flight
         };
     }
 

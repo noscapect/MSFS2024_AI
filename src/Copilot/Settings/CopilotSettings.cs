@@ -8,6 +8,7 @@ public sealed class CopilotSettings
     public AutomationPolicy AutomationPolicy { get; set; } = AutomationPolicy.AutomaticWhenSupported;
     public bool RequireManualStepConfirmation { get; set; } = true;
     public bool EnableStandardCallouts { get; set; } = true;
+    public bool EnableAutolandAssist { get; set; }
     public bool AutoAdvanceObservedSteps { get; set; } = true;
     public int TransitionAltitudeFeet { get; set; } = 5000;
     public int TakeoffV1SpeedKnots { get; set; } = 140;

@@ -278,7 +278,7 @@ internal static class B737ProcedureLibrary
             {
                 Manual("captain-fmc-arrival", "FMC arrival and approach entered", "Captain: set arrival, approach, landing runway and descent forecast.", CrewRole.Captain),
                 Manual("captain-vref", "Landing data and VREF set", "Captain: select landing flap and VREF.", CrewRole.Captain, state => state.BoeingLandingDataSet),
-                Manual("captain-ils-autoland", "ILS/autoland setup checked", "Captain: if using autoland, verify both NAV radios/courses, both FDs, APP mode, correct ILS capture and dual-channel AP availability.", CrewRole.Captain),
+                Manual("captain-ils-autoland", "ILS/autoland setup checked", "Captain: if using autoland, verify both NAV radios are tuned to the same ILS, both course selectors match the runway course, both FDs are ON, APP is armed/captured, LOC/GS are valid, and CMD B remains engaged for dual-channel approach.", CrewRole.Captain),
                 Manual("captain-briefing", "Approach briefing complete", "Captain: complete approach briefing.", CrewRole.Captain)
             });
 

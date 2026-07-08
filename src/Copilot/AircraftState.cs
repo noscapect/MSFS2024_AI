@@ -124,6 +124,14 @@ internal sealed class AircraftState
     public bool GearHandleDown { get; set; }
     public double PitchDegrees { get; set; }
     public bool AutopilotMasterOn { get; set; }
+    public bool AutopilotApproachHoldOn { get; set; }
+    public bool AutopilotGlideslopeHoldOn { get; set; }
+    public bool Nav1HasLocalizer { get; set; }
+    public bool Nav1HasGlideslope { get; set; }
+    public double Nav1ActiveFrequencyMhz { get; set; }
+    public double Nav2ActiveFrequencyMhz { get; set; }
+    public double Nav1CourseDegrees { get; set; }
+    public double Nav2CourseDegrees { get; set; }
     public double Adirs1SelectorState { get; set; }
     public double Adirs2SelectorState { get; set; }
     public double Adirs3SelectorState { get; set; }
@@ -210,6 +218,50 @@ internal sealed class AircraftState
                 : "Unsupported aircraft";
 
     public bool EnginesOff => !Engine1Running && !Engine2Running;
+    public bool BoeingAutolandRadioSetupLooksReady =>
+        IsSupportedBoeing737
+        && Nav1HasLocalizer
+        && Nav1HasGlideslope
+        && Math.Abs(Nav1ActiveFrequencyMhz - Nav2ActiveFrequencyMhz) < 0.01
+        && CourseDifferenceDegrees(Nav1CourseDegrees, Nav2CourseDegrees) <= 1;
+
+    public bool BoeingAutolandApproachModesLookReady =>
+        IsSupportedBoeing737
+        && AutopilotMasterOn
+        && AutopilotApproachHoldOn
+        && AutopilotGlideslopeHoldOn;
+
+    public string BoeingAutolandReadinessSummary
+    {
+        get
+        {
+            if (!IsSupportedBoeing737)
+            {
+                return "Autoland: not a Boeing 737 profile";
+            }
+
+            var nav = Math.Abs(Nav1ActiveFrequencyMhz - Nav2ActiveFrequencyMhz) < 0.01
+                ? "NAV radios match"
+                : $"NAV mismatch {Nav1ActiveFrequencyMhz:F2}/{Nav2ActiveFrequencyMhz:F2}";
+            var courseDelta = CourseDifferenceDegrees(Nav1CourseDegrees, Nav2CourseDegrees);
+            var crs = courseDelta <= 1
+                ? "courses match"
+                : $"course mismatch {Nav1CourseDegrees:F0}/{Nav2CourseDegrees:F0}";
+            var loc = Nav1HasLocalizer ? "LOC valid" : "LOC not valid";
+            var gs = Nav1HasGlideslope ? "GS valid" : "GS not valid";
+            var app = AutopilotApproachHoldOn ? "APP active" : "APP not active";
+            var gsMode = AutopilotGlideslopeHoldOn ? "GS mode active" : "GS mode not active";
+
+            return $"Autoland: {nav}, {crs}, {loc}, {gs}, {app}, {gsMode}";
+        }
+    }
+
+    private static double CourseDifferenceDegrees(double left, double right)
+    {
+        var diff = Math.Abs((left % 360 + 360) % 360 - (right % 360 + 360) % 360);
+        return diff > 180 ? 360 - diff : diff;
+    }
+
     public bool EngineModeIgnStart =>
         EngineModeSelectorPosition.HasValue
         && Math.Abs(EngineModeSelectorPosition.Value - 2) < 0.1;

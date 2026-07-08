@@ -330,7 +330,7 @@ internal sealed class SimConnectWindow : Form
         {
             _ = Handle;
             _simConnect = new SimConnect(
-                "MSFS 2024 AI Copilot",
+                "MSFS 2024 Virtual First Officer",
                 Handle,
                 WmUserSimConnect,
                 null,
@@ -1048,3 +1048,4 @@ internal sealed class SimConnectWindow : Form
         base.Dispose(disposing);
     }
 }
+

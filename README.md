@@ -1,4 +1,4 @@
-# MSFS 2024 AI First Officer
+# MSFS 2024 Virtual First Officer
 
 A Windows first-officer companion for supported aircraft in Microsoft Flight
 Simulator 2024:
@@ -19,7 +19,8 @@ gate-to-gate flight, automates verified First Officer actions, monitors
 Captain actions, and speaks important callouts.
 
 > This is an independent community project. It is not affiliated with or
-> endorsed by Microsoft, Asobo Studio, iniBuilds, Airbus, or MobiFlight.
+> endorsed by Microsoft, Asobo Studio, iniBuilds, FlyByWire Simulations,
+> PMDG, Boeing, Airbus, or MobiFlight.
 
 ## Current capabilities
 
@@ -63,16 +64,17 @@ The gameplay flow is defined in [docs/checklist.md](docs/checklist.md).
 
 ## Supported aircraft
 
-The latest public release supports three Microsoft Flight Simulator 2024
-Airbus A320-family aircraft:
+The application has moved from a single-aircraft A320 assistant to a
+multi-aircraft virtual first officer. The current public release supports
+three Microsoft Flight Simulator 2024 Airbus A320-family aircraft:
 
 - iniBuilds A320neo V2
 - iniBuilds A321LR
 - FlyByWire A32NX for MSFS 2024
 
-The PMDG 737-800 is being developed on `feature/pmdg-737-800-support`. That
-branch keeps Boeing procedures and PMDG SDK control mapping separate from the
-Airbus flow while preserving the same one-app user experience.
+The PMDG 737-800 is being developed on `feature/pmdg-737-800-support`. This
+development branch adds Boeing procedures and PMDG SDK control mapping while
+preserving the same one-app user experience.
 
 The application deliberately avoids guessed generic events for unsupported
 aircraft controls.
@@ -83,7 +85,8 @@ To run the application:
 
 - Windows 10 or Windows 11
 - Microsoft Flight Simulator 2024
-- iniBuilds A320neo V2, iniBuilds A321LR, or FlyByWire A32NX for MSFS 2024
+- A supported aircraft profile: iniBuilds A320neo V2, iniBuilds A321LR,
+  FlyByWire A32NX for MSFS 2024, or a PMDG 737-800 development build
 - MobiFlight WASM module installed in MSFS
 - .NET Framework 4.7.2 or newer
 
@@ -237,9 +240,9 @@ See [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Development status
 
-The iniBuilds A320neo V2 flow is the mature baseline. FlyByWire A32NX support
-has been added and live-tested across the complete 12-flow sequence. iniBuilds
-A321LR support is implemented through the shared iniBuilds A320-family adapter
-with A321-specific approach flap-speed handling and has been live-tested
-through the complete gate-to-gate sequence. Treat this as active development
-software and remain ready to operate the aircraft manually.
+The iniBuilds A320neo V2 flow remains the mature baseline. FlyByWire A32NX and
+iniBuilds A321LR support have been added through aircraft-specific adapters and
+live-tested across the complete 12-flow sequence. PMDG 737-800 support is under
+active development on its own Boeing procedure path. Treat this as active
+development software and remain ready to operate the aircraft manually.
+

@@ -84,17 +84,17 @@ Copy-Item -LiteralPath (Join-Path $outputRoot "SimConnect.dll") -Destination $st
 Copy-Item -LiteralPath (Join-Path $workspace "README.md") -Destination $stageRoot
 
 $installText = @"
-MSFS 2024 AI First Officer $version
+MSFS 2024 Virtual First Officer $version
 
 Requirements:
 - Windows 10 or Windows 11
 - Microsoft Flight Simulator 2024
-- iniBuilds A320neo V2, iniBuilds A321LR, or FlyByWire A32NX for MSFS 2024
-- MobiFlight WASM module installed
+- A supported aircraft profile
+- MobiFlight WASM module installed for Airbus aircraft
 - .NET Framework 4.7.2 or newer
 
 The required Microsoft SimConnect client libraries are included. Start MSFS
-2024, load a supported A320-family aircraft, and run Copilot.exe.
+2024, load a supported aircraft, and run Copilot.exe.
 
 Project:
 https://github.com/$Repository
@@ -126,7 +126,7 @@ $previousTag = git tag --sort=-creatordate |
 $logRange = if ($previousTag) { "$previousTag..HEAD" } else { "HEAD" }
 $changes = git log $logRange --pretty=format:"- %s"
 $releaseNotes = @"
-## MSFS 2024 AI First Officer $version
+## MSFS 2024 Virtual First Officer $version
 
 $changes
 
@@ -158,7 +158,7 @@ $release = Invoke-GitHubJson `
     -Body @{
         tag_name = $tag
         target_commitish = "main"
-        name = "MSFS 2024 AI First Officer $version"
+        name = "MSFS 2024 Virtual First Officer $version"
         body = $releaseNotes
         draft = [bool]$Draft
         prerelease = [bool]$Prerelease
@@ -187,3 +187,4 @@ Remove-Variable token
 Write-Host "Published $($release.html_url)"
 Write-Host "Package: $zipPath"
 Write-Host "SHA-256: $hash"
+

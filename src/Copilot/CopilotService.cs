@@ -1,4 +1,4 @@
-﻿using Microsoft.FlightSimulator.SimConnect;
+using Microsoft.FlightSimulator.SimConnect;
 using Msfs2024Ai.Copilot.AircraftIdentity;
 using Msfs2024Ai.Copilot.Checklists;
 using Msfs2024Ai.Copilot.Controls;
@@ -816,7 +816,7 @@ internal sealed class CopilotService : Form
         {
             AppLog.Write($"Voice callouts unavailable: {ex.Message}");
         }
-        Text = "MSFS 2024 AI Copilot";
+        Text = "MSFS 2024 Virtual First Officer";
         Icon = System.Drawing.Icon.ExtractAssociatedIcon(
                    Application.ExecutablePath)
                ?? Icon;
@@ -842,7 +842,7 @@ internal sealed class CopilotService : Form
         {
             _ = Handle;
             _simConnect = new SimConnect(
-                "MSFS 2024 AI Copilot",
+                "MSFS 2024 Virtual First Officer",
                 Handle,
                 WmUserSimConnect,
                 null,
@@ -7561,7 +7561,7 @@ internal sealed class CopilotService : Form
 
         var title = new Label
         {
-            Text = "MSFS 2024 A320 Virtual First Officer",
+            Text = "MSFS 2024 Virtual First Officer",
             AutoSize = true,
             Font = new System.Drawing.Font(Font.FontFamily, 16, System.Drawing.FontStyle.Bold),
             Margin = new Padding(0, 0, 0, 10)
@@ -9528,4 +9528,5 @@ internal static class DisplayExtensions
     public static string ToYesNo(this bool value) => value ? "YES" : "NO";
     public static string ToSetReleased(this bool value) => value ? "SET" : "RELEASED";
 }
+
 

@@ -41,7 +41,9 @@ Maps normalized state and commands to:
 Every capability is marked as supported, unsupported, read-only, or requiring
 manual confirmation.
 
-The public release supports three A320-family aircraft profiles:
+The application is now structured around aircraft-family adapters rather than a
+single A320-specific flow. The public release supports three A320-family
+aircraft profiles:
 
 - iniBuilds A320neo V2
 - iniBuilds A321LR
@@ -56,9 +58,10 @@ so procedures can stay shared.
 PMDG 737-800 support is being developed as a separate Boeing aircraft family.
 Airbus procedures remain in `A320ProcedureLibrary`; Boeing procedures live in
 `B737ProcedureLibrary`; `ProcedureCatalog` selects the correct catalog from the
-loaded aircraft. PMDG cockpit state is read from the official `PMDG_NG3_Data`
-client-data area and controls are sent through `PMDG_NG3_Control` where SDK
-events have been mapped.
+loaded aircraft so the user still sees one app. PMDG cockpit state is read from
+the official `PMDG_NG3_Data` client-data area and controls are sent through
+`PMDG_NG3_Control` or aircraft-confirmed PMDG `ROTOR_BRAKE` switch events
+where required.
 
 ### SimConnect transport
 
@@ -123,3 +126,4 @@ The application separates deciding from doing:
    completion according to policy.
 
 No future AI component receives direct simulator-control access.
+

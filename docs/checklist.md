@@ -1,7 +1,9 @@
 # Application Flow Checklist
 
-This document mirrors the flows currently implemented in
-`src/Copilot/Procedures/A320ProcedureLibrary.cs`. The application code is
+This document mirrors the gate-to-gate flow concept implemented by the
+application. Airbus procedures live in
+`src/Copilot/Procedures/A320ProcedureLibrary.cs`; Boeing 737 procedures live in
+`src/Copilot/Procedures/B737ProcedureLibrary.cs`. The application code is
 authoritative. Update this file whenever a flow changes.
 
 An interrupted active flow is saved locally and restored at its exact step
@@ -308,3 +310,4 @@ The app requests one explicit confirmation before removing electrical power.
 12. **Monitor:** Wait until the APU intake/exhaust flap closes.
 13. **Automatic:** Turn BAT 1 OFF.
 14. **Automatic:** Turn BAT 2 OFF.
+

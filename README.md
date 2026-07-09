@@ -1,23 +1,26 @@
-# MSFS 2024 AI First Officer
+# MSFS 2024 Virtual First Officer
 
-A Windows first-officer companion for supported Airbus A320-family aircraft in
-Microsoft Flight Simulator 2024:
+A Windows first-officer companion for supported aircraft in Microsoft Flight
+Simulator 2024:
 
 - **iniBuilds A320neo V2**
 - **iniBuilds A321LR**
 - **FlyByWire A32NX**
+- **PMDG 737-800**
 
 Application icon artwork contributed by the project owner.
 The icon is embedded in the executable and assigned to the running WinForms
 window so it is also used by the Windows taskbar.
 
-The application connects to the simulator through SimConnect and the installed
-MobiFlight WASM module. It guides a complete 12-flow gate-to-gate flight,
-automates verified First Officer actions, monitors Captain actions, and speaks
-important callouts.
+The application connects to the simulator through SimConnect, the installed
+MobiFlight WASM module for Airbus aircraft, and the PMDG NG3 SDK client-data
+channel for PMDG 737 support. It guides a complete 12-flow
+gate-to-gate flight, automates verified First Officer actions, monitors
+Captain actions, and speaks important callouts.
 
 > This is an independent community project. It is not affiliated with or
-> endorsed by Microsoft, Asobo Studio, iniBuilds, Airbus, or MobiFlight.
+> endorsed by Microsoft, Asobo Studio, iniBuilds, FlyByWire Simulations,
+> PMDG, Boeing, Airbus, or MobiFlight.
 
 ## Current capabilities
 
@@ -28,6 +31,8 @@ important callouts.
   takeoff, approach, landing, or taxi
 - Native iniBuilds A320-family and FlyByWire A32NX state monitoring through
   MobiFlight
+- PMDG 737-800 aircraft-family routing, Boeing procedures and PMDG NG3 SDK
+  state/control integration
 - Verification after every automatic aircraft action
 - Optional Windows offline voice callouts
 - Persistent preflight settings for V1, VR, and transition altitude
@@ -59,12 +64,13 @@ The gameplay flow is defined in [docs/checklist.md](docs/checklist.md).
 
 ## Supported aircraft
 
-The app supports three Microsoft Flight Simulator 2024 Airbus A320-family
-aircraft:
+The application has moved from a single-aircraft A320 assistant to a
+multi-aircraft virtual first officer. The current public release supports:
 
 - iniBuilds A320neo V2
 - iniBuilds A321LR
 - FlyByWire A32NX for MSFS 2024
+- PMDG 737-800
 
 The application deliberately avoids guessed generic events for unsupported
 aircraft controls.
@@ -75,9 +81,14 @@ To run the application:
 
 - Windows 10 or Windows 11
 - Microsoft Flight Simulator 2024
-- iniBuilds A320neo V2, iniBuilds A321LR, or FlyByWire A32NX for MSFS 2024
+- A supported aircraft profile: iniBuilds A320neo V2, iniBuilds A321LR,
+  FlyByWire A32NX for MSFS 2024, or PMDG 737-800
 - MobiFlight WASM module installed in MSFS
 - .NET Framework 4.7.2 or newer
+
+PMDG 737-800 support also requires PMDG's SDK data broadcast to be enabled in
+the aircraft options file. See
+[docs/PMDG_737_SUPPORT_PLAN.md](docs/PMDG_737_SUPPORT_PLAN.md).
 
 GitHub release packages include the matching managed and native Microsoft
 SimConnect client libraries. End users do not need the MSFS SDK.
@@ -104,7 +115,7 @@ src\Copilot\bin\Release\net472\Copilot.exe
 
 ## Run
 
-Start MSFS 2024, load a supported A320-family aircraft, and then run:
+Start MSFS 2024, load a supported aircraft, and then run:
 
 ```powershell
 .\src\Copilot\bin\Release\net472\Copilot.exe
@@ -225,9 +236,8 @@ See [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Development status
 
-The iniBuilds A320neo V2 flow is the mature baseline. FlyByWire A32NX support
-has been added and live-tested across the complete 12-flow sequence. iniBuilds
-A321LR support is implemented through the shared iniBuilds A320-family adapter
-with A321-specific approach flap-speed handling and has been live-tested
-through the complete gate-to-gate sequence. Treat this as active development
-software and remain ready to operate the aircraft manually.
+The iniBuilds A320neo V2 flow remains the mature baseline. FlyByWire A32NX,
+iniBuilds A321LR, and PMDG 737-800 support have been added through
+aircraft-specific adapters and procedure paths. Treat this as active
+development software and remain ready to operate the aircraft manually.
+

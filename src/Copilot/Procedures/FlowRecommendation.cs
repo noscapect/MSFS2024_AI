@@ -47,12 +47,12 @@ internal static class FlowRecommendationEngine
             _ => "power-up-initial-setup"
         };
 
-        var firstIncomplete = A320ProcedureLibrary.GateToGate
+        var firstIncomplete = ProcedureCatalog.ForAircraft(state)
             .FirstOrDefault(procedure => !completedProcedureIds.Contains(procedure.Id))
-            ?? A320ProcedureLibrary.ParkingAndShutdown;
-        var phaseProcedure = A320ProcedureLibrary.Find(recommendedId) ?? firstIncomplete;
-        var firstIncompleteIndex = A320ProcedureLibrary.GateToGate.IndexOf(firstIncomplete);
-        var phaseIndex = A320ProcedureLibrary.GateToGate.IndexOf(phaseProcedure);
+            ?? ProcedureCatalog.ForAircraft(state).Last();
+        var phaseProcedure = ProcedureCatalog.Find(state, recommendedId) ?? firstIncomplete;
+        var firstIncompleteIndex = ProcedureCatalog.ForAircraft(state).IndexOf(firstIncomplete);
+        var phaseIndex = ProcedureCatalog.ForAircraft(state).IndexOf(phaseProcedure);
         var overdue = firstIncompleteIndex < phaseIndex;
 
         return new FlowRecommendation(

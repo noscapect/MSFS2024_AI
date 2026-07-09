@@ -23,8 +23,8 @@ internal static class Program
         if (!ownsInstanceMutex)
         {
             MessageBox.Show(
-                "MSFS 2024 AI Copilot is already running. Close the existing instance before starting another.",
-                "MSFS 2024 AI Copilot",
+                "MSFS 2024 Virtual First Officer is already running. Close the existing instance before starting another.",
+                "MSFS 2024 Virtual First Officer",
                 MessageBoxButtons.OK,
                 MessageBoxIcon.Information);
             return;
@@ -71,3 +71,4 @@ internal static class Program
         return null;
     }
 }
+

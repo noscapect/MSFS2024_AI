@@ -3,7 +3,7 @@ namespace Msfs2024Ai.Copilot.Procedures;
 internal sealed class ProcedureRunner
 {
     private static readonly TimeSpan AutomaticActionCadence =
-        TimeSpan.FromSeconds(1);
+        TimeSpan.FromMilliseconds(2500);
     private readonly Action<string> _executeCommand;
     private readonly Func<Domain.AutomationPolicy> _automationPolicy;
     private ProcedureDefinition? _definition;
@@ -61,6 +61,22 @@ internal sealed class ProcedureRunner
         Status = ProcedureStatus.Running;
         Message = $"Resumed {definition.Name} from saved step {_stepIndex + 1}.";
         Advance(state);
+    }
+
+    public void RestorePaused(
+        ProcedureDefinition definition,
+        int stepIndex)
+    {
+        _definition = definition;
+        _stepIndex = Math.Max(0, Math.Min(stepIndex, definition.Steps.Count));
+        _manualConfirmationReceived = false;
+        _lastAutomaticStepId = null;
+        _nextAutomaticActionUtc = DateTime.MinValue;
+        _recovering = true;
+        Status = ProcedureStatus.Paused;
+        Message =
+            $"Restored {definition.Name} from saved step {_stepIndex + 1}. Press Resume when the cockpit is in the expected state.";
+        Changed?.Invoke();
     }
 
     public void Update(AircraftState state)

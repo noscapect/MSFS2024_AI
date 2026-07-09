@@ -6,7 +6,7 @@ internal static class CockpitPreparationProcedure
     {
         return new[]
         {
-            new ProcedureStepResult("aircraft", "Supported A320 loaded", state.IsSupportedA320),
+            new ProcedureStepResult("aircraft", "Supported aircraft loaded", state.IsSupportedAircraft),
             new ProcedureStepResult("stationary", "Aircraft stationary on ground", state.OnGround && state.GroundSpeedKnots <= 0.5),
             new ProcedureStepResult("parking-brake", "Parking brake set", state.ParkingBrakeSet),
             new ProcedureStepResult("engines", "Engines off", state.EnginesOff),

@@ -45,4 +45,45 @@ public sealed class FlightTelemetryStoreTests
             }
         }
     }
+
+    [TestMethod]
+    public void StoreRecordsSupportedPmdg737Flights()
+    {
+        var directory = Path.Combine(
+            Path.GetTempPath(),
+            "MSFS2024_AI-tests",
+            Guid.NewGuid().ToString("N"));
+        try
+        {
+            using (var store = new FlightTelemetryStore(directory))
+            {
+                store.Record(
+                    new AircraftState
+                    {
+                        Title = "737-800 PAX BW TC",
+                        Battery1On = true,
+                        OnGround = false,
+                        IndicatedAltitudeFeet = 3000,
+                        BoeingLandingFlaps = 30,
+                        BoeingLandingVrefKnots = 137
+                    },
+                    new DateTime(2026, 7, 7, 10, 0, 0, DateTimeKind.Utc));
+            }
+
+            using var reader = new FlightTelemetryStore(directory);
+            Assert.AreEqual(1, reader.Recordings.Count);
+            var replay = reader.Load(reader.Recordings[0]);
+            Assert.AreEqual(1, replay.Count);
+            Assert.AreEqual("737-800 PAX BW TC", replay[0].Title);
+            Assert.AreEqual(30, replay[0].BoeingLandingFlaps);
+            Assert.AreEqual(137, replay[0].BoeingLandingVrefKnots);
+        }
+        finally
+        {
+            if (Directory.Exists(directory))
+            {
+                Directory.Delete(directory, true);
+            }
+        }
+    }
 }

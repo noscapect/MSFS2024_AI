@@ -9,6 +9,8 @@ internal sealed class AircraftState
     public bool Engine2Running { get; set; }
     public bool Engine1StarterActive { get; set; }
     public bool Engine2StarterActive { get; set; }
+    public double? Engine1StartSwitchPosition { get; set; }
+    public double? Engine2StartSwitchPosition { get; set; }
     public double Engine1N1Percent { get; set; }
     public double Engine2N1Percent { get; set; }
     public double Engine1EgtCelsius { get; set; }
@@ -37,12 +39,32 @@ internal sealed class AircraftState
     public bool ApuMasterSwitchOn { get; set; }
     public bool ApuAvailable { get; set; }
     public bool ApuStartButtonOn { get; set; }
+    public bool ApuSpoolingOrAvailable { get; set; }
     public bool ApuBleedOn { get; set; }
+    public bool ApuBleedWarmupComplete { get; set; } = true;
+    public double? LeftPackSwitchPosition { get; set; }
+    public double? RightPackSwitchPosition { get; set; }
+    public double? IsolationValvePosition { get; set; }
+    public double LeftDuctPressurePsi { get; set; }
+    public double RightDuctPressurePsi { get; set; }
     public double ApuFlapPercent { get; set; }
     public bool ApuGeneratorActive { get; set; }
     public bool ApuGeneratorSwitchOn { get; set; }
+    public bool ApuGeneratorPowerEstablished { get; set; }
+    public bool EngineGeneratorsOn { get; set; }
+    public bool ApuGenOffBus { get; set; }
+    public bool AcTransferBus1Powered { get; set; }
+    public bool AcTransferBus2Powered { get; set; }
+    public bool TransferBus1Off { get; set; }
+    public bool TransferBus2Off { get; set; }
+    public bool BoeingElectricHydraulicPumpsOn { get; set; }
+    public bool BoeingElectricHydraulicPump1On { get; set; }
+    public bool BoeingElectricHydraulicPump2On { get; set; }
+    public bool BoeingElectricHydraulicPump1LowPressure { get; set; }
+    public bool BoeingElectricHydraulicPump2LowPressure { get; set; }
     public double ApuVolts { get; set; }
     public bool FuelPumpsConfigured { get; set; }
+    public double CenterFuelQuantityPounds { get; set; }
     public double FuelPump1State { get; set; }
     public double FuelPump2State { get; set; }
     public double FuelPump3State { get; set; }
@@ -89,6 +111,9 @@ internal sealed class AircraftState
     public double LeftSpoilerPositionPercent { get; set; }
     public double RightSpoilerPositionPercent { get; set; }
     public double FlapsHandleIndex { get; set; }
+    public int? BoeingTakeoffFlaps { get; set; }
+    public int? BoeingLandingFlaps { get; set; }
+    public int? BoeingLandingVrefKnots { get; set; }
     public double LeftFlapPositionPercent { get; set; }
     public double RightFlapPositionPercent { get; set; }
     public bool FlapReadbackSane { get; set; } = true;
@@ -100,13 +125,32 @@ internal sealed class AircraftState
     public double? NoseLightSelectorPosition { get; set; }
     public double? LeftLandingLightSelectorPosition { get; set; }
     public double? RightLandingLightSelectorPosition { get; set; }
+    public bool RunwayTurnoffLightsOn { get; set; }
+    public double? GearHandlePosition { get; set; }
     public bool GearHandleDown { get; set; }
     public double PitchDegrees { get; set; }
     public bool AutopilotMasterOn { get; set; }
+    public bool AutopilotApproachHoldOn { get; set; }
+    public bool AutopilotGlideslopeHoldOn { get; set; }
+    public bool Nav1HasLocalizer { get; set; }
+    public bool Nav1HasGlideslope { get; set; }
+    public bool Nav2HasLocalizer { get; set; }
+    public bool Nav2HasGlideslope { get; set; }
+    public double Nav1ActiveFrequencyMhz { get; set; }
+    public double Nav2ActiveFrequencyMhz { get; set; }
+    public double Nav1CourseDegrees { get; set; }
+    public double Nav2CourseDegrees { get; set; }
     public double Adirs1SelectorState { get; set; }
     public double Adirs2SelectorState { get; set; }
     public double Adirs3SelectorState { get; set; }
     public bool AdirsOnBattery { get; set; }
+    public bool IrsLeftAlignLightOn { get; set; }
+    public bool IrsRightAlignLightOn { get; set; }
+    public bool IrsLeftOnDcLightOn { get; set; }
+    public bool IrsRightOnDcLightOn { get; set; }
+    public bool IrsLeftFault { get; set; }
+    public bool IrsRightFault { get; set; }
+    public bool IrsAligned { get; set; } = true;
     public bool CrewOxygenOn { get; set; }
     public double? StrobeSelectorPosition { get; set; }
     public bool ApuFireTestActive { get; set; }
@@ -158,20 +202,119 @@ internal sealed class AircraftState
     public bool IsSupportedA320 =>
         IsIniBuildsA320Family || IsFlyByWireA320Neo;
 
+    public bool IsPmdg737 =>
+        Title.IndexOf("PMDG", StringComparison.OrdinalIgnoreCase) >= 0
+        && Title.IndexOf("737", StringComparison.OrdinalIgnoreCase) >= 0
+        || Title.IndexOf("737-800", StringComparison.OrdinalIgnoreCase) >= 0
+        || Title.IndexOf("738", StringComparison.OrdinalIgnoreCase) >= 0;
+
+    public bool IsPmdg737800 =>
+        IsPmdg737
+        && (Title.IndexOf("737-800", StringComparison.OrdinalIgnoreCase) >= 0
+            || Title.IndexOf("738", StringComparison.OrdinalIgnoreCase) >= 0);
+
+    public bool IsSupportedBoeing737 => IsPmdg737800;
+
+    public bool IsSupportedAircraft =>
+        IsSupportedA320 || IsSupportedBoeing737;
+
+    public string AircraftFamilyLabel =>
+        IsSupportedBoeing737
+            ? "PMDG 737-800"
+            : IsSupportedA320
+                ? "Airbus A320-family"
+                : "Unsupported aircraft";
+
     public bool EnginesOff => !Engine1Running && !Engine2Running;
+
     public bool EngineModeIgnStart =>
         EngineModeSelectorPosition.HasValue
         && Math.Abs(EngineModeSelectorPosition.Value - 2) < 0.1;
     public bool EngineModeNormal =>
         EngineModeSelectorPosition.HasValue
         && Math.Abs(EngineModeSelectorPosition.Value - 1) < 0.1;
+    public bool Engine1StartSwitchGround =>
+        Engine1StartSwitchPosition.HasValue
+        && Math.Abs(Engine1StartSwitchPosition.Value) < 0.1;
+    public bool Engine2StartSwitchGround =>
+        Engine2StartSwitchPosition.HasValue
+        && Math.Abs(Engine2StartSwitchPosition.Value) < 0.1;
+    public bool EngineStartSwitchesContinuous =>
+        Engine1StartSwitchPosition.HasValue
+        && Engine2StartSwitchPosition.HasValue
+        && Math.Abs(Engine1StartSwitchPosition.Value - 2) < 0.1
+        && Math.Abs(Engine2StartSwitchPosition.Value - 2) < 0.1;
+    public bool EngineGeneratorPowerEstablished =>
+        !IsPmdg737
+        || Engine1Running
+        && Engine2Running
+        && EngineGeneratorsOn
+        && !TransferBus1Off
+        && !TransferBus2Off
+        && AcTransferBus1Powered
+        && AcTransferBus2Powered;
+    public bool PacksOffForEngineStart =>
+        LeftPackSwitchPosition.HasValue
+        && RightPackSwitchPosition.HasValue
+        && Math.Abs(LeftPackSwitchPosition.Value) < 0.1
+        && Math.Abs(RightPackSwitchPosition.Value) < 0.1;
+    public bool PacksAuto =>
+        LeftPackSwitchPosition.HasValue
+        && RightPackSwitchPosition.HasValue
+        && Math.Abs(LeftPackSwitchPosition.Value - 1) < 0.1
+        && Math.Abs(RightPackSwitchPosition.Value - 1) < 0.1;
+    public bool IsolationValveOpen =>
+        IsolationValvePosition.HasValue
+        && Math.Abs(IsolationValvePosition.Value - 2) < 0.1;
+    public bool IsolationValveAuto =>
+        IsolationValvePosition.HasValue
+        && Math.Abs(IsolationValvePosition.Value - 1) < 0.1;
+    public bool EngineStartAirAvailable =>
+        !IsPmdg737
+        || ApuBleedOn
+        && IsolationValveOpen
+        && LeftDuctPressurePsi >= 10
+        && RightDuctPressurePsi >= 10;
+    public bool BoeingTakeoffFlapsSet =>
+        !IsPmdg737
+        || FlapsAtBoeingSetting(BoeingTakeoffFlaps.GetValueOrDefault(5));
+    public bool BoeingLandingFlapsSet =>
+        !IsPmdg737
+        || FlapsAtBoeingSetting(BoeingLandingFlaps.GetValueOrDefault(30));
+    public bool BoeingLandingDataSet =>
+        !IsPmdg737
+        || BoeingLandingFlaps.GetValueOrDefault() > 0
+        && BoeingLandingVrefKnots.GetValueOrDefault() > 0;
+    public int EffectiveBoeingApproachTargetSpeedKnots =>
+        IsPmdg737 && BoeingLandingVrefKnots.GetValueOrDefault() > 0
+            ? BoeingLandingVrefKnots.GetValueOrDefault() + 5
+            : ApproachLandingConfigSpeedKnots;
+    public bool BoeingLandingSpeedStable =>
+        !IsPmdg737
+        || IndicatedAirspeedKnots > 0
+        && IndicatedAirspeedKnots <= EffectiveBoeingApproachTargetSpeedKnots + 10;
+    public bool BoeingApproachStable =>
+        !IsPmdg737
+        || BoeingLandingDataSet
+        && GearHandleDown
+        && BoeingLandingFlapsSet
+        && GroundSpoilersArmed
+        && BoeingLandingSpeedStable;
+    public bool GearHandleUp =>
+        GearHandlePosition.HasValue
+            ? GearHandlePosition.Value <= 0.1
+            : !GearHandleDown;
     public bool Engine1FuelFlowDetected =>
         Engine1FuelFlowPph > 0
+        || IsPmdg737
+        && Engine1Running
         || IsFlyByWireA320Neo
         && (Engine1StarterActive || Engine1Running)
         && Engine1N1Percent >= 3;
     public bool Engine2FuelFlowDetected =>
         Engine2FuelFlowPph > 0
+        || IsPmdg737
+        && Engine2Running
         || IsFlyByWireA320Neo
         && (Engine2StarterActive || Engine2Running)
         && Engine2N1Percent >= 3;
@@ -206,8 +349,33 @@ internal sealed class AircraftState
         && Math.Abs(Adirs2SelectorState - 1) < 0.1
         && Math.Abs(Adirs3SelectorState - 1) < 0.1;
 
+    public bool PmdgIrsSelectorsNav =>
+        !IsSupportedBoeing737
+        || Math.Abs(Adirs1SelectorState - 2) < 0.1
+        && Math.Abs(Adirs2SelectorState - 2) < 0.1;
+
+    public bool PmdgIrsOnDcExtinguished =>
+        !IsSupportedBoeing737
+        || !IrsLeftOnDcLightOn
+        && !IrsRightOnDcLightOn;
+
+    public bool PmdgIrsReady =>
+        !IsSupportedBoeing737
+        || PmdgIrsSelectorsNav
+        && IrsAligned
+        && PmdgIrsOnDcExtinguished
+        && !IrsLeftAlignLightOn
+        && !IrsRightAlignLightOn
+        && !IrsLeftFault
+        && !IrsRightFault;
+
     public bool FlapsAtDetent(int detent)
     {
+        if (IsSupportedBoeing737)
+        {
+            return Boeing737FlapsAtDetent(detent);
+        }
+
         if (IsIniBuildsA321Lr)
         {
             return A321FlapsAtDetent(detent);
@@ -215,6 +383,11 @@ internal sealed class AircraftState
 
         return LegacyA320FlapsAtDetent(detent);
     }
+
+    public bool BoeingFlapsAtSetting(int flaps) =>
+        IsSupportedBoeing737
+            ? FlapsAtBoeingSetting(flaps)
+            : FlapsAtDetent(flaps);
 
     private bool LegacyA320FlapsAtDetent(int detent)
     {
@@ -250,6 +423,58 @@ internal sealed class AircraftState
         }
 
         return false;
+    }
+
+    private bool Boeing737FlapsAtDetent(int detent)
+    {
+        if (detent == 0)
+        {
+            return FlapsHandleIndex <= 0.1 || FlapSurfacesMatchDetent(0);
+        }
+
+        var handleIndex = (int)Math.Round(FlapsHandleIndex);
+        return detent switch
+        {
+            1 => handleIndex >= 1,
+            2 => handleIndex >= 3,
+            4 => handleIndex >= 7,
+            _ => Math.Abs(FlapsHandleIndex - detent) < 0.1
+        };
+    }
+
+    private bool FlapSurfacesMatchBoeingFlaps(int flaps)
+    {
+        var maximumSurface =
+            Math.Max(LeftFlapPositionPercent, RightFlapPositionPercent);
+        return flaps switch
+        {
+            1 => maximumSurface is >= 1 and <= 10,
+            2 => maximumSurface is >= 5 and <= 18,
+            5 => maximumSurface is >= 10 and <= 30,
+            10 => maximumSurface is >= 20 and <= 45,
+            15 => maximumSurface is >= 30 and <= 55,
+            25 => maximumSurface is >= 50 and <= 75,
+            30 => maximumSurface >= 65,
+            40 => maximumSurface >= 80,
+            _ => false
+        };
+    }
+
+    private bool FlapsAtBoeingSetting(int flaps)
+    {
+        return flaps switch
+        {
+            <= 0 => FlapsAtDetent(0),
+            1 => Boeing737FlapsAtDetent(1),
+            2 => Math.Round(FlapsHandleIndex) >= 2,
+            5 => Boeing737FlapsAtDetent(2),
+            10 => Math.Round(FlapsHandleIndex) >= 4,
+            15 => Math.Round(FlapsHandleIndex) >= 5,
+            25 => Math.Round(FlapsHandleIndex) >= 6,
+            30 => Boeing737FlapsAtDetent(4),
+            40 => Math.Round(FlapsHandleIndex) >= 8,
+            _ => FlapsHandleIndex > 0
+        };
     }
 
     private bool FlapSurfacesMatchDetent(int detent)

@@ -94,7 +94,7 @@ internal static class DiagnosticLog
         }
 
         var manifestBuilder = new StringBuilder()
-            .AppendLine("MSFS 2024 AI First Officer diagnostic package")
+            .AppendLine("MSFS 2024 Virtual First Officer diagnostic package")
             .AppendLine($"Created local: {DateTime.Now:O}")
             .AppendLine($"Created UTC: {DateTime.UtcNow:O}")
             .AppendLine($"Diagnostics file: {FilePath}")
@@ -182,3 +182,4 @@ internal static class DiagnosticLog
             new UTF8Encoding(false));
     }
 }
+

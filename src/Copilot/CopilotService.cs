@@ -266,6 +266,7 @@ internal sealed class CopilotService : Form
     private Label? _electricalLabel;
     private Label? _recommendationLabel;
     private Label? _telemetryLabel;
+    private Label? _autolandReadinessLabel;
     private Label? _versionLabel;
     private Label? _adapterLabel;
     private Label? _simBadgeLabel;
@@ -621,6 +622,8 @@ internal sealed class CopilotService : Form
         public double AutopilotGlideslopeHold;
         public double Nav1HasLocalizer;
         public double Nav1HasGlideslope;
+        public double Nav2HasLocalizer;
+        public double Nav2HasGlideslope;
         public double Nav1ActiveFrequency;
         public double Nav2ActiveFrequency;
         public double Nav1Course;
@@ -734,6 +737,8 @@ internal sealed class CopilotService : Form
         public bool IrsAligned { get; set; }
         public bool Engine1StartValveOpen { get; set; }
         public bool Engine2StartValveOpen { get; set; }
+        public bool Engine1ReverserAnnunciated { get; set; }
+        public bool Engine2ReverserAnnunciated { get; set; }
         public bool LeftForwardFuelPump { get; set; }
         public bool RightForwardFuelPump { get; set; }
         public bool LeftAftFuelPump { get; set; }
@@ -761,6 +766,10 @@ internal sealed class CopilotService : Form
         public bool ApuGenOffBus { get; set; }
         public float ApuEgtNeedle { get; set; }
         public bool ApuAvailableForTransfer => ApuGenOffBus;
+        public bool ElectricHydraulicPump1On { get; set; }
+        public bool ElectricHydraulicPump2On { get; set; }
+        public bool ElectricHydraulicPump1LowPressure { get; set; }
+        public bool ElectricHydraulicPump2LowPressure { get; set; }
         public byte EmergencyExitLights { get; set; }
         public byte NoSmokingSelector { get; set; }
         public byte FastenBeltsSelector { get; set; }
@@ -782,7 +791,10 @@ internal sealed class CopilotService : Form
         public byte PositionStrobeSelector { get; set; }
         public bool AntiCollisionOn { get; set; }
         public bool SpeedbrakeArmed { get; set; }
+        public bool SpeedbrakeExtended { get; set; }
         public byte AutobrakeSelector { get; set; }
+        public bool AutobrakeDisarmed { get; set; }
+        public float BrakePressureNeedle { get; set; }
         public byte GearLever { get; set; }
         public bool ParkingBrakeAnnunciated { get; set; }
         public byte FireDetectionTestSwitch { get; set; }
@@ -994,6 +1006,8 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "AUTOPILOT GLIDESLOPE HOLD", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "NAV HAS LOCALIZER:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "NAV HAS GLIDE SLOPE:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "NAV HAS LOCALIZER:2", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "NAV HAS GLIDE SLOPE:2", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "NAV ACTIVE FREQUENCY:1", "MHz", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "NAV ACTIVE FREQUENCY:2", "MHz", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "NAV OBS:1", "Degrees", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
@@ -2345,6 +2359,9 @@ internal sealed class CopilotService : Form
                 : isPmdg737 && pmdg != null
                     ? pmdg.ApuSelector == 2 || raw.ApuStarter > 0
                 : _nativeApuStartButton.HasValue && _nativeApuStartButton.Value != 0,
+            ApuSpoolingOrAvailable = isPmdg737 && pmdg != null
+                ? pmdg.ApuEgtNeedle > 0 || pmdgApuAvailable
+                : raw.ApuRpm > 5 || raw.ApuStarter > 0,
             ApuBleedOn = isFlyByWireA320Neo
                 ? _fbwApuBleedButton == true
                 : isPmdg737 && pmdg != null
@@ -2390,6 +2407,13 @@ internal sealed class CopilotService : Form
             AcTransferBus2Powered = isPmdg737 && pmdg != null && pmdg.AcTransferBus2Powered,
             TransferBus1Off = isPmdg737 && pmdg != null && pmdg.TransferBus1Off,
             TransferBus2Off = isPmdg737 && pmdg != null && pmdg.TransferBus2Off,
+            BoeingElectricHydraulicPumpsOn = isPmdg737 && pmdg != null
+                && pmdg.ElectricHydraulicPump1On
+                && pmdg.ElectricHydraulicPump2On,
+            BoeingElectricHydraulicPump1On = isPmdg737 && pmdg != null && pmdg.ElectricHydraulicPump1On,
+            BoeingElectricHydraulicPump2On = isPmdg737 && pmdg != null && pmdg.ElectricHydraulicPump2On,
+            BoeingElectricHydraulicPump1LowPressure = isPmdg737 && pmdg != null && pmdg.ElectricHydraulicPump1LowPressure,
+            BoeingElectricHydraulicPump2LowPressure = isPmdg737 && pmdg != null && pmdg.ElectricHydraulicPump2LowPressure,
             ApuVolts = raw.ApuVolts,
             CenterFuelQuantityPounds = isPmdg737 && pmdg != null
                 ? pmdg.CenterFuelQuantityPounds
@@ -2448,11 +2472,21 @@ internal sealed class CopilotService : Form
             GForce = raw.GForce,
             RadioHeightFeet = raw.RadioHeight,
             DecisionHeightFeet = raw.DecisionHeight,
-            Engine1ReverseEngaged = raw.Engine1Reverse != 0,
-            Engine2ReverseEngaged = raw.Engine2Reverse != 0,
-            AutobrakesActive = raw.AutobrakesActive != 0,
-            LeftSpoilerPositionPercent = raw.LeftSpoilerPosition,
-            RightSpoilerPositionPercent = raw.RightSpoilerPosition,
+            Engine1ReverseEngaged = isPmdg737 && pmdg != null
+                ? pmdg.Engine1ReverserAnnunciated
+                : raw.Engine1Reverse != 0,
+            Engine2ReverseEngaged = isPmdg737 && pmdg != null
+                ? pmdg.Engine2ReverserAnnunciated
+                : raw.Engine2Reverse != 0,
+            AutobrakesActive = isPmdg737 && pmdg != null
+                ? pmdg.AutobrakeSelector >= 2 && !pmdg.AutobrakeDisarmed && pmdg.BrakePressureNeedle > 0
+                : raw.AutobrakesActive != 0,
+            LeftSpoilerPositionPercent = isPmdg737 && pmdg?.SpeedbrakeExtended == true
+                ? 100
+                : raw.LeftSpoilerPosition,
+            RightSpoilerPositionPercent = isPmdg737 && pmdg?.SpeedbrakeExtended == true
+                ? 100
+                : raw.RightSpoilerPosition,
             FlapsHandleIndex = raw.FlapsHandleIndex,
             BoeingTakeoffFlaps = isPmdg737 && pmdg != null && pmdg.TakeoffFlaps > 0
                 ? pmdg.TakeoffFlaps
@@ -2485,6 +2519,8 @@ internal sealed class CopilotService : Form
             AutopilotGlideslopeHoldOn = raw.AutopilotGlideslopeHold != 0,
             Nav1HasLocalizer = raw.Nav1HasLocalizer != 0,
             Nav1HasGlideslope = raw.Nav1HasGlideslope != 0,
+            Nav2HasLocalizer = raw.Nav2HasLocalizer != 0,
+            Nav2HasGlideslope = raw.Nav2HasGlideslope != 0,
             Nav1ActiveFrequencyMhz = raw.Nav1ActiveFrequency,
             Nav2ActiveFrequencyMhz = raw.Nav2ActiveFrequency,
             Nav1CourseDegrees = raw.Nav1Course,
@@ -3213,6 +3249,8 @@ internal sealed class CopilotService : Form
             IrsRightFault = BoolAt(8),
             Engine1StartValveOpen = BoolAt(44),
             Engine2StartValveOpen = BoolAt(45),
+            Engine1ReverserAnnunciated = BoolAt(38),
+            Engine2ReverserAnnunciated = BoolAt(39),
             LeftForwardFuelPump = BoolAt(89),
             RightForwardFuelPump = BoolAt(90),
             LeftAftFuelPump = BoolAt(91),
@@ -3239,6 +3277,10 @@ internal sealed class CopilotService : Form
             GenBus2Off = BoolAt(154),
             ApuGenOffBus = BoolAt(155),
             ApuEgtNeedle = FloatAt(200),
+            ElectricHydraulicPump1LowPressure = BoolAt(262),
+            ElectricHydraulicPump2LowPressure = BoolAt(263),
+            ElectricHydraulicPump1On = BoolAt(268),
+            ElectricHydraulicPump2On = BoolAt(269),
             EmergencyExitLights = ByteAt(217),
             NoSmokingSelector = ByteAt(218),
             FastenBeltsSelector = ByteAt(219),
@@ -3260,7 +3302,10 @@ internal sealed class CopilotService : Form
             PositionStrobeSelector = ByteAt(384),
             AntiCollisionOn = BoolAt(385),
             SpeedbrakeArmed = BoolAt(477),
+            SpeedbrakeExtended = BoolAt(479),
             AutobrakeSelector = ByteAt(487),
+            AutobrakeDisarmed = BoolAt(489),
+            BrakePressureNeedle = FloatAt(508),
             GearLever = ByteAt(506),
             ParkingBrakeAnnunciated = BoolAt(574),
             FireDetectionTestSwitch = ByteAt(579),
@@ -3828,6 +3873,9 @@ internal sealed class CopilotService : Form
             case "pmdg engine-generators on":
                 SetPmdgEngineGenerators(true);
                 break;
+            case "pmdg electric-hydraulic-pumps on":
+                SetPmdgElectricHydraulicPumps(true);
+                break;
             case "pmdg packs off":
                 SetPmdgPacks(0);
                 break;
@@ -3980,25 +4028,39 @@ internal sealed class CopilotService : Form
 
     private void SetPmdgLogoLight(bool on)
     {
-        _pmdgCommandedLogoLightOn = on;
-        _pmdgCommandedLogoLightUtc = DateTime.UtcNow;
-        if (_state != null)
-        {
-            _state.LogoLightsOn = on;
-            _state.NavLogoSelectorPosition = on ? 0 : 2;
-        }
-
         if (_pmdgNg3State?.LogoLightOn == on)
         {
             AppLog.Write(
-                $"PMDG logo light already {(on ? "ON" : "OFF")}; command-backed verification active.");
+                $"PMDG logo light already {(on ? "ON" : "OFF")}.");
             FinishOneShot();
             return;
         }
 
-        SendPmdgNg3Control(122, on ? 1u : 0u);
+        // PMDG's LOGO switch is a three-position physical switch. The SDK
+        // direct bool/position command can leave it in the centre detent, so
+        // drive the actual cockpit mouse rectangle through ROTOR_BRAKE switch
+        // id 122 and wait for PMDG's real bool readback.
+        const uint switchId = 122;
+        var actionCode = on ? 7u : 8u;
+        var clicks = 3;
+
+        for (var i = 0; i < clicks; i++)
+        {
+            if (i == 0)
+            {
+                SendPmdgRotorBrakeSwitch(switchId, actionCode);
+            }
+            else
+            {
+                SchedulePmdgRotorBrakeSwitch(switchId, actionCode, 300 * i);
+            }
+        }
+
+        SchedulePmdgNg3Control(122, on ? 2u : 0u, 1000);
+        _pmdgCommandedLogoLightOn = null;
+        _pmdgCommandedLogoLightUtc = null;
         AppLog.Write(
-            $"Executed PMDG logo light command: {(on ? "ON" : "OFF")}; command-backed verification active.");
+            $"Executed PMDG logo light ROTOR_BRAKE command: switch id {switchId} action {actionCode}, {clicks} click(s) toward {(on ? "ON" : "OFF")}.");
         FinishOneShot();
     }
 
@@ -4011,8 +4073,7 @@ internal sealed class CopilotService : Form
         var clicks = current.HasValue
             ? Math.Max(1, Math.Abs((int)position - current.Value))
             : 2;
-
-        clicks = Math.Min(3, clicks + 1);
+        clicks = Math.Min(2, clicks);
 
         for (var i = 0; i < clicks; i++)
         {
@@ -4026,11 +4087,9 @@ internal sealed class CopilotService : Form
             }
         }
 
-        // Keep the official SDK control as a fallback, but do not use
-        // optimistic command-backed verification here. The takeoff flow must
-        // wait for PMDG's actual position/strobe selector readback so it cannot
-        // mark strobes complete while the physical cockpit switch stays steady.
-        SchedulePmdgNg3Control(123, position, 1000);
+        // Do not send the SDK direct-position fallback here. This PMDG switch
+        // has three physical detents and can cycle; extra commands can move it
+        // past STROBE & STEADY and back to STEADY.
         _pmdgCommandedPositionStrobeSelector = null;
         _pmdgCommandedPositionStrobeUtc = null;
 
@@ -4102,7 +4161,18 @@ internal sealed class CopilotService : Form
 
     private void SetPmdgApuSelector(uint position)
     {
+        if (position == 2)
+        {
+            SendPmdgNg3Control(118, 1);
+            SchedulePmdgNg3Control(118, 2, 600);
+            SchedulePmdgNg3Control(118, 1, 1800);
+            AppLog.Write("Executed PMDG APU selector sequence: ON, momentary START, release to ON.");
+            FinishOneShot();
+            return;
+        }
+
         SendPmdgNg3Control(118, position);
+        AppLog.Write($"Executed PMDG APU selector command: position {position}.");
         FinishOneShot();
     }
 
@@ -4138,6 +4208,34 @@ internal sealed class CopilotService : Form
         SendPmdgNg3Control(27, parameter);
         SendPmdgNg3Control(30, parameter);
         AppLog.Write($"Executed PMDG engine generator command: {(on ? "ON" : "OFF")}.");
+        FinishOneShot();
+    }
+
+    private void SetPmdgElectricHydraulicPumps(bool on)
+    {
+        if (!on)
+        {
+            AppLog.Write("Skipped PMDG electric hydraulic pump OFF command; shutdown flow does not currently manage hydraulic pumps.");
+            FinishOneShot();
+            return;
+        }
+
+        var clicked = new List<string>();
+        if (_pmdgNg3State?.ElectricHydraulicPump1On != true)
+        {
+            SendPmdgNg3Control(168, PmdgMouseLeftSingle);
+            clicked.Add("ELEC 1");
+        }
+
+        if (_pmdgNg3State?.ElectricHydraulicPump2On != true)
+        {
+            SendPmdgNg3Control(167, PmdgMouseLeftSingle);
+            clicked.Add("ELEC 2");
+        }
+
+        AppLog.Write(clicked.Count == 0
+            ? "PMDG electric hydraulic pumps already ON."
+            : $"Executed PMDG electric hydraulic pump command: {string.Join(", ", clicked)} ON.");
         FinishOneShot();
     }
 
@@ -4409,7 +4507,7 @@ internal sealed class CopilotService : Form
             }
             else
             {
-                SchedulePmdgRotorBrakeSwitch(800, actionCode, 300 * i);
+                SchedulePmdgRotorBrakeSwitch(800, actionCode, 650 * i);
             }
         }
 
@@ -7737,6 +7835,7 @@ internal sealed class CopilotService : Form
         _adapterLabel = AddDashboardRow(statusPanel, "Aircraft adapter", "Connecting...");
         _recommendationLabel = AddDashboardRow(statusPanel, "Recommended flow", "Waiting for state...");
         _telemetryLabel = AddDashboardRow(statusPanel, "Current-step telemetry", "Waiting for state...");
+        _autolandReadinessLabel = AddDashboardRow(statusPanel, "Autoland assist", "737 only - disabled");
         _versionLabel = AddDashboardRow(
             statusPanel,
             "Version",
@@ -7873,11 +7972,11 @@ internal sealed class CopilotService : Form
         {
             _settings.TakeoffV1SpeedKnots = (int)_takeoffV1Box.Value;
             if (_takeoffRotateBox != null
-                && _takeoffRotateBox.Value <= _takeoffV1Box.Value)
+                && _takeoffRotateBox.Value < _takeoffV1Box.Value)
             {
                 _takeoffRotateBox.Value = Math.Min(
                     _takeoffRotateBox.Maximum,
-                    _takeoffV1Box.Value + 1);
+                    _takeoffV1Box.Value);
             }
             SettingsStore.Save(_settings);
             if (_state != null)
@@ -7905,18 +8004,18 @@ internal sealed class CopilotService : Form
             Maximum = 220,
             Increment = 1,
             Value = Math.Max(
-                _settings.TakeoffV1SpeedKnots + 1,
+                _settings.TakeoffV1SpeedKnots,
                 Math.Min(220, _settings.TakeoffRotateSpeedKnots)),
             Width = 64
         };
         _takeoffRotateBox.ValueChanged += (_, _) =>
         {
             if (_takeoffV1Box != null
-                && _takeoffRotateBox.Value <= _takeoffV1Box.Value)
+                && _takeoffRotateBox.Value < _takeoffV1Box.Value)
             {
                 _takeoffRotateBox.Value = Math.Min(
                     _takeoffRotateBox.Maximum,
-                    _takeoffV1Box.Value + 1);
+                    _takeoffV1Box.Value);
                 return;
             }
             _settings.TakeoffRotateSpeedKnots = (int)_takeoffRotateBox.Value;
@@ -8869,12 +8968,13 @@ internal sealed class CopilotService : Form
             var supported = _state.IsSupportedBoeing737;
             _autolandAssistBox.Enabled = supported;
             _autolandAssistBox.Text = supported
-                ? "Autoland assist"
+                ? $"Autoland assist {(_settings.EnableAutolandAssist ? "ON" : "OFF")}"
                 : "Autoland assist (737 only)";
             _autolandAssistBox.ForeColor = supported
                 ? System.Drawing.Color.Black
                 : System.Drawing.Color.DimGray;
         }
+        UpdateAutolandReadinessLabel(_state);
         _telemetryLabel!.Text = FormatCurrentStepTelemetry(_state);
         _telemetryLabel.ForeColor = _state.TelemetryIssues.Count == 0
             ? System.Drawing.Color.DarkSlateBlue
@@ -8933,6 +9033,40 @@ internal sealed class CopilotService : Form
             ? System.Drawing.Color.DarkRed
             : System.Drawing.Color.DarkBlue;
         RefreshFlowList(recommendation.Procedure.Id, definition?.Id);
+    }
+
+    private void UpdateAutolandReadinessLabel(AircraftState state)
+    {
+        if (_autolandReadinessLabel == null)
+        {
+            return;
+        }
+
+        if (!state.IsSupportedBoeing737)
+        {
+            _autolandReadinessLabel.Text = "737 only - hidden for Airbus aircraft";
+            _autolandReadinessLabel.ForeColor = System.Drawing.Color.DimGray;
+            return;
+        }
+
+        if (!_settings.EnableAutolandAssist)
+        {
+            _autolandReadinessLabel.Text = "Disabled - enable before ILS setup if troubleshooting dual-channel autoland";
+            _autolandReadinessLabel.ForeColor = System.Drawing.Color.DimGray;
+            return;
+        }
+
+        var ready = state.BoeingAutolandRadioSetupLooksReady
+            && state.BoeingAutolandApproachModesLookReady;
+        var next = ready
+            ? "If SINGLE CH remains, check PMDG-specific CMD B / FMA conditions next."
+            : "Resolve amber item before expecting CMD B / dual channel.";
+
+        _autolandReadinessLabel.Text =
+            $"{state.BoeingAutolandReadinessSummary} | {next}";
+        _autolandReadinessLabel.ForeColor = ready
+            ? System.Drawing.Color.DarkGreen
+            : System.Drawing.Color.DarkOrange;
     }
 
     private void UpdateAircraftCard(AircraftState state)

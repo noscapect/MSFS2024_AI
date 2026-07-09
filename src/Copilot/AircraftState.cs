@@ -39,6 +39,7 @@ internal sealed class AircraftState
     public bool ApuMasterSwitchOn { get; set; }
     public bool ApuAvailable { get; set; }
     public bool ApuStartButtonOn { get; set; }
+    public bool ApuSpoolingOrAvailable { get; set; }
     public bool ApuBleedOn { get; set; }
     public bool ApuBleedWarmupComplete { get; set; } = true;
     public double? LeftPackSwitchPosition { get; set; }
@@ -56,6 +57,11 @@ internal sealed class AircraftState
     public bool AcTransferBus2Powered { get; set; }
     public bool TransferBus1Off { get; set; }
     public bool TransferBus2Off { get; set; }
+    public bool BoeingElectricHydraulicPumpsOn { get; set; }
+    public bool BoeingElectricHydraulicPump1On { get; set; }
+    public bool BoeingElectricHydraulicPump2On { get; set; }
+    public bool BoeingElectricHydraulicPump1LowPressure { get; set; }
+    public bool BoeingElectricHydraulicPump2LowPressure { get; set; }
     public double ApuVolts { get; set; }
     public bool FuelPumpsConfigured { get; set; }
     public double CenterFuelQuantityPounds { get; set; }
@@ -128,6 +134,8 @@ internal sealed class AircraftState
     public bool AutopilotGlideslopeHoldOn { get; set; }
     public bool Nav1HasLocalizer { get; set; }
     public bool Nav1HasGlideslope { get; set; }
+    public bool Nav2HasLocalizer { get; set; }
+    public bool Nav2HasGlideslope { get; set; }
     public double Nav1ActiveFrequencyMhz { get; set; }
     public double Nav2ActiveFrequencyMhz { get; set; }
     public double Nav1CourseDegrees { get; set; }
@@ -222,6 +230,8 @@ internal sealed class AircraftState
         IsSupportedBoeing737
         && Nav1HasLocalizer
         && Nav1HasGlideslope
+        && Nav2HasLocalizer
+        && Nav2HasGlideslope
         && Math.Abs(Nav1ActiveFrequencyMhz - Nav2ActiveFrequencyMhz) < 0.01
         && CourseDifferenceDegrees(Nav1CourseDegrees, Nav2CourseDegrees) <= 1;
 
@@ -247,8 +257,12 @@ internal sealed class AircraftState
             var crs = courseDelta <= 1
                 ? "courses match"
                 : $"course mismatch {Nav1CourseDegrees:F0}/{Nav2CourseDegrees:F0}";
-            var loc = Nav1HasLocalizer ? "LOC valid" : "LOC not valid";
-            var gs = Nav1HasGlideslope ? "GS valid" : "GS not valid";
+            var loc = Nav1HasLocalizer && Nav2HasLocalizer
+                ? "LOC valid both"
+                : $"LOC L/R {(Nav1HasLocalizer ? "OK" : "NO")}/{(Nav2HasLocalizer ? "OK" : "NO")}";
+            var gs = Nav1HasGlideslope && Nav2HasGlideslope
+                ? "GS valid both"
+                : $"GS L/R {(Nav1HasGlideslope ? "OK" : "NO")}/{(Nav2HasGlideslope ? "OK" : "NO")}";
             var app = AutopilotApproachHoldOn ? "APP active" : "APP not active";
             var gsMode = AutopilotGlideslopeHoldOn ? "GS mode active" : "GS mode not active";
 

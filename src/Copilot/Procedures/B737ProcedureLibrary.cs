@@ -207,6 +207,7 @@ internal static class B737ProcedureLibrary
             {
                 Automatic("fo-engine-generators", "Engine generators ON", state => state.EngineGeneratorPowerEstablished, "pmdg engine-generators on", requireCommandExecution: true),
                 Observe("fo-engine-generator-power", "Engine generator power established", state => state.EngineGeneratorPowerEstablished),
+                Automatic("fo-electric-hydraulic-pumps", "Electric hydraulic pumps ON", state => state.BoeingElectricHydraulicPumpsOn, "pmdg electric-hydraulic-pumps on"),
                 Automatic("fo-apu-bleed-off", "APU bleed OFF", state => !state.ApuBleedOn, "pmdg apu-bleed off"),
                 Automatic("fo-packs-auto", "PACK switches AUTO", state => state.PacksAuto, "pmdg packs auto"),
                 Automatic("fo-isolation-auto", "Isolation valve AUTO", state => state.IsolationValveAuto, "pmdg isolation auto"),
@@ -312,7 +313,7 @@ internal static class B737ProcedureLibrary
                 Observe("approaching-minimums", "Approaching Minimums", state => state.RadioHeightFeet > 0 && state.RadioHeightFeet <= state.DecisionHeightFeet + 100),
                 Observe("minimums", "Minimums", state => state.RadioHeightFeet > 0 && state.RadioHeightFeet <= state.DecisionHeightFeet),
                 Observe("touchdown", "Touchdown", state => state.OnGround && state.GroundSpeedKnots > 30),
-                Observe("landing-rollout", "Spoilers, Reverse Green, Decel", state => state.OnGround && (state.GroundSpoilersDeployed || state.GroundSpeedKnots <= 80))
+                Observe("landing-rollout", "Spoilers, Reverse Green, Decel", state => state.OnGround && state.GroundSpoilersDeployed && state.ReverseThrustEngaged && state.GroundSpeedKnots <= 120)
             });
 
     public static ProcedureDefinition AfterLandingAndTaxi { get; } =
@@ -328,10 +329,11 @@ internal static class B737ProcedureLibrary
                 Automatic("fo-landing-lights-off", "Landing lights RETRACT", state => state.LeftLandingLightSelectorPosition == 0 && state.RightLandingLightSelectorPosition == 0, "pmdg landing-lights off", requireCommandExecution: true),
                 Automatic("fo-strobes-off", "Position lights STEADY", state => state.StrobeSelectorPosition.HasValue && Math.Abs(state.StrobeSelectorPosition.Value - 1) < 0.1, "pmdg strobes off"),
                 Automatic("fo-runway-turnoff-on", "Runway turnoff lights ON for taxi", state => state.RunwayTurnoffLightsOn, "pmdg runway-turnoff on"),
-                Automatic("fo-spoilers-down", "Speedbrake down", state => !state.GroundSpoilersArmed, "pmdg spoilers down"),
+                Automatic("fo-spoilers-down", "Speedbrake down", state => !state.GroundSpoilersArmed && !state.GroundSpoilersDeployed, "pmdg spoilers down"),
                 Automatic("fo-flaps-up", "Flaps UP", state => state.FlapsHandleIndex <= 0, "pmdg flaps clean"),
-                Automatic("fo-transponder-standby", "Transponder STBY", state => state.TransponderStandby, "pmdg transponder stby"),
-                Automatic("fo-apu-on", "APU started for gate", state => state.ApuMasterSwitchOn || state.ApuAvailable, "pmdg apu start"),
+                Automatic("fo-transponder-standby", "Transponder STBY", _ => true, "pmdg transponder stby", requireCommandExecution: true),
+                Automatic("fo-apu-on", "APU selector ON", state => state.ApuMasterSwitchOn || state.ApuAvailable, "pmdg apu on"),
+                Automatic("fo-apu-start", "APU start initiated", state => state.ApuSpoolingOrAvailable, "pmdg apu start"),
                 Observe("apu-available", "APU available", state => state.ApuAvailable),
                 Automatic("fo-apu-bleed-on", "APU bleed ON", state => state.ApuBleedOn, "pmdg apu-bleed on")
             });

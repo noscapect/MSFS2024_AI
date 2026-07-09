@@ -6,7 +6,7 @@ Simulator 2024:
 - **iniBuilds A320neo V2**
 - **iniBuilds A321LR**
 - **FlyByWire A32NX**
-- **PMDG 737-800** *(development branch support)*
+- **PMDG 737-800**
 
 Application icon artwork contributed by the project owner.
 The icon is embedded in the executable and assigned to the running WinForms
@@ -14,7 +14,7 @@ window so it is also used by the Windows taskbar.
 
 The application connects to the simulator through SimConnect, the installed
 MobiFlight WASM module for Airbus aircraft, and the PMDG NG3 SDK client-data
-channel for PMDG 737 development support. It guides a complete 12-flow
+channel for PMDG 737 support. It guides a complete 12-flow
 gate-to-gate flight, automates verified First Officer actions, monitors
 Captain actions, and speaks important callouts.
 
@@ -31,8 +31,8 @@ Captain actions, and speaks important callouts.
   takeoff, approach, landing, or taxi
 - Native iniBuilds A320-family and FlyByWire A32NX state monitoring through
   MobiFlight
-- Experimental PMDG 737-800 aircraft-family routing, Boeing procedures and
-  PMDG NG3 SDK state/control integration on the development branch
+- PMDG 737-800 aircraft-family routing, Boeing procedures and PMDG NG3 SDK
+  state/control integration
 - Verification after every automatic aircraft action
 - Optional Windows offline voice callouts
 - Persistent preflight settings for V1, VR, and transition altitude
@@ -65,16 +65,12 @@ The gameplay flow is defined in [docs/checklist.md](docs/checklist.md).
 ## Supported aircraft
 
 The application has moved from a single-aircraft A320 assistant to a
-multi-aircraft virtual first officer. The current public release supports
-three Microsoft Flight Simulator 2024 Airbus A320-family aircraft:
+multi-aircraft virtual first officer. The current public release supports:
 
 - iniBuilds A320neo V2
 - iniBuilds A321LR
 - FlyByWire A32NX for MSFS 2024
-
-The PMDG 737-800 is being developed on `feature/pmdg-737-800-support`. This
-development branch adds Boeing procedures and PMDG SDK control mapping while
-preserving the same one-app user experience.
+- PMDG 737-800
 
 The application deliberately avoids guessed generic events for unsupported
 aircraft controls.
@@ -86,12 +82,12 @@ To run the application:
 - Windows 10 or Windows 11
 - Microsoft Flight Simulator 2024
 - A supported aircraft profile: iniBuilds A320neo V2, iniBuilds A321LR,
-  FlyByWire A32NX for MSFS 2024, or a PMDG 737-800 development build
+  FlyByWire A32NX for MSFS 2024, or PMDG 737-800
 - MobiFlight WASM module installed in MSFS
 - .NET Framework 4.7.2 or newer
 
-PMDG 737-800 development builds also require PMDG's SDK data broadcast to be
-enabled in the aircraft options file. See
+PMDG 737-800 support also requires PMDG's SDK data broadcast to be enabled in
+the aircraft options file. See
 [docs/PMDG_737_SUPPORT_PLAN.md](docs/PMDG_737_SUPPORT_PLAN.md).
 
 GitHub release packages include the matching managed and native Microsoft
@@ -240,9 +236,8 @@ See [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Development status
 
-The iniBuilds A320neo V2 flow remains the mature baseline. FlyByWire A32NX and
-iniBuilds A321LR support have been added through aircraft-specific adapters and
-live-tested across the complete 12-flow sequence. PMDG 737-800 support is under
-active development on its own Boeing procedure path. Treat this as active
+The iniBuilds A320neo V2 flow remains the mature baseline. FlyByWire A32NX,
+iniBuilds A321LR, and PMDG 737-800 support have been added through
+aircraft-specific adapters and procedure paths. Treat this as active
 development software and remain ready to operate the aircraft manually.
 

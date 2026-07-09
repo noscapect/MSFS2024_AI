@@ -226,55 +226,6 @@ internal sealed class AircraftState
                 : "Unsupported aircraft";
 
     public bool EnginesOff => !Engine1Running && !Engine2Running;
-    public bool BoeingAutolandRadioSetupLooksReady =>
-        IsSupportedBoeing737
-        && Nav1HasLocalizer
-        && Nav1HasGlideslope
-        && Nav2HasLocalizer
-        && Nav2HasGlideslope
-        && Math.Abs(Nav1ActiveFrequencyMhz - Nav2ActiveFrequencyMhz) < 0.01
-        && CourseDifferenceDegrees(Nav1CourseDegrees, Nav2CourseDegrees) <= 1;
-
-    public bool BoeingAutolandApproachModesLookReady =>
-        IsSupportedBoeing737
-        && AutopilotMasterOn
-        && AutopilotApproachHoldOn
-        && AutopilotGlideslopeHoldOn;
-
-    public string BoeingAutolandReadinessSummary
-    {
-        get
-        {
-            if (!IsSupportedBoeing737)
-            {
-                return "Autoland: not a Boeing 737 profile";
-            }
-
-            var nav = Math.Abs(Nav1ActiveFrequencyMhz - Nav2ActiveFrequencyMhz) < 0.01
-                ? "NAV radios match"
-                : $"NAV mismatch {Nav1ActiveFrequencyMhz:F2}/{Nav2ActiveFrequencyMhz:F2}";
-            var courseDelta = CourseDifferenceDegrees(Nav1CourseDegrees, Nav2CourseDegrees);
-            var crs = courseDelta <= 1
-                ? "courses match"
-                : $"course mismatch {Nav1CourseDegrees:F0}/{Nav2CourseDegrees:F0}";
-            var loc = Nav1HasLocalizer && Nav2HasLocalizer
-                ? "LOC valid both"
-                : $"LOC L/R {(Nav1HasLocalizer ? "OK" : "NO")}/{(Nav2HasLocalizer ? "OK" : "NO")}";
-            var gs = Nav1HasGlideslope && Nav2HasGlideslope
-                ? "GS valid both"
-                : $"GS L/R {(Nav1HasGlideslope ? "OK" : "NO")}/{(Nav2HasGlideslope ? "OK" : "NO")}";
-            var app = AutopilotApproachHoldOn ? "APP active" : "APP not active";
-            var gsMode = AutopilotGlideslopeHoldOn ? "GS mode active" : "GS mode not active";
-
-            return $"Autoland: {nav}, {crs}, {loc}, {gs}, {app}, {gsMode}";
-        }
-    }
-
-    private static double CourseDifferenceDegrees(double left, double right)
-    {
-        var diff = Math.Abs((left % 360 + 360) % 360 - (right % 360 + 360) % 360);
-        return diff > 180 ? 360 - diff : diff;
-    }
 
     public bool EngineModeIgnStart =>
         EngineModeSelectorPosition.HasValue
@@ -484,9 +435,9 @@ internal sealed class AircraftState
         var handleIndex = (int)Math.Round(FlapsHandleIndex);
         return detent switch
         {
-            1 => handleIndex >= 1 || FlapSurfacesMatchBoeingFlaps(1),
-            2 => handleIndex >= 3 || FlapSurfacesMatchBoeingFlaps(5),
-            4 => handleIndex >= 7 || FlapSurfacesMatchBoeingFlaps(30),
+            1 => handleIndex >= 1,
+            2 => handleIndex >= 3,
+            4 => handleIndex >= 7,
             _ => Math.Abs(FlapsHandleIndex - detent) < 0.1
         };
     }
@@ -515,13 +466,13 @@ internal sealed class AircraftState
         {
             <= 0 => FlapsAtDetent(0),
             1 => Boeing737FlapsAtDetent(1),
-            2 => Math.Round(FlapsHandleIndex) >= 2 || FlapSurfacesMatchBoeingFlaps(2),
+            2 => Math.Round(FlapsHandleIndex) >= 2,
             5 => Boeing737FlapsAtDetent(2),
-            10 => Math.Round(FlapsHandleIndex) >= 4 || FlapSurfacesMatchBoeingFlaps(10),
-            15 => Math.Round(FlapsHandleIndex) >= 5 || FlapSurfacesMatchBoeingFlaps(15),
-            25 => Math.Round(FlapsHandleIndex) >= 6 || FlapSurfacesMatchBoeingFlaps(25),
+            10 => Math.Round(FlapsHandleIndex) >= 4,
+            15 => Math.Round(FlapsHandleIndex) >= 5,
+            25 => Math.Round(FlapsHandleIndex) >= 6,
             30 => Boeing737FlapsAtDetent(4),
-            40 => Math.Round(FlapsHandleIndex) >= 8 || FlapSurfacesMatchBoeingFlaps(40),
+            40 => Math.Round(FlapsHandleIndex) >= 8,
             _ => FlapsHandleIndex > 0
         };
     }

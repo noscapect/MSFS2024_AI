@@ -266,7 +266,6 @@ internal sealed class CopilotService : Form
     private Label? _electricalLabel;
     private Label? _recommendationLabel;
     private Label? _telemetryLabel;
-    private Label? _autolandReadinessLabel;
     private Label? _versionLabel;
     private Label? _adapterLabel;
     private Label? _simBadgeLabel;
@@ -293,7 +292,6 @@ internal sealed class CopilotService : Form
     private NumericUpDown? _takeoffV1Box;
     private NumericUpDown? _takeoffRotateBox;
     private CheckBox? _voiceCalloutsBox;
-    private CheckBox? _autolandAssistBox;
     private ComboBox? _replayFlightBox;
     private ListBox? _eventLog;
     private ListBox? _flowList;
@@ -3821,6 +3819,9 @@ internal sealed class CopilotService : Form
                 break;
             case "pmdg logo on":
                 SetPmdgLogoLight(true);
+                break;
+            case "pmdg logo off":
+                SetPmdgLogoLight(false);
                 break;
             case "pmdg position steady":
                 SetPmdgPositionStrobe(0);
@@ -7835,7 +7836,6 @@ internal sealed class CopilotService : Form
         _adapterLabel = AddDashboardRow(statusPanel, "Aircraft adapter", "Connecting...");
         _recommendationLabel = AddDashboardRow(statusPanel, "Recommended flow", "Waiting for state...");
         _telemetryLabel = AddDashboardRow(statusPanel, "Current-step telemetry", "Waiting for state...");
-        _autolandReadinessLabel = AddDashboardRow(statusPanel, "Autoland assist", "737 only - disabled");
         _versionLabel = AddDashboardRow(
             statusPanel,
             "Version",
@@ -7887,22 +7887,6 @@ internal sealed class CopilotService : Form
             }
         };
         settingsPanel.Controls.Add(_voiceCalloutsBox);
-
-        _autolandAssistBox = new CheckBox
-        {
-            Text = "Autoland assist",
-            AutoSize = true,
-            Checked = _settings.EnableAutolandAssist,
-            Margin = new Padding(18, 5, 0, 0)
-        };
-        _autolandAssistBox.CheckedChanged += (_, _) =>
-        {
-            _settings.EnableAutolandAssist = _autolandAssistBox.Checked;
-            SettingsStore.Save(_settings);
-            AppendDashboardLog(
-                $"Autoland assist {(_autolandAssistBox.Checked ? "enabled" : "disabled")}.");
-        };
-        settingsPanel.Controls.Add(_autolandAssistBox);
 
         var featureSettingsButton = new Button
         {
@@ -8963,18 +8947,6 @@ internal sealed class CopilotService : Form
             : _mobiFlightReady
             ? System.Drawing.Color.DarkGreen
             : System.Drawing.Color.DarkRed;
-        if (_autolandAssistBox != null)
-        {
-            var supported = _state.IsSupportedBoeing737;
-            _autolandAssistBox.Enabled = supported;
-            _autolandAssistBox.Text = supported
-                ? $"Autoland assist {(_settings.EnableAutolandAssist ? "ON" : "OFF")}"
-                : "Autoland assist (737 only)";
-            _autolandAssistBox.ForeColor = supported
-                ? System.Drawing.Color.Black
-                : System.Drawing.Color.DimGray;
-        }
-        UpdateAutolandReadinessLabel(_state);
         _telemetryLabel!.Text = FormatCurrentStepTelemetry(_state);
         _telemetryLabel.ForeColor = _state.TelemetryIssues.Count == 0
             ? System.Drawing.Color.DarkSlateBlue
@@ -9033,40 +9005,6 @@ internal sealed class CopilotService : Form
             ? System.Drawing.Color.DarkRed
             : System.Drawing.Color.DarkBlue;
         RefreshFlowList(recommendation.Procedure.Id, definition?.Id);
-    }
-
-    private void UpdateAutolandReadinessLabel(AircraftState state)
-    {
-        if (_autolandReadinessLabel == null)
-        {
-            return;
-        }
-
-        if (!state.IsSupportedBoeing737)
-        {
-            _autolandReadinessLabel.Text = "737 only - hidden for Airbus aircraft";
-            _autolandReadinessLabel.ForeColor = System.Drawing.Color.DimGray;
-            return;
-        }
-
-        if (!_settings.EnableAutolandAssist)
-        {
-            _autolandReadinessLabel.Text = "Disabled - enable before ILS setup if troubleshooting dual-channel autoland";
-            _autolandReadinessLabel.ForeColor = System.Drawing.Color.DimGray;
-            return;
-        }
-
-        var ready = state.BoeingAutolandRadioSetupLooksReady
-            && state.BoeingAutolandApproachModesLookReady;
-        var next = ready
-            ? "If SINGLE CH remains, check PMDG-specific CMD B / FMA conditions next."
-            : "Resolve amber item before expecting CMD B / dual channel.";
-
-        _autolandReadinessLabel.Text =
-            $"{state.BoeingAutolandReadinessSummary} | {next}";
-        _autolandReadinessLabel.ForeColor = ready
-            ? System.Drawing.Color.DarkGreen
-            : System.Drawing.Color.DarkOrange;
     }
 
     private void UpdateAircraftCard(AircraftState state)
@@ -9498,8 +9436,6 @@ internal sealed class CopilotService : Form
         var distance = state.ApproachDistanceToTouchdownNm.HasValue
             ? $" | DIST {state.ApproachDistanceToTouchdownNm.Value:F1} NM {state.ApproachDistanceSource}"
             : " | DIST n/a";
-        var showAutolandAssist = _settings.EnableAutolandAssist
-            && state.IsSupportedBoeing737;
         return stepId switch
         {
             "fo-v1" => $"{flight} | target V1 {state.TakeoffV1SpeedKnots} kt",
@@ -9522,14 +9458,8 @@ internal sealed class CopilotService : Form
                 $"{flight} | wait IAS <={state.EffectiveApproachFlapsFullSpeedKnots} kt for FULL",
             "landing-data-set" =>
                 $"{flight} | FMC landing flaps {(state.BoeingLandingFlaps.HasValue ? state.BoeingLandingFlaps.Value.ToString() : "not set")} | VREF {(state.BoeingLandingVrefKnots.HasValue ? state.BoeingLandingVrefKnots.Value.ToString() : "not set")}",
-            "captain-ils-autoland" =>
-                showAutolandAssist
-                    ? state.BoeingAutolandReadinessSummary
-                    : "Autoland assist disabled - confirm normal approach setup or enable assist if using dual-channel autoland",
             "stable-approach" =>
-                showAutolandAssist
-                    ? $"{flight} | RA {state.RadioHeightFeet:F0} ft | target {state.EffectiveBoeingApproachTargetSpeedKnots} kt | stable {(state.BoeingApproachStable ? "YES" : "NO")} | {state.BoeingAutolandReadinessSummary}"
-                    : $"{flight} | RA {state.RadioHeightFeet:F0} ft | target {state.EffectiveBoeingApproachTargetSpeedKnots} kt | stable {(state.BoeingApproachStable ? "YES" : "NO")}",
+                $"{flight} | RA {state.RadioHeightFeet:F0} ft | target {state.EffectiveBoeingApproachTargetSpeedKnots} kt | stable {(state.BoeingApproachStable ? "YES" : "NO")}",
             "fo-approaching-minimums" or "fo-minimums" =>
                 $"{flight} | RA {state.RadioHeightFeet:F0} ft | DH {state.DecisionHeightFeet:F0} ft",
             "fo-flaps-one" or "fo-flaps-two" or "fo-flaps-three" or "fo-flaps-full"
@@ -9541,10 +9471,7 @@ internal sealed class CopilotService : Form
             "fo-display-initialization" =>
                 $"BAT 1/2 {state.Battery1On.ToOnOff()}/{state.Battery2On.ToOnOff()} | " +
                 $"EXT PWR {state.ExternalPowerOn.ToOnOff()} | waiting for 45 s stable power",
-            _ => showAutolandAssist
-                 && _procedureRunner.Definition?.Id is "descent-preparation" or "approach-landing"
-                ? $"{flight} | {state.BoeingAutolandReadinessSummary}"
-                : flight
+            _ => flight
         };
     }
 

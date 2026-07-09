@@ -55,7 +55,7 @@ iniBuilds A320-family adapter where its controls match the A320neo V2.
 FBW-specific mappings were added through the same normalized state/action model
 so procedures can stay shared.
 
-PMDG 737-800 support is being developed as a separate Boeing aircraft family.
+PMDG 737-800 support is implemented as a separate Boeing aircraft family.
 Airbus procedures remain in `A320ProcedureLibrary`; Boeing procedures live in
 `B737ProcedureLibrary`; `ProcedureCatalog` selects the correct catalog from the
 loaded aircraft so the user still sees one app. PMDG cockpit state is read from

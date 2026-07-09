@@ -4,9 +4,8 @@ MSFS 2024 Virtual First Officer is an external application that performs the
 duties of a first officer in supported Microsoft Flight Simulator 2024 aircraft
 throughout a complete gate-to-gate operation.
 
-The app supports the iniBuilds A320neo V2, iniBuilds A321LR, and FlyByWire
-A32NX for MSFS 2024 in public releases. PMDG 737-800 support is being
-developed on a separate Boeing procedure path.
+The app supports the iniBuilds A320neo V2, iniBuilds A321LR, FlyByWire A32NX
+for MSFS 2024, and PMDG 737-800 in public releases.
 
 The application begins with a cold-and-dark aircraft at the departure gate and
 continues through shutdown and passenger offboarding at the destination.

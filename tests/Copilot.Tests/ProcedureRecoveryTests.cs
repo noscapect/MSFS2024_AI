@@ -57,7 +57,34 @@ public sealed class ProcedureRecoveryTests
 
         Assert.AreEqual("captain-batteries", runner.CurrentStep?.Id);
         Assert.IsTrue(state.IsFlyByWireA320Neo);
+        Assert.IsTrue(state.IsFlyByWireAirbus);
         Assert.IsTrue(state.IsSupportedA320);
+    }
+
+    [TestMethod]
+    public void PowerUpFlowAcceptsFlyByWireA380XForDiscovery()
+    {
+        var commands = new List<string>();
+        var runner = new ProcedureRunner(
+            commands.Add,
+            () => AutomationPolicy.AutomaticWhenSupported);
+        var state = new AircraftState
+        {
+            Title = "FlyByWire A380X",
+            OnGround = true,
+            GroundSpeedKnots = 0,
+            Engine1Running = false,
+            Engine2Running = false
+        };
+
+        runner.Start(A320ProcedureLibrary.PowerUpAndInitialSetup, state);
+
+        Assert.AreEqual("captain-batteries", runner.CurrentStep?.Id);
+        Assert.IsFalse(state.IsFlyByWireA320Neo);
+        Assert.IsTrue(state.IsFlyByWireA380X);
+        Assert.IsTrue(state.IsFlyByWireAirbus);
+        Assert.IsTrue(state.IsSupportedA320);
+        Assert.AreEqual("FlyByWire A380X", state.AircraftFamilyLabel);
     }
 
     [TestMethod]

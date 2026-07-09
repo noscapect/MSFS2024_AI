@@ -195,12 +195,24 @@ internal sealed class AircraftState
     public bool IsIniBuildsA320Family =>
         IsA320NeoV2 || IsIniBuildsA321Lr;
 
+    public bool IsFlyByWireA380X =>
+        Title.IndexOf("A380X", StringComparison.OrdinalIgnoreCase) >= 0
+        || Title.IndexOf("A380-842", StringComparison.OrdinalIgnoreCase) >= 0
+        || Title.IndexOf("A380", StringComparison.OrdinalIgnoreCase) >= 0
+        && Title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0;
+
     public bool IsFlyByWireA320Neo =>
-        Title.IndexOf("A32NX", StringComparison.OrdinalIgnoreCase) >= 0
-        || Title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0;
+        !IsFlyByWireA380X
+        && (Title.IndexOf("A32NX", StringComparison.OrdinalIgnoreCase) >= 0
+            || Title.IndexOf("A320", StringComparison.OrdinalIgnoreCase) >= 0
+            && Title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0
+            || string.Equals(Title, "FlyByWire A32NX", StringComparison.OrdinalIgnoreCase));
+
+    public bool IsFlyByWireAirbus =>
+        IsFlyByWireA320Neo || IsFlyByWireA380X;
 
     public bool IsSupportedA320 =>
-        IsIniBuildsA320Family || IsFlyByWireA320Neo;
+        IsIniBuildsA320Family || IsFlyByWireAirbus;
 
     public bool IsPmdg737 =>
         Title.IndexOf("PMDG", StringComparison.OrdinalIgnoreCase) >= 0
@@ -221,6 +233,10 @@ internal sealed class AircraftState
     public string AircraftFamilyLabel =>
         IsSupportedBoeing737
             ? "PMDG 737-800"
+            : IsFlyByWireA380X
+                ? "FlyByWire A380X"
+            : IsFlyByWireA320Neo
+                ? "FlyByWire A32NX"
             : IsSupportedA320
                 ? "Airbus A320-family"
                 : "Unsupported aircraft";
@@ -308,24 +324,24 @@ internal sealed class AircraftState
         Engine1FuelFlowPph > 0
         || IsPmdg737
         && Engine1Running
-        || IsFlyByWireA320Neo
+        || IsFlyByWireAirbus
         && (Engine1StarterActive || Engine1Running)
         && Engine1N1Percent >= 3;
     public bool Engine2FuelFlowDetected =>
         Engine2FuelFlowPph > 0
         || IsPmdg737
         && Engine2Running
-        || IsFlyByWireA320Neo
+        || IsFlyByWireAirbus
         && (Engine2StarterActive || Engine2Running)
         && Engine2N1Percent >= 3;
     public bool Engine1StartStabilized =>
-        IsFlyByWireA320Neo && FbwEngine1State == 1
+        IsFlyByWireAirbus && FbwEngine1State == 1
         || Engine1Running
         && !Engine1StarterActive
         && Engine1N1Percent >= 15
         && Engine1FuelFlowDetected;
     public bool Engine2StartStabilized =>
-        IsFlyByWireA320Neo && FbwEngine2State == 1
+        IsFlyByWireAirbus && FbwEngine2State == 1
         || Engine2Running
         && !Engine2StarterActive
         && Engine2N1Percent >= 15

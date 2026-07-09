@@ -42,18 +42,26 @@ Every capability is marked as supported, unsupported, read-only, or requiring
 manual confirmation.
 
 The application is now structured around aircraft-family adapters rather than a
-single A320-specific flow. The public release supports three A320-family
-aircraft profiles:
+single A320-specific flow. The public release supports multiple Airbus and
+Boeing aircraft profiles; this branch adds experimental FlyByWire A380X work:
 
 - iniBuilds A320neo V2
 - iniBuilds A321LR
 - FlyByWire A32NX for MSFS 2024
+- FlyByWire A380X for MSFS 2024 *(experimental branch profile)*
+- PMDG 737-800
 
 iniBuilds command/state pairs and the mandatory momentary-command workflow are
 defined in `docs/NATIVE_CONTROL_STRATEGY.md`. The A321LR uses the shared
 iniBuilds A320-family adapter where its controls match the A320neo V2.
 FBW-specific mappings were added through the same normalized state/action model
 so procedures can stay shared.
+
+FlyByWire A380X support starts from the same FBW Airbus adapter because the
+upstream A380X source reuses many `A32NX_...` local variables for shared
+systems. A380-specific differences must still be added behind explicit
+aircraft checks; for example, external power readback uses the indexed
+`A32NX_OVHD_ELEC_EXT_PWR_1_PB_IS_ON` pushbutton variable.
 
 PMDG 737-800 support is implemented as a separate Boeing aircraft family.
 Airbus procedures remain in `A320ProcedureLibrary`; Boeing procedures live in

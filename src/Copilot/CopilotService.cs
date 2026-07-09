@@ -154,6 +154,8 @@ internal sealed class CopilotService : Form
     private bool? _fbwA380ExternalPower3OnTyped;
     private bool? _fbwA380ExternalPower4AvailableTyped;
     private bool? _fbwA380ExternalPower4OnTyped;
+    private double? _lastLoggedA380ExternalPowerDirectSignature;
+    private double? _lastLoggedA380AcPowerSignature;
     private bool? _fbwApuMasterSwitch;
     private bool? _fbwApuStartButton;
     private bool? _fbwApuStartAvailable;
@@ -600,6 +602,18 @@ internal sealed class CopilotService : Form
         public double ExternalPowerOn;
         public double ExternalPowerAvailableUnindexed;
         public double ExternalPowerOnUnindexed;
+        public double FbwA380ExternalPower1Available;
+        public double FbwA380ExternalPower1On;
+        public double FbwA380ExternalPower2Available;
+        public double FbwA380ExternalPower2On;
+        public double FbwA380ExternalPower3Available;
+        public double FbwA380ExternalPower3On;
+        public double FbwA380ExternalPower4Available;
+        public double FbwA380ExternalPower4On;
+        public double FbwA380AcBus1Powered;
+        public double FbwA380AcBus2Powered;
+        public double FbwA380AcBus3Powered;
+        public double FbwA380AcBus4Powered;
         public double ParkingBrake;
         public double Beacon;
         public double NavigationLights;
@@ -984,6 +998,18 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "EXTERNAL POWER ON:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "EXTERNAL POWER AVAILABLE", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "EXTERNAL POWER ON", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:A32NX_EXT_PWR_AVAIL:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:A32NX_OVHD_ELEC_EXT_PWR_1_PB_IS_ON", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:A32NX_EXT_PWR_AVAIL:2", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:A32NX_OVHD_ELEC_EXT_PWR_2_PB_IS_ON", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:A32NX_EXT_PWR_AVAIL:3", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:A32NX_OVHD_ELEC_EXT_PWR_3_PB_IS_ON", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:A32NX_EXT_PWR_AVAIL:4", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:A32NX_OVHD_ELEC_EXT_PWR_4_PB_IS_ON", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:A32NX_ELEC_AC_1_BUS_IS_POWERED", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:A32NX_ELEC_AC_2_BUS_IS_POWERED", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:A32NX_ELEC_AC_3_BUS_IS_POWERED", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:A32NX_ELEC_AC_4_BUS_IS_POWERED", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "BRAKE PARKING POSITION", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "LIGHT BEACON", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "LIGHT NAV", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
@@ -2247,6 +2273,32 @@ internal sealed class CopilotService : Form
         {
             LogChangedVoltage("FBW generic BAT 1 voltage", raw.Battery1Voltage, ref _lastLoggedBattery1Voltage);
             LogChangedVoltage("FBW generic BAT 2 voltage", raw.Battery2Voltage, ref _lastLoggedBattery2Voltage);
+            if (isFlyByWireA380X)
+            {
+                var externalPowerDirectSignature =
+                    raw.FbwA380ExternalPower1Available * 1
+                    + raw.FbwA380ExternalPower1On * 10
+                    + raw.FbwA380ExternalPower2Available * 100
+                    + raw.FbwA380ExternalPower2On * 1000
+                    + raw.FbwA380ExternalPower3Available * 10000
+                    + raw.FbwA380ExternalPower3On * 100000
+                    + raw.FbwA380ExternalPower4Available * 1000000
+                    + raw.FbwA380ExternalPower4On * 10000000;
+                LogChangedFloat(
+                    "FBW A380 direct EXT PWR avail/on signature",
+                    externalPowerDirectSignature,
+                    ref _lastLoggedA380ExternalPowerDirectSignature);
+
+                var acPowerSignature =
+                    raw.FbwA380AcBus1Powered * 1
+                    + raw.FbwA380AcBus2Powered * 10
+                    + raw.FbwA380AcBus3Powered * 100
+                    + raw.FbwA380AcBus4Powered * 1000;
+                LogChangedFloat(
+                    "FBW A380 AC bus powered signature",
+                    acPowerSignature,
+                    ref _lastLoggedA380AcPowerSignature);
+            }
         }
         if (isPmdg737 && pmdg != null)
         {
@@ -2383,7 +2435,11 @@ internal sealed class CopilotService : Form
                     _fbwA380ExternalPower1AvailableTyped,
                     _fbwA380ExternalPower2AvailableTyped,
                     _fbwA380ExternalPower3AvailableTyped,
-                    _fbwA380ExternalPower4AvailableTyped)
+                    _fbwA380ExternalPower4AvailableTyped,
+                    raw.FbwA380ExternalPower1Available != 0,
+                    raw.FbwA380ExternalPower2Available != 0,
+                    raw.FbwA380ExternalPower3Available != 0,
+                    raw.FbwA380ExternalPower4Available != 0)
                 : isPmdg737
                     ? pmdg?.GroundPowerAvailable == true
                 : raw.ExternalPowerAvailable != 0,
@@ -2396,7 +2452,20 @@ internal sealed class CopilotService : Form
                     _fbwA380ExternalPower1OnTyped,
                     _fbwA380ExternalPower2OnTyped,
                     _fbwA380ExternalPower3OnTyped,
-                    _fbwA380ExternalPower4OnTyped)
+                    _fbwA380ExternalPower4OnTyped,
+                    raw.FbwA380ExternalPower1On != 0,
+                    raw.FbwA380ExternalPower2On != 0,
+                    raw.FbwA380ExternalPower3On != 0,
+                    raw.FbwA380ExternalPower4On != 0,
+                    isFlyByWireA380X
+                    && raw.ApuRpm < 5
+                    && raw.Engine1Combustion == 0
+                    && raw.Engine2Combustion == 0
+                    && (
+                        raw.FbwA380AcBus1Powered != 0
+                        || raw.FbwA380AcBus2Powered != 0
+                        || raw.FbwA380AcBus3Powered != 0
+                        || raw.FbwA380AcBus4Powered != 0))
                 : isPmdg737
                     ? pmdg?.GroundPowerOn == true
                       && pmdg.AcTransferBus1Powered
@@ -2405,6 +2474,18 @@ internal sealed class CopilotService : Form
                 : raw.ExternalPowerOn != 0,
             ExternalPowerAvailableUnindexed = raw.ExternalPowerAvailableUnindexed != 0,
             ExternalPowerOnUnindexed = raw.ExternalPowerOnUnindexed != 0,
+            FbwA380ExternalPower1Available = raw.FbwA380ExternalPower1Available != 0,
+            FbwA380ExternalPower1On = raw.FbwA380ExternalPower1On != 0,
+            FbwA380ExternalPower2Available = raw.FbwA380ExternalPower2Available != 0,
+            FbwA380ExternalPower2On = raw.FbwA380ExternalPower2On != 0,
+            FbwA380ExternalPower3Available = raw.FbwA380ExternalPower3Available != 0,
+            FbwA380ExternalPower3On = raw.FbwA380ExternalPower3On != 0,
+            FbwA380ExternalPower4Available = raw.FbwA380ExternalPower4Available != 0,
+            FbwA380ExternalPower4On = raw.FbwA380ExternalPower4On != 0,
+            FbwA380AcBus1Powered = raw.FbwA380AcBus1Powered != 0,
+            FbwA380AcBus2Powered = raw.FbwA380AcBus2Powered != 0,
+            FbwA380AcBus3Powered = raw.FbwA380AcBus3Powered != 0,
+            FbwA380AcBus4Powered = raw.FbwA380AcBus4Powered != 0,
             ParkingBrakeSet = isFlyByWireAirbus
                 ? _fbwParkingBrake == true
                 : isPmdg737 && pmdg != null
@@ -3236,6 +3317,15 @@ internal sealed class CopilotService : Form
         if (!previousValue.HasValue || Math.Abs(previousValue.Value - value) >= 0.1)
         {
             AppLog.Write($"{label} changed to {value:F1} V.");
+            previousValue = value;
+        }
+    }
+
+    private static void LogChangedFloat(string label, double value, ref double? previousValue)
+    {
+        if (!previousValue.HasValue || Math.Abs(previousValue.Value - value) >= 0.1)
+        {
+            AppLog.Write($"{label} changed to {value:F0}.");
             previousValue = value;
         }
     }
@@ -7818,6 +7908,9 @@ internal sealed class CopilotService : Form
             $"  FBW EXT PWR ON untyped/typed: {FormatOptionalBool(_fbwExternalPowerOn)}/{FormatOptionalBool(_fbwExternalPowerOnTyped)}",
             $"  FBW A380 EXT PWR available 1/2/3/4: {FormatOptionalBool(_fbwA380ExternalPower1AvailableTyped)}/{FormatOptionalBool(_fbwA380ExternalPower2AvailableTyped)}/{FormatOptionalBool(_fbwA380ExternalPower3AvailableTyped)}/{FormatOptionalBool(_fbwA380ExternalPower4AvailableTyped)}",
             $"  FBW A380 EXT PWR ON 1/2/3/4: {FormatOptionalBool(_fbwA380ExternalPower1OnTyped)}/{FormatOptionalBool(_fbwA380ExternalPower2OnTyped)}/{FormatOptionalBool(_fbwA380ExternalPower3OnTyped)}/{FormatOptionalBool(_fbwA380ExternalPower4OnTyped)}",
+            $"  FBW A380 direct EXT PWR available 1/2/3/4: {_state.FbwA380ExternalPower1Available.ToYesNo()}/{_state.FbwA380ExternalPower2Available.ToYesNo()}/{_state.FbwA380ExternalPower3Available.ToYesNo()}/{_state.FbwA380ExternalPower4Available.ToYesNo()}",
+            $"  FBW A380 direct EXT PWR ON 1/2/3/4: {_state.FbwA380ExternalPower1On.ToOnOff()}/{_state.FbwA380ExternalPower2On.ToOnOff()}/{_state.FbwA380ExternalPower3On.ToOnOff()}/{_state.FbwA380ExternalPower4On.ToOnOff()}",
+            $"  FBW A380 AC buses powered 1/2/3/4: {_state.FbwA380AcBus1Powered.ToYesNo()}/{_state.FbwA380AcBus2Powered.ToYesNo()}/{_state.FbwA380AcBus3Powered.ToYesNo()}/{_state.FbwA380AcBus4Powered.ToYesNo()}",
             $"  Generic EXT PWR unindexed available/on: {_state.ExternalPowerAvailableUnindexed.ToYesNo()}/{_state.ExternalPowerOnUnindexed.ToOnOff()}",
             $"  App ADIRS 1/2/3 selector: {_state.Adirs1SelectorState:F0}/{_state.Adirs2SelectorState:F0}/{_state.Adirs3SelectorState:F0}",
             $"  FBW ADIRS 1 untyped/typed/commanded: {FormatOptionalFloat(_fbwAdirs1Selector, "F0")}/{FormatOptionalFloat(_fbwAdirs1SelectorTyped, "F0")}/{FormatOptionalFloat(_fbwCommandedAdirs1Selector, "F0")}",

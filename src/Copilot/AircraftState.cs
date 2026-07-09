@@ -28,6 +28,18 @@ internal sealed class AircraftState
     public bool ExternalPowerOn { get; set; }
     public bool ExternalPowerAvailableUnindexed { get; set; }
     public bool ExternalPowerOnUnindexed { get; set; }
+    public bool FbwA380ExternalPower1Available { get; set; }
+    public bool FbwA380ExternalPower1On { get; set; }
+    public bool FbwA380ExternalPower2Available { get; set; }
+    public bool FbwA380ExternalPower2On { get; set; }
+    public bool FbwA380ExternalPower3Available { get; set; }
+    public bool FbwA380ExternalPower3On { get; set; }
+    public bool FbwA380ExternalPower4Available { get; set; }
+    public bool FbwA380ExternalPower4On { get; set; }
+    public bool FbwA380AcBus1Powered { get; set; }
+    public bool FbwA380AcBus2Powered { get; set; }
+    public bool FbwA380AcBus3Powered { get; set; }
+    public bool FbwA380AcBus4Powered { get; set; }
     public bool CockpitDisplaysReady { get; set; }
     public bool ParkingBrakeSet { get; set; }
     public bool BeaconOn { get; set; }

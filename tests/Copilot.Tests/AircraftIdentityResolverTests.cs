@@ -75,4 +75,20 @@ public sealed class AircraftIdentityResolverTests
             }
         }
     }
+
+    [TestMethod]
+    public void DisplayTextIgnoresAircraftLocalizationTokens()
+    {
+        var identity = new Msfs2024Ai.Copilot.AircraftIdentity.AircraftIdentity
+        {
+            Title = "FlyByWire A380X",
+            Manufacturer = "TT:AIRCRAFT_UI_MANUFACTURER",
+            Type = "TT:AIRCRAFT_UI_MODEL",
+            Variation = "TT:AIRCRAFT.UI_VARIATION",
+            CreatedBy = "FlyByWire Simulations"
+        };
+
+        Assert.AreEqual("FlyByWire A380X", identity.DisplayName);
+        Assert.AreEqual("FlyByWire Simulations", identity.DisplayVariation);
+    }
 }

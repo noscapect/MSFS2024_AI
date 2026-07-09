@@ -46,6 +46,15 @@ internal sealed class AircraftIdentity
         }
     }
 
-    private static string Clean(string value) =>
-        value.Trim().Trim('"');
+    private static string Clean(string value)
+    {
+        var cleaned = value.Trim().Trim('"');
+        return IsLocalizationToken(cleaned) ? "" : cleaned;
+    }
+
+    private static bool IsLocalizationToken(string value) =>
+        value.StartsWith("TT:", StringComparison.OrdinalIgnoreCase)
+        || value.StartsWith("TT_", StringComparison.OrdinalIgnoreCase)
+        || value.StartsWith("AIRCRAFT.UI.", StringComparison.OrdinalIgnoreCase)
+        || value.StartsWith("AIRCRAFT_UI_", StringComparison.OrdinalIgnoreCase);
 }

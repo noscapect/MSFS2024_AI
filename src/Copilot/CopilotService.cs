@@ -146,7 +146,14 @@ internal sealed class CopilotService : Form
     private bool? _fbwExternalPowerOn;
     private bool? _fbwExternalPowerAvailableTyped;
     private bool? _fbwExternalPowerOnTyped;
+    private bool? _fbwA380ExternalPower1AvailableTyped;
     private bool? _fbwA380ExternalPower1OnTyped;
+    private bool? _fbwA380ExternalPower2AvailableTyped;
+    private bool? _fbwA380ExternalPower2OnTyped;
+    private bool? _fbwA380ExternalPower3AvailableTyped;
+    private bool? _fbwA380ExternalPower3OnTyped;
+    private bool? _fbwA380ExternalPower4AvailableTyped;
+    private bool? _fbwA380ExternalPower4OnTyped;
     private bool? _fbwApuMasterSwitch;
     private bool? _fbwApuStartButton;
     private bool? _fbwApuStartAvailable;
@@ -399,7 +406,14 @@ internal sealed class CopilotService : Form
         FbwWeatherRadarPwsSelector = 198,
         FbwTcasAltitudeReporting = 199,
         FbwTcasMode = 200,
-        FbwA380ExternalPower1OnTyped = 201,
+        FbwA380ExternalPower1AvailableTyped = 201,
+        FbwA380ExternalPower1OnTyped = 202,
+        FbwA380ExternalPower2AvailableTyped = 203,
+        FbwA380ExternalPower2OnTyped = 204,
+        FbwA380ExternalPower3AvailableTyped = 205,
+        FbwA380ExternalPower3OnTyped = 206,
+        FbwA380ExternalPower4AvailableTyped = 207,
+        FbwA380ExternalPower4OnTyped = 208,
         PmdgNg3Data = 300,
         PmdgNg3Control = 301
     }
@@ -509,7 +523,14 @@ internal sealed class CopilotService : Form
         FbwWeatherRadarPwsSelector = 198,
         FbwTcasAltitudeReporting = 199,
         FbwTcasMode = 200,
-        FbwA380ExternalPower1OnTyped = 201,
+        FbwA380ExternalPower1AvailableTyped = 201,
+        FbwA380ExternalPower1OnTyped = 202,
+        FbwA380ExternalPower2AvailableTyped = 203,
+        FbwA380ExternalPower2OnTyped = 204,
+        FbwA380ExternalPower3AvailableTyped = 205,
+        FbwA380ExternalPower3OnTyped = 206,
+        FbwA380ExternalPower4AvailableTyped = 207,
+        FbwA380ExternalPower4OnTyped = 208,
         PmdgNg3Data = unchecked((int)PmdgNg3DataDefinition),
         PmdgNg3Control = unchecked((int)PmdgNg3ControlDefinition)
     }
@@ -1203,7 +1224,7 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        if (request is >= Request.NativeBattery1 and <= Request.FbwA380ExternalPower1OnTyped)
+        if (request is >= Request.NativeBattery1 and <= Request.FbwA380ExternalPower4OnTyped)
         {
             var value = ((MobiFlightFloat)data.dwData[0]).Value;
             if (request == Request.NativeBattery1)
@@ -1284,9 +1305,37 @@ internal sealed class CopilotService : Form
             {
                 SetLoggedBool(ref _fbwExternalPowerOnTyped, value, "FBW A32NX EXT PWR ON typed");
             }
+            else if (request == Request.FbwA380ExternalPower1AvailableTyped)
+            {
+                SetLoggedBool(ref _fbwA380ExternalPower1AvailableTyped, value, "FBW A380X EXT PWR 1 available typed");
+            }
             else if (request == Request.FbwA380ExternalPower1OnTyped)
             {
                 SetLoggedBool(ref _fbwA380ExternalPower1OnTyped, value, "FBW A380X EXT PWR 1 ON typed");
+            }
+            else if (request == Request.FbwA380ExternalPower2AvailableTyped)
+            {
+                SetLoggedBool(ref _fbwA380ExternalPower2AvailableTyped, value, "FBW A380X EXT PWR 2 available typed");
+            }
+            else if (request == Request.FbwA380ExternalPower2OnTyped)
+            {
+                SetLoggedBool(ref _fbwA380ExternalPower2OnTyped, value, "FBW A380X EXT PWR 2 ON typed");
+            }
+            else if (request == Request.FbwA380ExternalPower3AvailableTyped)
+            {
+                SetLoggedBool(ref _fbwA380ExternalPower3AvailableTyped, value, "FBW A380X EXT PWR 3 available typed");
+            }
+            else if (request == Request.FbwA380ExternalPower3OnTyped)
+            {
+                SetLoggedBool(ref _fbwA380ExternalPower3OnTyped, value, "FBW A380X EXT PWR 3 ON typed");
+            }
+            else if (request == Request.FbwA380ExternalPower4AvailableTyped)
+            {
+                SetLoggedBool(ref _fbwA380ExternalPower4AvailableTyped, value, "FBW A380X EXT PWR 4 available typed");
+            }
+            else if (request == Request.FbwA380ExternalPower4OnTyped)
+            {
+                SetLoggedBool(ref _fbwA380ExternalPower4OnTyped, value, "FBW A380X EXT PWR 4 ON typed");
             }
             else if (request == Request.FbwAdirs1Selector)
             {
@@ -1698,7 +1747,14 @@ internal sealed class CopilotService : Form
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwWeatherRadarPwsSelector, Request.FbwWeatherRadarPwsSelector, 87 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwTcasAltitudeReporting, Request.FbwTcasAltitudeReporting, 88 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwTcasMode, Request.FbwTcasMode, 89 * sizeof(float));
-        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwA380ExternalPower1OnTyped, Request.FbwA380ExternalPower1OnTyped, 90 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwA380ExternalPower1AvailableTyped, Request.FbwA380ExternalPower1AvailableTyped, 90 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwA380ExternalPower1OnTyped, Request.FbwA380ExternalPower1OnTyped, 91 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwA380ExternalPower2AvailableTyped, Request.FbwA380ExternalPower2AvailableTyped, 92 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwA380ExternalPower2OnTyped, Request.FbwA380ExternalPower2OnTyped, 93 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwA380ExternalPower3AvailableTyped, Request.FbwA380ExternalPower3AvailableTyped, 94 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwA380ExternalPower3OnTyped, Request.FbwA380ExternalPower3OnTyped, 95 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwA380ExternalPower4AvailableTyped, Request.FbwA380ExternalPower4AvailableTyped, 96 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwA380ExternalPower4OnTyped, Request.FbwA380ExternalPower4OnTyped, 97 * sizeof(float));
 
         _mobiFlightRuntimeReady = true;
         _mobiFlightRuntimeInitializedUtc = DateTime.UtcNow;
@@ -1771,7 +1827,19 @@ internal sealed class CopilotService : Form
         SendMobiFlightRuntimeCommand(
             "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_EXT_PWR_PB_IS_ON, Bool)");
         SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_EXT_PWR_AVAIL:2, Bool)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_EXT_PWR_AVAIL:3, Bool)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_EXT_PWR_AVAIL:4, Bool)");
+        SendMobiFlightRuntimeCommand(
             "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_EXT_PWR_1_PB_IS_ON, Bool)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_EXT_PWR_2_PB_IS_ON, Bool)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_EXT_PWR_3_PB_IS_ON, Bool)");
+        SendMobiFlightRuntimeCommand(
+            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_EXT_PWR_4_PB_IS_ON, Bool)");
         SendMobiFlightRuntimeCommand(
             "MF.SimVars.Add.(L:A32NX_OVHD_ADIRS_IR_1_MODE_SELECTOR_KNOB)");
         SendMobiFlightRuntimeCommand(
@@ -2311,7 +2379,11 @@ internal sealed class CopilotService : Form
                     _fbwExternalPowerAvailableTyped,
                     _fbwExternalPowerAvailable,
                     raw.ExternalPowerAvailableUnindexed,
-                    raw.ExternalPowerAvailable)
+                    raw.ExternalPowerAvailable,
+                    _fbwA380ExternalPower1AvailableTyped,
+                    _fbwA380ExternalPower2AvailableTyped,
+                    _fbwA380ExternalPower3AvailableTyped,
+                    _fbwA380ExternalPower4AvailableTyped)
                 : isPmdg737
                     ? pmdg?.GroundPowerAvailable == true
                 : raw.ExternalPowerAvailable != 0,
@@ -2321,7 +2393,10 @@ internal sealed class CopilotService : Form
                     _fbwExternalPowerOn,
                     raw.ExternalPowerOnUnindexed,
                     raw.ExternalPowerOn,
-                    _fbwA380ExternalPower1OnTyped)
+                    _fbwA380ExternalPower1OnTyped,
+                    _fbwA380ExternalPower2OnTyped,
+                    _fbwA380ExternalPower3OnTyped,
+                    _fbwA380ExternalPower4OnTyped)
                 : isPmdg737
                     ? pmdg?.GroundPowerOn == true
                       && pmdg.AcTransferBus1Powered
@@ -2864,11 +2939,11 @@ internal sealed class CopilotService : Form
         bool? untypedValue,
         double genericUnindexedValue,
         double genericIndexedValue,
-        bool? typedIndexedPushbuttonValue = null)
+        params bool?[] typedIndexedValues)
     {
         return typedValue == true
                || untypedValue == true
-               || typedIndexedPushbuttonValue == true
+               || typedIndexedValues.Any(value => value == true)
                || genericUnindexedValue != 0
                || genericIndexedValue != 0;
     }
@@ -5203,7 +5278,8 @@ internal sealed class CopilotService : Form
         string lvarName,
         bool desiredOn,
         Func<AircraftState, bool> verify,
-        string? alternateLVarName = null)
+        string? alternateLVarName = null,
+        IEnumerable<string>? additionalAlternateLVarNames = null)
     {
         if (_state == null || !_mobiFlightRuntimeReady)
         {
@@ -5226,6 +5302,19 @@ internal sealed class CopilotService : Form
         {
             SendMobiFlightCommand($"MF.SimVars.Set.{value} (>L:{alternateLVarName})");
             SendMobiFlightCommand($"MF.SimVars.Set.{value} (>L:{alternateLVarName}, Bool)");
+        }
+        if (additionalAlternateLVarNames != null)
+        {
+            foreach (var additionalAlternateLVarName in additionalAlternateLVarNames)
+            {
+                if (string.IsNullOrWhiteSpace(additionalAlternateLVarName))
+                {
+                    continue;
+                }
+
+                SendMobiFlightCommand($"MF.SimVars.Set.{value} (>L:{additionalAlternateLVarName})");
+                SendMobiFlightCommand($"MF.SimVars.Set.{value} (>L:{additionalAlternateLVarName}, Bool)");
+            }
         }
         SendMobiFlightCommand("MF.DummyCmd");
         BeginNativeAction(name, verify, desiredOn, TimeSpan.FromSeconds(10));
@@ -7294,7 +7383,13 @@ internal sealed class CopilotService : Form
                 "A32NX_OVHD_ELEC_EXT_PWR_PB_IS_ON",
                 desiredOn,
                 state => state.ExternalPowerOn == desiredOn,
-                alternateLVarName: "A32NX_OVHD_ELEC_EXT_PWR_1_PB_IS_ON");
+                alternateLVarName: "A32NX_OVHD_ELEC_EXT_PWR_1_PB_IS_ON",
+                additionalAlternateLVarNames: new[]
+                {
+                    "A32NX_OVHD_ELEC_EXT_PWR_2_PB_IS_ON",
+                    "A32NX_OVHD_ELEC_EXT_PWR_3_PB_IS_ON",
+                    "A32NX_OVHD_ELEC_EXT_PWR_4_PB_IS_ON"
+                });
             return;
         }
 
@@ -7721,7 +7816,8 @@ internal sealed class CopilotService : Form
             $"  App EXT PWR available/on: {_state.ExternalPowerAvailable.ToYesNo()}/{_state.ExternalPowerOn.ToOnOff()}",
             $"  FBW EXT PWR available untyped/typed: {FormatOptionalBool(_fbwExternalPowerAvailable)}/{FormatOptionalBool(_fbwExternalPowerAvailableTyped)}",
             $"  FBW EXT PWR ON untyped/typed: {FormatOptionalBool(_fbwExternalPowerOn)}/{FormatOptionalBool(_fbwExternalPowerOnTyped)}",
-            $"  FBW A380 EXT PWR 1 ON typed: {FormatOptionalBool(_fbwA380ExternalPower1OnTyped)}",
+            $"  FBW A380 EXT PWR available 1/2/3/4: {FormatOptionalBool(_fbwA380ExternalPower1AvailableTyped)}/{FormatOptionalBool(_fbwA380ExternalPower2AvailableTyped)}/{FormatOptionalBool(_fbwA380ExternalPower3AvailableTyped)}/{FormatOptionalBool(_fbwA380ExternalPower4AvailableTyped)}",
+            $"  FBW A380 EXT PWR ON 1/2/3/4: {FormatOptionalBool(_fbwA380ExternalPower1OnTyped)}/{FormatOptionalBool(_fbwA380ExternalPower2OnTyped)}/{FormatOptionalBool(_fbwA380ExternalPower3OnTyped)}/{FormatOptionalBool(_fbwA380ExternalPower4OnTyped)}",
             $"  Generic EXT PWR unindexed available/on: {_state.ExternalPowerAvailableUnindexed.ToYesNo()}/{_state.ExternalPowerOnUnindexed.ToOnOff()}",
             $"  App ADIRS 1/2/3 selector: {_state.Adirs1SelectorState:F0}/{_state.Adirs2SelectorState:F0}/{_state.Adirs3SelectorState:F0}",
             $"  FBW ADIRS 1 untyped/typed/commanded: {FormatOptionalFloat(_fbwAdirs1Selector, "F0")}/{FormatOptionalFloat(_fbwAdirs1SelectorTyped, "F0")}/{FormatOptionalFloat(_fbwCommandedAdirs1Selector, "F0")}",

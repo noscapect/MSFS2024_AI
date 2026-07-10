@@ -62,7 +62,7 @@ public sealed class ProcedureRecoveryTests
     }
 
     [TestMethod]
-    public void PowerUpFlowAcceptsFlyByWireA380XForDiscovery()
+    public void PowerUpFlowDoesNotAcceptParkedFlyByWireA380X()
     {
         var commands = new List<string>();
         var runner = new ProcedureRunner(
@@ -79,12 +79,13 @@ public sealed class ProcedureRecoveryTests
 
         runner.Start(A320ProcedureLibrary.PowerUpAndInitialSetup, state);
 
-        Assert.AreEqual("captain-batteries", runner.CurrentStep?.Id);
+        Assert.AreEqual("aircraft", runner.CurrentStep?.Id);
         Assert.IsFalse(state.IsFlyByWireA320Neo);
-        Assert.IsTrue(state.IsFlyByWireA380X);
-        Assert.IsTrue(state.IsFlyByWireAirbus);
-        Assert.IsTrue(state.IsSupportedA320);
-        Assert.AreEqual("FlyByWire A380X", state.AircraftFamilyLabel);
+        Assert.IsTrue(state.HasFlyByWireA380XSignature);
+        Assert.IsFalse(state.IsFlyByWireA380X);
+        Assert.IsFalse(state.IsFlyByWireAirbus);
+        Assert.IsFalse(state.IsSupportedA320);
+        Assert.AreEqual("Unsupported aircraft", state.AircraftFamilyLabel);
     }
 
     [TestMethod]

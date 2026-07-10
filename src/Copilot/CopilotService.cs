@@ -21,6 +21,8 @@ namespace Msfs2024Ai.Copilot;
 
 internal sealed class CopilotService : Form
 {
+    private const bool EnableExperimentalFlyByWireA380X = false;
+
     private const int WmUserSimConnect = 0x0402;
     private const double MetersPerNauticalMile = 1852.0;
     private const uint PmdgNg3DataId = 0x4E473331;
@@ -2251,13 +2253,15 @@ internal sealed class CopilotService : Form
             raw.Title.Equals("A320neo V2", StringComparison.OrdinalIgnoreCase)
             || raw.Title.Equals("A321", StringComparison.OrdinalIgnoreCase)
             || raw.Title.IndexOf("A321", StringComparison.OrdinalIgnoreCase) >= 0;
-        var isFlyByWireA380X =
+        var hasFlyByWireA380XSignature =
             raw.Title.IndexOf("A380X", StringComparison.OrdinalIgnoreCase) >= 0
             || raw.Title.IndexOf("A380-842", StringComparison.OrdinalIgnoreCase) >= 0
             || raw.Title.IndexOf("A380", StringComparison.OrdinalIgnoreCase) >= 0
             && raw.Title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0;
+        var isFlyByWireA380X =
+            EnableExperimentalFlyByWireA380X && hasFlyByWireA380XSignature;
         var isFlyByWireA320Neo =
-            !isFlyByWireA380X
+            !hasFlyByWireA380XSignature
             && (raw.Title.IndexOf("A32NX", StringComparison.OrdinalIgnoreCase) >= 0
                 || raw.Title.IndexOf("A320", StringComparison.OrdinalIgnoreCase) >= 0
                 && raw.Title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0
@@ -2921,7 +2925,7 @@ internal sealed class CopilotService : Form
         AppendDashboardLog($"Aircraft detected: {_state.Title}");
         if (!_state.IsSupportedAircraft)
         {
-            Console.Error.WriteLine("Warning: this build supports the iniBuilds A320neo V2, iniBuilds A321LR, FlyByWire A32NX, FlyByWire A380X, and PMDG 737-800.");
+            Console.Error.WriteLine("Warning: this build supports the iniBuilds A320neo V2, iniBuilds A321LR, FlyByWire A32NX, and PMDG 737-800.");
         }
 
         if (_oneShotCommand == null)
@@ -9125,8 +9129,6 @@ internal sealed class CopilotService : Form
                 ? "iniBuilds A320neo V2"
                 : _state.IsIniBuildsA321Lr
                     ? "iniBuilds A321LR"
-                    : _state.IsFlyByWireA380X
-                    ? "FBW A380X EXPERIMENTAL"
                     : _state.IsFlyByWireA320Neo
                     ? "FBW A32NX"
                     : _state.IsPmdg737800

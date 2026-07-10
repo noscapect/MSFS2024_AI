@@ -2,6 +2,8 @@ namespace Msfs2024Ai.Copilot;
 
 internal sealed class AircraftState
 {
+    private const bool EnableExperimentalFlyByWireA380X = false;
+
     public string Title { get; set; } = "";
     public bool OnGround { get; set; }
     public double GroundSpeedKnots { get; set; }
@@ -207,11 +209,14 @@ internal sealed class AircraftState
     public bool IsIniBuildsA320Family =>
         IsA320NeoV2 || IsIniBuildsA321Lr;
 
-    public bool IsFlyByWireA380X =>
+    public bool HasFlyByWireA380XSignature =>
         Title.IndexOf("A380X", StringComparison.OrdinalIgnoreCase) >= 0
         || Title.IndexOf("A380-842", StringComparison.OrdinalIgnoreCase) >= 0
         || Title.IndexOf("A380", StringComparison.OrdinalIgnoreCase) >= 0
         && Title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0;
+
+    public bool IsFlyByWireA380X =>
+        EnableExperimentalFlyByWireA380X && HasFlyByWireA380XSignature;
 
     public bool IsFlyByWireA320Neo =>
         !IsFlyByWireA380X

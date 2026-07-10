@@ -6,7 +6,6 @@ Simulator 2024:
 - **iniBuilds A320neo V2**
 - **iniBuilds A321LR**
 - **FlyByWire A32NX**
-- **FlyByWire A380X** *(experimental branch support)*
 - **PMDG 737-800**
 
 Application icon artwork contributed by the project owner.
@@ -30,8 +29,8 @@ Captain actions, and speaks important callouts.
   commands and independent readback are available
 - Monitoring of Captain actions without requiring app confirmations during
   takeoff, approach, landing, or taxi
-- Native iniBuilds A320-family, FlyByWire A32NX, and experimental FlyByWire
-  A380X state monitoring through MobiFlight
+- Native iniBuilds A320-family and FlyByWire A32NX state monitoring through
+  MobiFlight
 - PMDG 737-800 aircraft-family routing, Boeing procedures and PMDG NG3 SDK
   state/control integration
 - Verification after every automatic aircraft action
@@ -71,7 +70,6 @@ multi-aircraft virtual first officer. The current public release supports:
 - iniBuilds A320neo V2
 - iniBuilds A321LR
 - FlyByWire A32NX for MSFS 2024
-- FlyByWire A380X for MSFS 2024 *(experimental on the A380 branch)*
 - PMDG 737-800
 
 The application deliberately avoids guessed generic events for unsupported
@@ -84,8 +82,7 @@ To run the application:
 - Windows 10 or Windows 11
 - Microsoft Flight Simulator 2024
 - A supported aircraft profile: iniBuilds A320neo V2, iniBuilds A321LR,
-  FlyByWire A32NX for MSFS 2024, FlyByWire A380X for MSFS 2024, or PMDG
-  737-800
+  FlyByWire A32NX for MSFS 2024, or PMDG 737-800
 - MobiFlight WASM module installed in MSFS
 - .NET Framework 4.7.2 or newer
 
@@ -240,8 +237,7 @@ See [docs/RELEASING.md](docs/RELEASING.md).
 ## Development status
 
 The iniBuilds A320neo V2 flow remains the mature baseline. FlyByWire A32NX,
-iniBuilds A321LR, PMDG 737-800, and experimental FlyByWire A380X support have
-been added through aircraft-specific adapters and procedure paths. Treat this
-as active development software and remain ready to operate the aircraft
-manually.
+iniBuilds A321LR, and PMDG 737-800 support have been added through
+aircraft-specific adapters and procedure paths. Treat this as active
+development software and remain ready to operate the aircraft manually.
 

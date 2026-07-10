@@ -41,6 +41,21 @@ public sealed class ProcedureCatalogTests
     }
 
     [TestMethod]
+    public void FlyByWireA380XIsParkedAndNotExposedAsSupported()
+    {
+        var state = new AircraftState { Title = "FlyByWire A380X" };
+
+        var flows = ProcedureCatalog.ForAircraft(state);
+
+        Assert.IsTrue(state.HasFlyByWireA380XSignature);
+        Assert.IsFalse(state.IsFlyByWireA380X);
+        Assert.IsFalse(state.IsFlyByWireAirbus);
+        Assert.IsFalse(state.IsSupportedAircraft);
+        Assert.AreEqual("1. Power Up & Initial Setup", flows[0].Name);
+        Assert.AreEqual(A320ProcedureLibrary.GateToGate.Count, flows.Count);
+    }
+
+    [TestMethod]
     public void Pmdg737ChecklistDoesNotAcceptOffDetentsAsConfigured()
     {
         var beforeTakeoff = B737ChecklistLibrary.FindForProcedure("before-takeoff")!;

@@ -120,8 +120,8 @@ internal static class A320ProcedureLibrary
                 Observe("aircraft", "Supported A320 loaded", state => state.IsSupportedA320),
                 Observe("stationary", "Aircraft stationary on the ground", state => state.OnGround && state.GroundSpeedKnots <= 0.5),
                 Observe("engines-off", "Engines off", state => state.EnginesOff),
-                Manual("captain-batteries", "BAT 1 and BAT 2 ON", "Captain: turn BAT 1 and BAT 2 ON, then confirm if the app does not detect the battery switch state.", CrewRole.Captain, state => state.Battery1On && state.Battery2On),
-                Manual("captain-external-power", "External power ON when available", "Captain: when EXT PWR shows AVAIL, turn external power ON.", CrewRole.Captain, state => state.ExternalPowerOn),
+                Observe("captain-batteries", "Captain BAT 1 and BAT 2 ON", state => state.Battery1On && state.Battery2On, CrewRole.Captain),
+                Observe("captain-external-power", "Captain external power ON when available", state => state.ExternalPowerOn, CrewRole.Captain),
                 Automatic("fo-adirs-1", "ADIRS 1 set to NAV", state => Math.Abs(state.Adirs1SelectorState - 1) < 0.1, "adirs-1 nav"),
                 Observe("fo-adirs-1-on-bat", "ADIRS ON BAT extinguished after selector 1", state => !state.AdirsOnBattery),
                 Automatic("fo-adirs-2", "ADIRS 2 set to NAV", state => Math.Abs(state.Adirs2SelectorState - 1) < 0.1, "adirs-2 nav"),
@@ -283,7 +283,7 @@ internal static class A320ProcedureLibrary
                     state => state.WeatherRadarPwsSelectorPosition.HasValue
                              && Math.Abs(
                                  state.WeatherRadarPwsSelectorPosition.Value
-                                 - (state.IsFlyByWireA320Neo ? 1 : 0)) < 0.1,
+                                 - (state.IsFlyByWireAirbus ? 1 : 0)) < 0.1,
                     "wxr-pws 1",
                     requireCommandExecution: true),
                 Automatic(
@@ -723,7 +723,7 @@ internal static class A320ProcedureLibrary
                     "APU MASTER ON",
                     state => state.ApuMasterSwitchOn,
                     "apu-master on"),
-                Observe("fo-apu-flap-open", "APU intake flap open", state => state.IsFlyByWireA320Neo ? state.ApuMasterSwitchOn : state.ApuFlapPercent >= 0.95),
+                Observe("fo-apu-flap-open", "APU intake flap open", state => state.IsFlyByWireAirbus ? state.ApuMasterSwitchOn : state.ApuFlapPercent >= 0.95),
                 Automatic("fo-apu-start-on", "APU START selected", state => state.ApuStartButtonOn, "apu-start on"),
                 Observe("apu-available", "APU AVAIL", state => state.ApuAvailable),
                 Automatic("fo-apu-bleed-on", "APU BLEED ON", state => state.ApuBleedOn, "apu-bleed on")
@@ -785,11 +785,11 @@ internal static class A320ProcedureLibrary
                     "secure-apu-power",
                     "APU power available before external-power disconnect",
                     state => !state.ExternalPowerOn
-                             || (state.ApuAvailable && (state.IsFlyByWireA320Neo || state.ApuGeneratorSwitchOn)),
+                             || (state.ApuAvailable && (state.IsFlyByWireAirbus || state.ApuGeneratorSwitchOn)),
                     CrewRole.Either),
                 Automatic("secure-external-power-off", "External power OFF", state => !state.ExternalPowerOn, "external-power off", CrewRole.Either),
                 Automatic("secure-apu-master-off", "APU MASTER OFF", state => !state.ApuMasterSwitchOn, "apu-master off", CrewRole.Either),
-                Observe("secure-apu-flap", "APU exhaust/intake flap closed", state => state.IsFlyByWireA320Neo ? !state.ApuMasterSwitchOn : state.ApuFlapPercent <= 0.05, CrewRole.Either),
+                Observe("secure-apu-flap", "APU exhaust/intake flap closed", state => state.IsFlyByWireAirbus ? !state.ApuMasterSwitchOn : state.ApuFlapPercent <= 0.05, CrewRole.Either),
                 Automatic("secure-battery-one-off", "BAT 1 OFF", state => !state.Battery1On, "battery-1 off", CrewRole.Either),
                 Automatic("secure-battery-two-off", "BAT 2 OFF", state => !state.Battery2On, "battery-2 off", CrewRole.Either)
             });

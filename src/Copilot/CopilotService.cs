@@ -9313,8 +9313,11 @@ internal sealed class CopilotService : Form
         var identity = result.Identity;
         if (identity == null)
         {
-            SetAircraftThumbnail(result.Image ?? CreateAircraftPlaceholderImage(_aircraftCardTitleLabel.Text));
-            _aircraftCardSourceLabel.Text = "No package thumbnail available";
+            var fallback = TryLoadFallbackAircraftPhoto(result.Title, null);
+            SetAircraftThumbnail(result.Image ?? fallback ?? CreateAircraftPlaceholderImage(_aircraftCardTitleLabel.Text));
+            _aircraftCardSourceLabel.Text = fallback == null
+                ? "No package thumbnail available"
+                : "Fallback aircraft photo";
             return;
         }
 
@@ -9333,9 +9336,71 @@ internal sealed class CopilotService : Form
         }
         else
         {
-            SetAircraftThumbnail(CreateAircraftPlaceholderImage(identity.DisplayName));
-            _aircraftCardSourceLabel.Text = "Package matched, no thumbnail available";
+            var fallback = TryLoadFallbackAircraftPhoto(result.Title, identity);
+            SetAircraftThumbnail(fallback ?? CreateAircraftPlaceholderImage(identity.DisplayName));
+            _aircraftCardSourceLabel.Text = fallback == null
+                ? "Package matched, no thumbnail available"
+                : "Fallback aircraft photo";
         }
+    }
+
+    private System.Drawing.Image? TryLoadFallbackAircraftPhoto(
+        string title,
+        Msfs2024Ai.Copilot.AircraftIdentity.AircraftIdentity? identity)
+    {
+        var fileName = ResolveFallbackAircraftPhotoFileName(title, identity);
+        if (fileName == null)
+        {
+            return null;
+        }
+
+        var path = Path.Combine(
+            AppDomain.CurrentDomain.BaseDirectory,
+            "Assets",
+            "AircraftFallbacks",
+            fileName);
+
+        return File.Exists(path)
+            ? LoadImageWithoutLocking(path)
+            : null;
+    }
+
+    private static string? ResolveFallbackAircraftPhotoFileName(
+        string title,
+        Msfs2024Ai.Copilot.AircraftIdentity.AircraftIdentity? identity)
+    {
+        var probe = string.Join(
+            " ",
+            new[]
+            {
+                title,
+                identity?.Title,
+                identity?.Variation,
+                identity?.DisplayName,
+                identity?.DisplayVariation
+            }.Where(value => !string.IsNullOrWhiteSpace(value))).ToUpperInvariant();
+
+        if (probe.Contains("737") || probe.Contains("B738") || probe.Contains("PMDG"))
+        {
+            return "boeing-737-800.jpg";
+        }
+
+        if (probe.Contains("A321"))
+        {
+            return "airbus-a321lr.jpg";
+        }
+
+        if (probe.Contains("A330") || probe.Contains("E330"))
+        {
+            return "airbus-a330.jpg";
+        }
+
+        if (probe.Contains("A320") || probe.Contains("A32N") || probe.Contains("A20N"))
+        {
+            return "airbus-a320neo.jpg";
+        }
+
+        return null;
     }
 
     private static System.Drawing.Image CreateAircraftPlaceholderImage(string label)

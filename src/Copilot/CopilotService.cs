@@ -9313,8 +9313,8 @@ internal sealed class CopilotService : Form
         var identity = result.Identity;
         if (identity == null)
         {
-            SetAircraftThumbnail(result.Image);
-            _aircraftCardSourceLabel.Text = "No package thumbnail found";
+            SetAircraftThumbnail(result.Image ?? CreateAircraftPlaceholderImage(_aircraftCardTitleLabel.Text));
+            _aircraftCardSourceLabel.Text = "No package thumbnail available";
             return;
         }
 
@@ -9333,9 +9333,70 @@ internal sealed class CopilotService : Form
         }
         else
         {
-            SetAircraftThumbnail(null);
-            _aircraftCardSourceLabel.Text = "Package matched, no thumbnail";
+            SetAircraftThumbnail(CreateAircraftPlaceholderImage(identity.DisplayName));
+            _aircraftCardSourceLabel.Text = "Package matched, no thumbnail available";
         }
+    }
+
+    private static System.Drawing.Image CreateAircraftPlaceholderImage(string label)
+    {
+        var bitmap = new System.Drawing.Bitmap(360, 150);
+        using var graphics = System.Drawing.Graphics.FromImage(bitmap);
+        graphics.SmoothingMode = System.Drawing.Drawing2D.SmoothingMode.AntiAlias;
+        graphics.Clear(System.Drawing.Color.FromArgb(223, 229, 237));
+
+        using var skyBrush = new System.Drawing.Drawing2D.LinearGradientBrush(
+            new System.Drawing.Rectangle(0, 0, bitmap.Width, bitmap.Height),
+            System.Drawing.Color.FromArgb(232, 239, 247),
+            System.Drawing.Color.FromArgb(205, 216, 230),
+            90f);
+        graphics.FillRectangle(skyBrush, 0, 0, bitmap.Width, bitmap.Height);
+
+        using var wingBrush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(88, 112, 140));
+        using var bodyBrush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(52, 74, 101));
+        using var accentBrush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(39, 130, 87));
+        using var pen = new System.Drawing.Pen(System.Drawing.Color.FromArgb(39, 58, 82), 5f)
+        {
+            StartCap = System.Drawing.Drawing2D.LineCap.Round,
+            EndCap = System.Drawing.Drawing2D.LineCap.Round
+        };
+
+        var centerY = 75;
+        graphics.DrawLine(pen, 62, centerY, 292, centerY - 14);
+        graphics.FillEllipse(bodyBrush, 270, centerY - 28, 52, 30);
+        graphics.FillPolygon(
+            wingBrush,
+            new[]
+            {
+                new System.Drawing.Point(150, centerY - 8),
+                new System.Drawing.Point(220, centerY - 58),
+                new System.Drawing.Point(236, centerY - 46),
+                new System.Drawing.Point(184, centerY + 4)
+            });
+        graphics.FillPolygon(
+            wingBrush,
+            new[]
+            {
+                new System.Drawing.Point(144, centerY + 4),
+                new System.Drawing.Point(218, centerY + 46),
+                new System.Drawing.Point(230, centerY + 34),
+                new System.Drawing.Point(184, centerY - 4)
+            });
+        graphics.FillPolygon(
+            accentBrush,
+            new[]
+            {
+                new System.Drawing.Point(70, centerY - 2),
+                new System.Drawing.Point(35, centerY - 38),
+                new System.Drawing.Point(84, centerY - 20)
+            });
+
+        using var font = new System.Drawing.Font("Segoe UI", 14f, System.Drawing.FontStyle.Bold);
+        using var textBrush = new System.Drawing.SolidBrush(System.Drawing.Color.FromArgb(39, 58, 82));
+        var text = string.IsNullOrWhiteSpace(label) ? "Aircraft" : label.Trim();
+        graphics.DrawString(text, font, textBrush, new System.Drawing.RectangleF(16, 112, bitmap.Width - 32, 28));
+
+        return bitmap;
     }
 
     private void SetAircraftThumbnail(System.Drawing.Image? image)

@@ -206,8 +206,15 @@ internal sealed class AircraftState
         string.Equals(Title, "A321", StringComparison.OrdinalIgnoreCase)
         || Title.IndexOf("A321", StringComparison.OrdinalIgnoreCase) >= 0;
 
+    public bool IsIniBuildsA330 =>
+        string.Equals(Title, "A330", StringComparison.OrdinalIgnoreCase)
+        || Title.IndexOf("A330", StringComparison.OrdinalIgnoreCase) >= 0;
+
     public bool IsIniBuildsA320Family =>
         IsA320NeoV2 || IsIniBuildsA321Lr;
+
+    public bool IsIniBuildsAirbusFamily =>
+        IsIniBuildsA320Family || IsIniBuildsA330;
 
     public bool HasFlyByWireA380XSignature =>
         Title.IndexOf("A380X", StringComparison.OrdinalIgnoreCase) >= 0
@@ -229,7 +236,7 @@ internal sealed class AircraftState
         IsFlyByWireA320Neo || IsFlyByWireA380X;
 
     public bool IsSupportedA320 =>
-        IsIniBuildsA320Family || IsFlyByWireAirbus;
+        IsIniBuildsAirbusFamily || IsFlyByWireAirbus;
 
     public bool IsPmdg737 =>
         Title.IndexOf("PMDG", StringComparison.OrdinalIgnoreCase) >= 0
@@ -250,12 +257,14 @@ internal sealed class AircraftState
     public string AircraftFamilyLabel =>
         IsSupportedBoeing737
             ? "PMDG 737-800"
+            : IsIniBuildsA330
+                ? "iniBuilds A330"
             : IsFlyByWireA380X
                 ? "FlyByWire A380X"
             : IsFlyByWireA320Neo
                 ? "FlyByWire A32NX"
             : IsSupportedA320
-                ? "Airbus A320-family"
+                ? "Airbus"
                 : "Unsupported aircraft";
 
     public bool EnginesOff => !Engine1Running && !Engine2Running;

@@ -1971,11 +1971,11 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        if (_state.IsIniBuildsA320Family && _nativeBattery1On.HasValue)
+        if (_state.IsIniBuildsAirbusFamily && _nativeBattery1On.HasValue)
         {
             _state.Battery1On = _nativeBattery1On.Value;
         }
-        if (_state.IsIniBuildsA320Family && _nativeBattery2On.HasValue)
+        if (_state.IsIniBuildsAirbusFamily && _nativeBattery2On.HasValue)
         {
             _state.Battery2On = _nativeBattery2On.Value;
         }
@@ -2249,10 +2249,12 @@ internal sealed class CopilotService : Form
 
         var raw = (AircraftData)data.dwData[0];
         var approachDistance = ResolveApproachDistance(raw);
-        var isIniBuildsA320Family =
+        var isIniBuildsAirbusFamily =
             raw.Title.Equals("A320neo V2", StringComparison.OrdinalIgnoreCase)
             || raw.Title.Equals("A321", StringComparison.OrdinalIgnoreCase)
-            || raw.Title.IndexOf("A321", StringComparison.OrdinalIgnoreCase) >= 0;
+            || raw.Title.IndexOf("A321", StringComparison.OrdinalIgnoreCase) >= 0
+            || raw.Title.Equals("A330", StringComparison.OrdinalIgnoreCase)
+            || raw.Title.IndexOf("A330", StringComparison.OrdinalIgnoreCase) >= 0;
         var hasFlyByWireA380XSignature =
             raw.Title.IndexOf("A380X", StringComparison.OrdinalIgnoreCase) >= 0
             || raw.Title.IndexOf("A380-842", StringComparison.OrdinalIgnoreCase) >= 0
@@ -2406,7 +2408,7 @@ internal sealed class CopilotService : Form
                 raw.Engine2IgnitionSwitch),
             FbwEngine1State = _fbwEngine1State,
             FbwEngine2State = _fbwEngine2State,
-            Battery1On = isIniBuildsA320Family
+            Battery1On = isIniBuildsAirbusFamily
                 ? _nativeBattery1On ?? raw.Battery1 != 0
                 : isFlyByWireAirbus
                     ? ResolveFbwBatteryState(
@@ -2417,7 +2419,7 @@ internal sealed class CopilotService : Form
                 : isPmdg737
                     ? pmdg != null && pmdg.BatterySelector != 0
                 : raw.Battery1 != 0,
-            Battery2On = isIniBuildsA320Family
+            Battery2On = isIniBuildsAirbusFamily
                 ? _nativeBattery2On ?? raw.Battery2 != 0
                 : isFlyByWireAirbus
                     ? ResolveFbwBatteryState(
@@ -2925,7 +2927,7 @@ internal sealed class CopilotService : Form
         AppendDashboardLog($"Aircraft detected: {_state.Title}");
         if (!_state.IsSupportedAircraft)
         {
-            Console.Error.WriteLine("Warning: this build supports the iniBuilds A320neo V2, iniBuilds A321LR, FlyByWire A32NX, and PMDG 737-800.");
+            Console.Error.WriteLine("Warning: this build supports the iniBuilds A320neo V2, iniBuilds A321LR, iniBuilds A330, FlyByWire A32NX, and PMDG 737-800.");
         }
 
         if (_oneShotCommand == null)
@@ -4776,7 +4778,7 @@ internal sealed class CopilotService : Form
         if (_procedureSessionRestoreAttempted
             || _state == null
             || !_state.IsSupportedAircraft
-            || (_state.IsIniBuildsA320Family && !NativeStateReady)
+            || (_state.IsIniBuildsAirbusFamily && !NativeStateReady)
             || (_state.IsSupportedBoeing737 && !_pmdgNg3DataReady))
         {
             return;
@@ -5142,7 +5144,7 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        if (!_state.IsIniBuildsA320Family || !_mobiFlightReady)
+        if (!_state.IsIniBuildsAirbusFamily || !_mobiFlightReady)
         {
             Console.Error.WriteLine("NAV & LOGO procedure blocked: iniBuilds adapter is unavailable.");
             FinishOneShot(4);
@@ -7421,9 +7423,9 @@ internal sealed class CopilotService : Form
             FinishOneShot(4);
             return false;
         }
-        if (!_state.IsIniBuildsA320Family)
+        if (!_state.IsIniBuildsAirbusFamily)
         {
-            AppendDashboardLog($"{name} blocked: the loaded aircraft is not a supported iniBuilds A320-family aircraft.");
+            AppendDashboardLog($"{name} blocked: the loaded aircraft is not a supported iniBuilds Airbus aircraft.");
             FinishOneShot(3);
             return false;
         }
@@ -7521,9 +7523,9 @@ internal sealed class CopilotService : Form
 
     private static string? ValidateExternalPowerProcedure(AircraftState state, bool desiredOn)
     {
-        if (!state.IsIniBuildsA320Family)
+        if (!state.IsIniBuildsAirbusFamily)
         {
-            return "the loaded aircraft is not a supported iniBuilds A320-family aircraft.";
+            return "the loaded aircraft is not a supported iniBuilds Airbus aircraft.";
         }
 
         if (!state.OnGround || state.GroundSpeedKnots > 0.5)
@@ -9129,6 +9131,8 @@ internal sealed class CopilotService : Form
                 ? "iniBuilds A320neo V2"
                 : _state.IsIniBuildsA321Lr
                     ? "iniBuilds A321LR"
+                    : _state.IsIniBuildsA330
+                    ? "iniBuilds A330"
                     : _state.IsFlyByWireA320Neo
                     ? "FBW A32NX"
                     : _state.IsPmdg737800

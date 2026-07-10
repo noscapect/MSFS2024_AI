@@ -41,6 +41,21 @@ public sealed class ProcedureCatalogTests
     }
 
     [TestMethod]
+    public void IniBuildsA330UsesAirbusProcedureCatalog()
+    {
+        var state = new AircraftState { Title = "A330" };
+
+        var flows = ProcedureCatalog.ForAircraft(state);
+
+        Assert.IsTrue(state.IsIniBuildsA330);
+        Assert.IsTrue(state.IsIniBuildsAirbusFamily);
+        Assert.IsTrue(state.IsSupportedA320);
+        Assert.AreEqual("iniBuilds A330", state.AircraftFamilyLabel);
+        Assert.AreEqual("1. Power Up & Initial Setup", flows[0].Name);
+        Assert.AreEqual(A320ProcedureLibrary.GateToGate.Count, flows.Count);
+    }
+
+    [TestMethod]
     public void FlyByWireA380XIsParkedAndNotExposedAsSupported()
     {
         var state = new AircraftState { Title = "FlyByWire A380X" };

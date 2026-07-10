@@ -47,12 +47,14 @@ Boeing aircraft profiles:
 
 - iniBuilds A320neo V2
 - iniBuilds A321LR
+- iniBuilds A330 *(experimental branch profile)*
 - FlyByWire A32NX for MSFS 2024
 - PMDG 737-800
 
 iniBuilds command/state pairs and the mandatory momentary-command workflow are
-defined in `docs/NATIVE_CONTROL_STRATEGY.md`. The A321LR uses the shared
-iniBuilds A320-family adapter where its controls match the A320neo V2.
+defined in `docs/NATIVE_CONTROL_STRATEGY.md`. The A321LR and experimental A330
+use the shared iniBuilds Airbus adapter where their controls match the
+A320neo V2.
 FBW-specific mappings were added through the same normalized state/action model
 so procedures can stay shared.
 

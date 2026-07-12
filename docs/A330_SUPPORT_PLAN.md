@@ -24,7 +24,11 @@ Live-test priority:
 
 Known assumptions to verify:
 
-- The A330 package uses compatible iniBuilds native variable names for the
-  controls already proven on the A320neo V2/A321LR.
+- The A330 package is close to the iniBuilds A320neo V2/A321LR but not fully
+  compatible. Live testing has already found A330-specific handling for EXT
+  A/B, NAV/LOGO, strobe, APU BAT, and fire-test completion.
+- APU BAT readback is `L:INI_OVHD_ELEC_BAT_3_PB_IS_AUTO_SWITCH`; the
+  Behavior Viewer input event is `AIRLINER_ELEC_APU_BAT`. The readback is
+  inverted for flow purposes: `0` means ON/AUTO, `1` means OFF.
 - The A330 approach flap schedule may need aircraft-specific gates after live
   testing, similar to the A321LR.

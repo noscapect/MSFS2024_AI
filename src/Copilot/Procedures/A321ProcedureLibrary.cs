@@ -2,7 +2,7 @@ using Msfs2024Ai.Copilot.Domain;
 
 namespace Msfs2024Ai.Copilot.Procedures;
 
-internal static class A320ProcedureLibrary
+internal static class A321ProcedureLibrary
 {
     public static IReadOnlyList<ProcedureDefinition> GateToGate =>
         new[]

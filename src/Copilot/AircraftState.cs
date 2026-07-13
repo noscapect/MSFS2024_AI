@@ -1,3 +1,5 @@
+using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA321;
+
 namespace Msfs2024Ai.Copilot;
 
 internal sealed class AircraftState
@@ -459,17 +461,11 @@ internal sealed class AircraftState
 
     private bool A321FlapsAtDetent(int detent)
     {
-        if (Math.Abs(FlapsHandleIndex - detent) < 0.1)
-        {
-            return true;
-        }
-
-        if (!FlapReadbackSane)
-        {
-            return FlapSurfacesMatchDetent(detent);
-        }
-
-        return false;
+        // The iniBuilds A321 can report both generic flap-surface SimVars as
+        // clean while its physical cockpit handle is still at detent 1. The
+        // handle index is therefore the authority for this aircraft; accepting
+        // the surface fallback here makes Flow 7 skip the retract command.
+        return A321ControlProfile.FlapsAtDetent(FlapsHandleIndex, detent);
     }
 
     private bool Boeing737FlapsAtDetent(int detent)

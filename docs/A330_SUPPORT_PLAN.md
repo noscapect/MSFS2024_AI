@@ -3,10 +3,16 @@
 Goal: add support for the built-in MSFS 2024 iniBuilds A330 by starting from
 the existing iniBuilds Airbus flow and validating each system live.
 
+Current status (2026-07-13): A330 development is paused after partial live
+validation while the stable aircraft profiles are protected. A330 changes
+must remain in `A330ProcedureLibrary`, `A330ChecklistLibrary`, and explicit
+A330 command/readback branches. They may not modify the frozen A321 control
+profile or relax A321 verification.
+
 Initial branch strategy:
 
 - Detect aircraft titles containing `A330`.
-- Route the aircraft through the shared Airbus procedure catalog.
+- Route the aircraft through the dedicated A330 procedure catalog.
 - Reuse the iniBuilds native/MobiFlight adapter where controls match the
   A320neo V2/A321LR implementation.
 - Keep mismatches aircraft-specific instead of weakening the proven A320/A321

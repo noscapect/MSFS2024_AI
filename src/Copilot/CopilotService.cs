@@ -1,5 +1,6 @@
 using Microsoft.FlightSimulator.SimConnect;
 using Msfs2024Ai.Copilot.AircraftAdapters.FbwA320;
+using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA321;
 using Msfs2024Ai.Copilot.AircraftIdentity;
 using Msfs2024Ai.Copilot.Checklists;
 using Msfs2024Ai.Copilot.Controls;
@@ -717,6 +718,7 @@ internal sealed class CopilotService : Form
         public double NavigationLights;
         public double LogoLights;
         public double TaxiLight;
+        public double FbwNoseLightSelectorPosition;
         public double FbwNoseTakeoffLightCircuit;
         public double FbwLeftLandingLightCircuit;
         public double FbwRightLandingLightCircuit;
@@ -1118,6 +1120,7 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "LIGHT NAV", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "LIGHT LOGO", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "LIGHT TAXI", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:LIGHTING_LANDING_1", "Enum", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "CIRCUIT SWITCH ON:17", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "CIRCUIT SWITCH ON:18", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "CIRCUIT SWITCH ON:19", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
@@ -3403,7 +3406,8 @@ internal sealed class CopilotService : Form
                     ? _a330WeatherRadarPwsInputState.Value >= 0.5 ? 0 : 1
                 : _nativeWeatherRadarPwsSelector,
             NoseLightSelectorPosition = isFlyByWireAirbus
-                ? ResolveFbwNoseLightSelectorPosition(
+                ? FbwStateResolvers.ResolveNoseLightSelectorPosition(
+                    raw.FbwNoseLightSelectorPosition,
                     _fbwCommandedNoseLightSelector,
                     _fbwCommandedNoseLightSelectorUtc,
                     raw.FbwNoseTakeoffLightCircuit,
@@ -3741,33 +3745,6 @@ internal sealed class CopilotService : Form
         }
 
         return null;
-    }
-
-    private static double ResolveFbwNoseLightSelectorPosition(
-        float? commandedValue,
-        DateTime? commandedUtc,
-        double takeoffCircuitOn,
-        double taxiCircuitOn,
-        double taxiLightOn)
-    {
-        if (takeoffCircuitOn != 0)
-        {
-            return 0;
-        }
-
-        if (taxiCircuitOn != 0 || taxiLightOn != 0)
-        {
-            return 1;
-        }
-
-        if (commandedValue.HasValue
-            && commandedUtc.HasValue
-            && DateTime.UtcNow - commandedUtc.Value < TimeSpan.FromSeconds(10))
-        {
-            return commandedValue.Value;
-        }
-
-        return 2;
     }
 
     private static bool? ResolveFbwTcasAltitudeReporting(
@@ -4750,7 +4727,8 @@ internal sealed class CopilotService : Form
         }
 
         _cruiseSeatbeltMonitoring =
-            string.Equals(definition.Id, "cruise", StringComparison.OrdinalIgnoreCase);
+            string.Equals(definition.Id, "cruise", StringComparison.OrdinalIgnoreCase)
+            && !_state.IsIniBuildsA321Lr;
         _smoothCruiseSinceUtc = null;
         _nextCruiseSeatbeltCommandUtc = DateTime.MinValue;
         _procedureRunner.Start(definition, _state);
@@ -7112,6 +7090,11 @@ internal sealed class CopilotService : Form
             SetFlyByWireSignSelector(selector, desiredPosition);
             return;
         }
+        if (_state?.IsIniBuildsA321Lr == true)
+        {
+            SetA321SignSelector(selector, desiredPosition);
+            return;
+        }
         if (_state?.IsIniBuildsA330 == true)
         {
             SetA330SignSelector(selector, desiredPosition);
@@ -7173,6 +7156,49 @@ internal sealed class CopilotService : Form
         }
 
         _simConnect!.SetInputEvent(inputEventHash, (double)desiredPosition);
+        BeginNativeAction(
+            FormatSignSelectorName(selector),
+            Verify,
+            desiredPosition != 2,
+            TimeSpan.FromSeconds(10));
+    }
+
+    private void SetA321SignSelector(SignSelector selector, int desiredPosition)
+    {
+        if (_simConnect == null || _state == null)
+        {
+            AppendDashboardLog(
+                $"{FormatSignSelectorName(selector)} blocked: simulator state is unavailable.");
+            FinishOneShot(3);
+            return;
+        }
+
+        double? ReadPosition(AircraftState state) =>
+            selector switch
+            {
+                SignSelector.Seatbelts => state.SeatbeltSelectorPosition,
+                SignSelector.NoSmoking => state.NoSmokingSelectorPosition,
+                SignSelector.EmergencyExit => state.EmergencyExitSelectorPosition,
+                _ => null
+            };
+
+        bool Verify(AircraftState state) =>
+            A321ControlProfile.SignSelectorAtPosition(
+                ReadPosition(state),
+                desiredPosition);
+
+        if (Verify(_state))
+        {
+            AppendDashboardLog(
+                $"{FormatSignSelectorName(selector)} already " +
+                $"{FormatSignSelectorPosition(selector, desiredPosition)}.");
+            FinishOneShot();
+            return;
+        }
+
+        _simConnect.SetInputEvent(
+            A321ControlProfile.GetSignInputEventHash((int)selector),
+            (double)desiredPosition);
         BeginNativeAction(
             FormatSignSelectorName(selector),
             Verify,
@@ -7909,9 +7935,9 @@ internal sealed class CopilotService : Form
 
             var calculatorCode = desiredPosition switch
             {
-                0 => "(A:CIRCUIT SWITCH ON:20, Bool) ! if{ 20 (>K:ELECTRICAL_CIRCUIT_TOGGLE) } (A:CIRCUIT SWITCH ON:17, Bool) ! if{ 17 (>K:ELECTRICAL_CIRCUIT_TOGGLE) }",
-                1 => "0 (>L:LIGHTING_LANDING_1) (A:CIRCUIT SWITCH ON:17, Bool) if{ 17 (>K:ELECTRICAL_CIRCUIT_TOGGLE) } (A:CIRCUIT SWITCH ON:20, Bool) ! if{ 20 (>K:ELECTRICAL_CIRCUIT_TOGGLE) }",
-                2 => "(A:CIRCUIT SWITCH ON:17, Bool) if{ 17 (>K:ELECTRICAL_CIRCUIT_TOGGLE) } (A:CIRCUIT SWITCH ON:20, Bool) if{ 20 (>K:ELECTRICAL_CIRCUIT_TOGGLE) }",
+                0 => "0 (>L:LIGHTING_LANDING_1) (A:CIRCUIT SWITCH ON:20, Bool) ! if{ 20 (>K:ELECTRICAL_CIRCUIT_TOGGLE) } (A:CIRCUIT SWITCH ON:17, Bool) ! if{ 17 (>K:ELECTRICAL_CIRCUIT_TOGGLE) }",
+                1 => "1 (>L:LIGHTING_LANDING_1) (A:CIRCUIT SWITCH ON:17, Bool) if{ 17 (>K:ELECTRICAL_CIRCUIT_TOGGLE) } (A:CIRCUIT SWITCH ON:20, Bool) ! if{ 20 (>K:ELECTRICAL_CIRCUIT_TOGGLE) }",
+                2 => "2 (>L:LIGHTING_LANDING_1) (A:CIRCUIT SWITCH ON:17, Bool) if{ 17 (>K:ELECTRICAL_CIRCUIT_TOGGLE) } (A:CIRCUIT SWITCH ON:20, Bool) if{ 20 (>K:ELECTRICAL_CIRCUIT_TOGGLE) }",
                 _ => throw new ArgumentOutOfRangeException(nameof(desiredPosition))
             };
 
@@ -8352,7 +8378,12 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        if (_state.IsIniBuildsA330)
+        if (_state.IsIniBuildsA321Lr)
+        {
+            SendMobiFlightCommand(A321ControlProfile.BuildTakeoffFlapsCommand());
+            SendMobiFlightCommand("MF.DummyCmd");
+        }
+        else if (_state.IsIniBuildsA330)
         {
             SendMobiFlightCommand(
                 "MF.SimVars.Set.16384 (A:FLAPS NUM HANDLE POSITIONS, Number) / " +
@@ -8410,6 +8441,10 @@ internal sealed class CopilotService : Form
         {
             SendMobiFlightCommand(
                 $"MF.SimVars.Set.{desiredPosition} (>L:A32NX_FLAPS_HANDLE_INDEX)");
+        }
+        else if (_state.IsIniBuildsA321Lr)
+        {
+            SendMobiFlightCommand(A321ControlProfile.BuildFlapsExtensionCommand());
         }
         else if (_state.IsIniBuildsA330)
         {
@@ -8480,6 +8515,11 @@ internal sealed class CopilotService : Form
         {
             SendMobiFlightCommand(
                 "MF.SimVars.Set.0 (>L:A32NX_FLAPS_HANDLE_INDEX)");
+        }
+        else if (_state.IsIniBuildsA321Lr)
+        {
+            SendMobiFlightCommand(
+                A321ControlProfile.BuildFlapsCleanCommand(_state.OnGround));
         }
         else if (_state.IsIniBuildsA330)
         {

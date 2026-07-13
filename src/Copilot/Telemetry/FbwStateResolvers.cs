@@ -2,6 +2,39 @@ namespace Msfs2024Ai.Copilot.Telemetry;
 
 internal static class FbwStateResolvers
 {
+    public static double ResolveNoseLightSelectorPosition(
+        double selectorPosition,
+        float? commandedValue,
+        DateTime? commandedUtc,
+        double takeoffCircuitOn,
+        double taxiCircuitOn,
+        double taxiLightOn)
+    {
+        // LIGHTING_LANDING_1 is the FBW A32NX cockpit selector itself:
+        // 0 = T.O., 1 = TAXI, 2 = OFF.  Generic LIGHT TAXI and the
+        // individual circuits describe emitted light state and can remain on
+        // or be changed automatically with the landing gear, so they must not
+        // override a valid selector readback.
+        if (selectorPosition >= -0.1 && selectorPosition <= 2.1)
+        {
+            return Math.Round(selectorPosition);
+        }
+
+        if (commandedValue.HasValue
+            && commandedUtc.HasValue
+            && DateTime.UtcNow - commandedUtc.Value < TimeSpan.FromSeconds(30))
+        {
+            return commandedValue.Value;
+        }
+
+        if (takeoffCircuitOn != 0)
+        {
+            return 0;
+        }
+
+        return taxiCircuitOn != 0 || taxiLightOn != 0 ? 1 : 2;
+    }
+
     public static bool ResolveBattery(
         bool? commandedPushbuttonAuto,
         bool? typedPushbuttonAuto,

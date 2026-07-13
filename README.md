@@ -63,6 +63,11 @@ and down, minimums, spoilers, reverse green, and deceleration.
 
 The gameplay flow is defined in [docs/checklist.md](docs/checklist.md).
 
+The iniBuilds A321LR profile has completed live validation of all twelve flows.
+Its procedures, checklists, flap mappings, and sign-selector policy are kept in
+an aircraft-specific profile and protected by regression tests. See
+[docs/A321_SUPPORT_STATUS.md](docs/A321_SUPPORT_STATUS.md).
+
 ## Supported aircraft
 
 The application has moved from a single-aircraft A320 assistant to a
@@ -238,9 +243,9 @@ See [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Development status
 
-The iniBuilds A320neo V2 flow remains the mature baseline. FlyByWire A32NX,
-iniBuilds A321LR, PMDG 737-800, and experimental iniBuilds A330 support have
-been added through aircraft-specific adapters and procedure paths. Treat this
-as active development software and remain ready to operate the aircraft
-manually.
+The iniBuilds A320neo V2 and fully live-validated iniBuilds A321LR flows are
+mature baselines. FlyByWire A32NX and PMDG 737-800 are supported through their
+own procedure paths; iniBuilds A330 remains experimental on this development
+branch. Treat unreleased aircraft work as active development software and
+remain ready to operate the aircraft manually.
 

@@ -72,6 +72,49 @@ public sealed class ProcedureCatalogTests
     }
 
     [TestMethod]
+    public void IniBuildsA321KeepsSignSelectorsAutoAfterPreflight()
+    {
+        var autoState = new AircraftState
+        {
+            Title = "A321",
+            SeatbeltSelectorPosition = 1,
+            NoSmokingSelectorPosition = 1
+        };
+
+        foreach (var flowIndex in new[] { 7, 9 })
+        {
+            var signSteps = A321ProcedureLibrary.GateToGate[flowIndex].Steps
+                .Where(step => step.Id.Contains("seatbelt")
+                               || step.Id.Contains("no-smoking"))
+                .ToList();
+
+            Assert.IsTrue(signSteps.Count >= 2);
+            Assert.IsTrue(signSteps.All(step => step.IsComplete(autoState)));
+            Assert.IsTrue(signSteps.All(step => step.Command != null
+                                                && step.Command.EndsWith(" auto")));
+        }
+
+        var shutdown = A321ProcedureLibrary.GateToGate[11];
+        var secureDecisionIndex = shutdown.Steps
+            .Select((step, index) => new { step.Id, index })
+            .Single(item => item.Id == "secure-decision")
+            .index;
+        var noSmokingAutoIndex = shutdown.Steps
+            .Select((step, index) => new { step.Id, index })
+            .Single(item => item.Id == "fo-no-smoking-auto")
+            .index;
+        var noSmokingOff = shutdown.Steps
+            .Select((step, index) => new { Step = step, index })
+            .Single(item => item.Step.Id == "secure-no-smoking-off");
+
+        Assert.IsTrue(noSmokingAutoIndex < secureDecisionIndex);
+        Assert.IsTrue(noSmokingOff.index > secureDecisionIndex);
+        Assert.AreEqual("no-smoking off", noSmokingOff.Step.Command);
+        Assert.IsTrue(noSmokingOff.Step.IsComplete(
+            new AircraftState { Title = "A321", NoSmokingSelectorPosition = 2 }));
+    }
+
+    [TestMethod]
     public void FlyByWireA320UsesFbwProcedureCatalog()
     {
         var state = new AircraftState { Title = "FlyByWire A32NX" };

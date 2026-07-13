@@ -1,9 +1,9 @@
 # A320 control mapping
 
 This document started as the iniBuilds A320neo V2 mapping record. The app now
-also supports the iniBuilds A321LR through the shared iniBuilds A320-family
-adapter where mappings match, and the FlyByWire A32NX through separate
-FBW-specific state and command mappings in the application code.
+also supports the iniBuilds A321LR through a dedicated procedure/checklist
+catalog and an A321 control profile for mappings that require isolation. The
+FlyByWire A32NX uses separate FBW-specific state and command mappings.
 
 ## Evidence levels
 

@@ -68,9 +68,12 @@ internal static class A321ChecklistLibrary
             Checklist("cruise", "Cruise Verification",
                 new ChecklistItem("Cruise", "ESTABLISHED", state => !state.OnGround && state.AltitudeAboveGroundFeet >= 10000 && Math.Abs(state.VerticalSpeedFeetPerMinute) < 300),
                 new ChecklistItem(
-                    "Seatbelt signs",
-                    "AS REQUIRED",
-                    state => state.SeatbeltSelectorPosition.HasValue)),
+                    "Signs selectors",
+                    "AUTO/AUTO",
+                    state => state.SeatbeltSelectorPosition.HasValue
+                             && Math.Abs(state.SeatbeltSelectorPosition.Value - 1) < 0.1
+                             && state.NoSmokingSelectorPosition.HasValue
+                             && Math.Abs(state.NoSmokingSelectorPosition.Value - 1) < 0.1)),
             Checklist("descent-preparation", "Descent Preparation Verification",
                 Unknown("Arrival and approach", "ENTERED"),
                 Unknown("PERF APPR data", "ENTERED"),
@@ -84,7 +87,15 @@ internal static class A321ChecklistLibrary
                         : null),
                 new ChecklistItem("Landing gear", "DOWN", state => state.GearHandleDown),
                 new ChecklistItem("Flaps", "LANDING SET", state => state.FlapsHandleIndex > 0),
-                Unknown("Destination QNH", "SET"), Unknown("Ground spoilers", "ARMED"), Unknown("Signs and lights", "SET")),
+                Unknown("Destination QNH", "SET"), Unknown("Ground spoilers", "ARMED"),
+                new ChecklistItem(
+                    "Signs selectors",
+                    "AUTO/AUTO",
+                    state => state.SeatbeltSelectorPosition.HasValue
+                             && Math.Abs(state.SeatbeltSelectorPosition.Value - 1) < 0.1
+                             && state.NoSmokingSelectorPosition.HasValue
+                             && Math.Abs(state.NoSmokingSelectorPosition.Value - 1) < 0.1),
+                Unknown("Exterior lights", "SET")),
             Checklist("after-landing-taxi", "After Landing & Taxi Verification",
                 new ChecklistItem("Flaps", "ZERO", state => state.FlapsHandleIndex <= 0),
                 new ChecklistItem("APU", "AVAILABLE", state => state.ApuAvailable),

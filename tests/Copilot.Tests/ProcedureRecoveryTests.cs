@@ -230,6 +230,22 @@ public sealed class ProcedureRecoveryTests
     }
 
     [TestMethod]
+    public void A321DoesNotReportCleanWhileHandleIsAtFlapsOne()
+    {
+        var state = new AircraftState
+        {
+            Title = "A321",
+            FlapsHandleIndex = 1,
+            FlapReadbackSane = false,
+            LeftFlapPositionPercent = 0,
+            RightFlapPositionPercent = 0
+        };
+
+        Assert.IsFalse(state.FlapsAtDetent(0));
+        Assert.IsTrue(state.FlapsAtDetent(1));
+    }
+
+    [TestMethod]
     public void ApproachFlapsOneGateUsesConfiguredSchedule()
     {
         var commands = new List<string>();

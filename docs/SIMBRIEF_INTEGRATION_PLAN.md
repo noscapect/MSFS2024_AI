@@ -1,6 +1,17 @@
 # SimBrief Integration Plan
 
-Status: research complete; no runtime implementation yet.
+Status: first implementation complete on `feature/simbrief-integration`.
+
+Implemented in the first development pass:
+
+- free, read-only latest-OFP import by Pilot ID or username;
+- no API key, password, subscription, or developer-hosted service;
+- normalized local cache containing only the latest flight summary;
+- explicit review before transition altitude, V1, or VR are applied;
+- stale-OFP and detected-aircraft mismatch warnings;
+- optional import when starting a new flight;
+- offline parser and validation tests;
+- complete separation from aircraft adapters and cockpit flow execution.
 
 ## Recommended first release
 

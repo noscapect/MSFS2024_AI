@@ -4,9 +4,10 @@ This roadmap records intentionally deferred product work. It is not a promise
 that experimental features belong in the next public release. Stable aircraft
 profiles remain protected by their aircraft-specific regression tests.
 
-## Current investigation
+## Current development
 
-1. SimBrief latest-OFP integration.
+1. SimBrief latest-OFP integration: first read-only import pass implemented;
+   live account/OFP validation and UX refinement remain.
 
 ## Later enhancements
 

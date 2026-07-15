@@ -41,6 +41,9 @@ Captain actions, and speaks important callouts.
 - Verification after every automatic aircraft action
 - Optional Windows offline voice callouts
 - Persistent preflight settings for V1, VR, and transition altitude
+- Optional free SimBrief latest-OFP import by Pilot ID or username, with a
+  local flight-summary cache, mismatch/staleness warnings, and review before
+  imported takeoff values are applied
 - A distance-aware standard approach schedule that can be overridden for flap,
   gear, and landing-configuration gates
 - Configurable automatic chaining between Flow 6 to 7, Flow 10 to 11, Flow 11
@@ -67,8 +70,8 @@ and down, minimums, spoilers, reverse green, and deceleration.
 
 The gameplay flow is defined in [docs/checklist.md](docs/checklist.md).
 Planned and deliberately deferred features are tracked in
-[docs/ROADMAP.md](docs/ROADMAP.md). The researched first scope for optional
-SimBrief support is documented in
+[docs/ROADMAP.md](docs/ROADMAP.md). The design and implemented first scope for
+optional SimBrief support is documented in
 [docs/SIMBRIEF_INTEGRATION_PLAN.md](docs/SIMBRIEF_INTEGRATION_PLAN.md).
 
 The iniBuilds A321LR profile has completed live validation of all twelve flows.

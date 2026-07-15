@@ -9,6 +9,7 @@ using Msfs2024Ai.Copilot.Diagnostics;
 using Msfs2024Ai.Copilot.Domain;
 using Msfs2024Ai.Copilot.Procedures;
 using Msfs2024Ai.Copilot.Settings;
+using Msfs2024Ai.Copilot.SimBrief;
 using Msfs2024Ai.Copilot.Telemetry;
 using Msfs2024Ai.Copilot.Voice;
 using System.Collections.Concurrent;
@@ -374,6 +375,9 @@ internal sealed class CopilotService : Form
     private ListBox? _flowList;
     private Button? _startSelectedFlowButton;
     private Button? _confirmCompletedButton;
+    private Button? _simBriefImportButton;
+    private ImportedFlightPlan? _simBriefFlightPlan;
+    private bool _simBriefImportInProgress;
 
     private enum Definition
     {
@@ -953,6 +957,7 @@ internal sealed class CopilotService : Form
         _oneShotCommand = oneShotCommand;
         _showUi = showUi;
         _settings = SettingsStore.Load();
+        _simBriefFlightPlan = SimBriefCacheStore.Load();
         _flightTelemetryStore = new FlightTelemetryStore();
         _procedureSession = ProcedureSessionStore.Load();
         foreach (var procedureId in _procedureSession.CompletedProcedureIds)
@@ -5408,6 +5413,12 @@ internal sealed class CopilotService : Form
         AppendDashboardLog(
             "New flight started: all saved flow progress was reset.");
         UpdateDashboard();
+        if (_settings.SimBriefAutoImportOnNewFlight
+            && (!string.IsNullOrWhiteSpace(_settings.SimBriefPilotId)
+                || !string.IsNullOrWhiteSpace(_settings.SimBriefUsername)))
+        {
+            _ = ImportLatestSimBriefAsync(showReview: true, automatic: true);
+        }
         FinishOneShot();
     }
 
@@ -9440,6 +9451,15 @@ internal sealed class CopilotService : Form
         debugJumpButton.Click += (_, _) => ShowDebugJumpDialog();
         settingsPanel.Controls.Add(debugJumpButton);
 
+        _simBriefImportButton = new Button
+        {
+            Text = SimBriefButtonText(),
+            AutoSize = true,
+            Margin = new Padding(10, 2, 0, 0)
+        };
+        _simBriefImportButton.Click += (_, _) => ShowSimBriefDialog();
+        settingsPanel.Controls.Add(_simBriefImportButton);
+
         settingsPanel.Controls.Add(new Label
         {
             Text = "Transition altitude:",
@@ -9815,6 +9835,233 @@ internal sealed class CopilotService : Form
         actions.Controls.Add(copyDiagnosticsButton);
         toolsShell.Controls.Add(actions);
         root.Controls.Add(toolsShell);
+    }
+
+    private string SimBriefButtonText() => _simBriefFlightPlan == null
+        ? "SimBrief"
+        : $"SimBrief: {_simBriefFlightPlan.RouteLabel}";
+
+    private void ShowSimBriefDialog()
+    {
+        using var dialog = new Form
+        {
+            Text = "SimBrief flight plan",
+            Width = 560,
+            Height = 390,
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false
+        };
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(16),
+            ColumnCount = 2,
+            RowCount = 7
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        dialog.Controls.Add(layout);
+
+        layout.Controls.Add(new Label
+        {
+            Text = "Free, read-only import of your latest generated SimBrief OFP. No API key or subscription is required.",
+            AutoSize = true,
+            MaximumSize = new System.Drawing.Size(500, 0),
+            Margin = new Padding(0, 0, 0, 14)
+        }, 0, 0);
+        layout.SetColumnSpan(layout.GetControlFromPosition(0, 0), 2);
+
+        layout.Controls.Add(new Label { Text = "Pilot ID (preferred)", AutoSize = true, Margin = new Padding(0, 7, 8, 0) }, 0, 1);
+        var pilotIdBox = new TextBox { Text = _settings.SimBriefPilotId, Dock = DockStyle.Top };
+        layout.Controls.Add(pilotIdBox, 1, 1);
+        layout.Controls.Add(new Label { Text = "Username", AutoSize = true, Margin = new Padding(0, 7, 8, 0) }, 0, 2);
+        var usernameBox = new TextBox { Text = _settings.SimBriefUsername, Dock = DockStyle.Top };
+        layout.Controls.Add(usernameBox, 1, 2);
+
+        var autoImportBox = new CheckBox
+        {
+            Text = "Import latest OFP when starting a new flight",
+            Checked = _settings.SimBriefAutoImportOnNewFlight,
+            AutoSize = true,
+            Margin = new Padding(0, 10, 0, 8)
+        };
+        layout.Controls.Add(autoImportBox, 1, 3);
+
+        var summary = new Label
+        {
+            Text = SimBriefSummary(_simBriefFlightPlan),
+            AutoSize = true,
+            MaximumSize = new System.Drawing.Size(500, 0),
+            Margin = new Padding(0, 10, 0, 12)
+        };
+        layout.Controls.Add(summary, 0, 4);
+        layout.SetColumnSpan(summary, 2);
+
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight
+        };
+        var importButton = new Button
+        {
+            Text = "Import latest flight",
+            AutoSize = true,
+            BackColor = System.Drawing.Color.FromArgb(39, 130, 87),
+            ForeColor = System.Drawing.Color.White,
+            FlatStyle = FlatStyle.Flat,
+            UseVisualStyleBackColor = false
+        };
+        var saveButton = new Button { Text = "Save settings", AutoSize = true };
+        var closeButton = new Button { Text = "Close", AutoSize = true };
+        Action saveSettings = () =>
+        {
+            _settings.SimBriefPilotId = pilotIdBox.Text.Trim();
+            _settings.SimBriefUsername = usernameBox.Text.Trim();
+            _settings.SimBriefAutoImportOnNewFlight = autoImportBox.Checked;
+            SettingsStore.Save(_settings);
+        };
+        saveButton.Click += (_, _) =>
+        {
+            saveSettings();
+            summary.Text = "SimBrief settings saved. " + SimBriefSummary(_simBriefFlightPlan);
+        };
+        importButton.Click += async (_, _) =>
+        {
+            saveSettings();
+            importButton.Enabled = false;
+            importButton.Text = "Importing...";
+            await ImportLatestSimBriefAsync(showReview: true, automatic: false);
+            summary.Text = SimBriefSummary(_simBriefFlightPlan);
+            importButton.Text = "Import latest flight";
+            importButton.Enabled = true;
+        };
+        closeButton.Click += (_, _) => dialog.Close();
+        buttons.Controls.Add(importButton);
+        buttons.Controls.Add(saveButton);
+        buttons.Controls.Add(closeButton);
+        layout.Controls.Add(buttons, 0, 5);
+        layout.SetColumnSpan(buttons, 2);
+        dialog.AcceptButton = importButton;
+        dialog.CancelButton = closeButton;
+        dialog.ShowDialog(this);
+    }
+
+    private async Task ImportLatestSimBriefAsync(bool showReview, bool automatic)
+    {
+        if (_simBriefImportInProgress) return;
+        if (IsProcedureActive(_procedureRunner.Status))
+        {
+            if (!automatic)
+            {
+                MessageBox.Show(this,
+                    "Finish, pause, or cancel the active procedure before reviewing a new SimBrief flight.",
+                    "SimBrief import",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            return;
+        }
+
+        _simBriefImportInProgress = true;
+        try
+        {
+            var plan = await new SimBriefClient().FetchLatestAsync(
+                _settings.SimBriefPilotId,
+                _settings.SimBriefUsername);
+            _simBriefFlightPlan = plan;
+            SimBriefCacheStore.Save(plan);
+            if (_simBriefImportButton != null) _simBriefImportButton.Text = SimBriefButtonText();
+            AppendDashboardLog($"SimBrief imported: {plan.RouteLabel} {plan.FlightNumber}".Trim());
+            if (showReview) ReviewAndApplySimBrief(plan);
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"SimBrief import failed: {ex}");
+            if (!automatic)
+            {
+                MessageBox.Show(this,
+                    $"The SimBrief flight could not be imported.\n\n{ex.Message}\n\nYour existing settings and cockpit flows were not changed.",
+                    "SimBrief unavailable",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+            AppendDashboardLog("SimBrief import unavailable; existing flight settings kept.");
+        }
+        finally
+        {
+            _simBriefImportInProgress = false;
+        }
+    }
+
+    private void ReviewAndApplySimBrief(ImportedFlightPlan plan)
+    {
+        var warnings = SimBriefImportValidator.Validate(
+            plan,
+            ExpectedSimBriefAircraftIcaos(),
+            DateTime.UtcNow);
+        var changes = new List<string>();
+        if (plan.TransitionAltitudeFeet is >= 1000 and <= 20000)
+            changes.Add($"Transition altitude: {plan.TransitionAltitudeFeet:N0} ft");
+        if (plan.TakeoffV1Knots is >= 80 and <= 219)
+            changes.Add($"V1: {plan.TakeoffV1Knots} kt");
+        if (plan.TakeoffVrKnots is >= 80 and <= 220)
+            changes.Add($"VR: {plan.TakeoffVrKnots} kt");
+
+        var message = SimBriefSummary(plan)
+            + (warnings.Count > 0 ? "\n\nWarnings:\n- " + string.Join("\n- ", warnings) : "")
+            + (changes.Count > 0
+                ? "\n\nApply these reviewed values to the app?\n- " + string.Join("\n- ", changes)
+                : "\n\nThis OFP contains no supported takeoff values to apply. It will remain available as a flight summary.");
+        if (changes.Count == 0)
+        {
+            MessageBox.Show(this, message, "SimBrief flight imported", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+        if (MessageBox.Show(this, message, "Review SimBrief import", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+            return;
+
+        if (plan.TransitionAltitudeFeet is >= 1000 and <= 20000)
+            _settings.TransitionAltitudeFeet = plan.TransitionAltitudeFeet.Value;
+        if (plan.TakeoffV1Knots is >= 80 and <= 219)
+            _settings.TakeoffV1SpeedKnots = plan.TakeoffV1Knots.Value;
+        if (plan.TakeoffVrKnots is >= 80 and <= 220)
+            _settings.TakeoffRotateSpeedKnots = Math.Max(_settings.TakeoffV1SpeedKnots, plan.TakeoffVrKnots.Value);
+        SettingsStore.Save(_settings);
+
+        if (_transitionAltitudeBox != null) _transitionAltitudeBox.Value = _settings.TransitionAltitudeFeet;
+        if (_takeoffV1Box != null) _takeoffV1Box.Value = _settings.TakeoffV1SpeedKnots;
+        if (_takeoffRotateBox != null) _takeoffRotateBox.Value = _settings.TakeoffRotateSpeedKnots;
+        if (_state != null)
+        {
+            _state.TransitionAltitudeFeet = _settings.TransitionAltitudeFeet;
+            _state.TakeoffV1SpeedKnots = _settings.TakeoffV1SpeedKnots;
+            _state.TakeoffRotateSpeedKnots = _settings.TakeoffRotateSpeedKnots;
+        }
+        AppendDashboardLog("Reviewed SimBrief takeoff settings applied.");
+    }
+
+    private IReadOnlyList<string> ExpectedSimBriefAircraftIcaos()
+    {
+        if (_state?.IsPmdg737800 == true) return new[] { "B738" };
+        if (_state?.IsIniBuildsA321Lr == true) return new[] { "A21N", "A321" };
+        if (_state?.IsIniBuildsA330 == true) return new[] { "A333", "A339" };
+        if (_state?.IsA320NeoV2 == true || _state?.IsFlyByWireA320Neo == true)
+            return new[] { "A20N" };
+        return Array.Empty<string>();
+    }
+
+    private static string SimBriefSummary(ImportedFlightPlan? plan)
+    {
+        if (plan == null) return "No SimBrief flight has been imported yet.";
+        var generated = plan.GeneratedUtc.HasValue
+            ? $"generated {plan.GeneratedUtc.Value.ToLocalTime():g}"
+            : "generation time unavailable";
+        var cruise = plan.CruiseAltitudeFeet.HasValue ? $"FL{plan.CruiseAltitudeFeet.Value / 100:000}" : "cruise n/a";
+        var runways = $"{(string.IsNullOrWhiteSpace(plan.OriginRunway) ? "--" : plan.OriginRunway)} -> {(string.IsNullOrWhiteSpace(plan.DestinationRunway) ? "--" : plan.DestinationRunway)}";
+        return $"{plan.RouteLabel}  {plan.FlightNumber}\nAircraft {plan.AircraftIcao} {plan.AircraftRegistration} | {cruise} | runways {runways}\n{generated}";
     }
 
     private void ShowDebugJumpDialog()

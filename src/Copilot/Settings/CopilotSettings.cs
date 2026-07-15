@@ -28,4 +28,7 @@ public sealed class CopilotSettings
     public bool AutoChainFlow6To7 { get; set; } = true;
     public bool AutoChainFlow10To11 { get; set; } = true;
     public bool AutoChainFlow11To12 { get; set; } = true;
+    public string SimBriefPilotId { get; set; } = "";
+    public string SimBriefUsername { get; set; } = "";
+    public bool SimBriefAutoImportOnNewFlight { get; set; }
 }

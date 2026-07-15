@@ -58,7 +58,7 @@ internal static class AircraftApproachProfiles
         16, 10000, 230, 11, 4500, 210, 8, 3000, 210, 5, 1800, 185, 185);
     private static readonly AircraftApproachProfile Pmdg737 = Profile(
         "pmdg-737-800", "PMDG 737-800",
-        15, 10000, 230, 10, 4000, 210, 7, 2500, 200, 5, 1800, 190, 190);
+        15, 10000, 230, 12, 4000, 190, 7, 2500, 200, 5, 1800, 190, 190);
     private static readonly AircraftApproachProfile Generic = Profile(
         "generic", "Generic standard",
         15, 10000, 230, 10, 4000, 200, 7, 2500, 210, 5, 1800, 185, 185);

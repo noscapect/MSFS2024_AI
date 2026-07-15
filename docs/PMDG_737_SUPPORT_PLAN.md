@@ -41,6 +41,12 @@ generic SimVars, but exact PMDG switch readback is not available yet.
   signs, speedbrake, autobrake, gear, transponder and fire-test indicators.
 - PMDG commands use the official `PMDG_NG3_Control` client-data channel where
   PMDG SDK events are known.
+- The approach schedule is PMDG-specific: Flaps 1 uses the 15 NM gate when
+  runway distance is available; Flaps 5 requires both 12 NM or closer and
+  190 knots or less. The 10,000/4,000-foot gates are fallbacks only when no
+  usable runway-distance readback exists. Gear, Flaps 15, and landing flaps
+  then continue through their separate distance/AGL and speed gates so the
+  aircraft is configured by the stabilized-approach gate.
 - Flow 1 performs and independently verifies the FAULT/INOP and OVHT/FIRE
   detection tests plus both extinguisher tests after electrical power is
   established. Each spring-loaded control is held, its complete annunciator

@@ -30,6 +30,18 @@ public sealed class AircraftApproachProfilesTests
     }
 
     [TestMethod]
+    public void Pmdg737StandardSchedulesFlapsFiveByPositionAndSpeed()
+    {
+        var schedule = AircraftApproachProfiles.EffectiveSchedule(
+            "737-800 PAX BW TC",
+            Array.Empty<AircraftApproachOverride>());
+
+        Assert.AreEqual(12, schedule.Flaps2DistanceNm);
+        Assert.AreEqual(4000, schedule.Flaps2AltitudeAglFeet);
+        Assert.AreEqual(190, schedule.Flaps2SpeedKnots);
+    }
+
+    [TestMethod]
     public void OverrideOnlyAppliesToItsAircraftProfile()
     {
         var overrides = new[]

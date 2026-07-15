@@ -18,7 +18,7 @@ public sealed class ReleasedAircraftContractTests
     [DataRow("A320neo V2", "8ca4d441ed99c53d9b42ecb60107edf4b2171ce49c88f6d1252a917cbb96a2f8")]
     [DataRow("A321", "f8253aa4c4533730444503354a5c0305bc524f7ddbf73ef5c393c3f9d0f41afd")]
     [DataRow("FlyByWire A32NX", "0d3992feff81319fc263abc4aa76e724da0072a7d6ecfe8981388a95067d02a0")]
-    [DataRow("PMDG 737-800", "8038b86e44bcd6d8d4b7a3670c326f466460989857556db42135f3c34211e395")]
+    [DataRow("PMDG 737-800", "e9192772bdaeb2de58b2978fc7e54060903d9ee1884bd93d0a476b52608da86a")]
     public void GateToGateStructureRemainsStable(string title, string expectedFingerprint)
     {
         Assert.AreEqual(expectedFingerprint, Fingerprint(title));

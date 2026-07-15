@@ -11692,6 +11692,10 @@ internal sealed class CopilotService : Form
                 $"{flight} | trigger <={state.ApproachFlaps1AltitudeFeet:N0} ft indicated or distance gate",
             "flaps-one-speed" =>
                 $"{flight} | wait IAS <={state.EffectiveApproachFlaps1SpeedKnots} kt for CONFIG 1",
+            "flaps-five-gate" =>
+                $"{flight}{distance} | trigger <={state.ApproachFlaps2DistanceNm} NM; fallback <={state.ApproachFlaps2AltitudeAglFeet:N0} ft AGL only without distance",
+            "flaps-five-speed" =>
+                $"{flight} | wait IAS <={state.EffectiveApproachFlaps2SpeedKnots} kt for Flaps 5",
             "flaps-two-speed" =>
                 $"{flight} | wait IAS <={state.EffectiveApproachFlaps2SpeedKnots} kt for CONFIG 2",
             "gear-down-point" =>

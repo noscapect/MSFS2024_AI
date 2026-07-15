@@ -90,27 +90,38 @@ internal static class B737ProcedureLibrary
     private static bool ApproachDistanceReached(
         AircraftState state,
         int maximumDistanceNm) =>
+        ApproachDistanceAvailable(state)
+        && state.ApproachDistanceToTouchdownNm.GetValueOrDefault() <= maximumDistanceNm;
+
+    private static bool ApproachDistanceAvailable(AircraftState state) =>
         state.ApproachDistanceToTouchdownNm.HasValue
-        && state.ApproachDistanceToTouchdownNm.Value > 0
-        && state.ApproachDistanceToTouchdownNm.Value <= maximumDistanceNm;
+        && state.ApproachDistanceToTouchdownNm.Value > 0;
 
     private static bool ApproachGearGateReached(AircraftState state) =>
         ApproachDistanceReached(state, state.ApproachGearDistanceNm)
-            || (!state.ApproachDistanceToTouchdownNm.HasValue
+            || (!ApproachDistanceAvailable(state)
                 && state.AltitudeAboveGroundFeet <= state.ApproachGearAltitudeAglFeet);
+
+    private static bool ApproachFlapsOneGateReached(AircraftState state) =>
+        ApproachDistanceReached(state, state.ApproachFlaps1DistanceNm)
+            || (!ApproachDistanceAvailable(state)
+                && state.IndicatedAltitudeFeet <= state.ApproachFlaps1AltitudeFeet);
+
+    private static bool ApproachFlapsFiveGateReached(AircraftState state) =>
+        ApproachDistanceReached(state, state.ApproachFlaps2DistanceNm)
+            || (!ApproachDistanceAvailable(state)
+                && state.AltitudeAboveGroundFeet <= state.ApproachFlaps2AltitudeAglFeet);
 
     private static bool ApproachLandingConfigGateReached(AircraftState state) =>
         ApproachDistanceReached(state, state.ApproachLandingConfigDistanceNm)
-            || (!state.ApproachDistanceToTouchdownNm.HasValue
+            || (!ApproachDistanceAvailable(state)
                 && state.AltitudeAboveGroundFeet <= state.ApproachLandingConfigAltitudeAglFeet);
 
     private static bool BoeingApproachSpeedSafe(
         AircraftState state,
         int scheduledSpeedKnots,
         int absoluteLimitKnots) =>
-        state.IsSupportedBoeing737
-            ? state.IndicatedAirspeedKnots <= absoluteLimitKnots
-            : state.IndicatedAirspeedKnots <= scheduledSpeedKnots;
+        state.IndicatedAirspeedKnots <= Math.Min(scheduledSpeedKnots, absoluteLimitKnots);
 
     public static ProcedureDefinition PowerUpAndInitialSetup { get; } =
         new(
@@ -303,8 +314,9 @@ internal static class B737ProcedureLibrary
                 Automatic("fo-runway-turnoff-on", "Runway turnoff lights ON", state => state.RunwayTurnoffLightsOn, "pmdg runway-turnoff on"),
                 Automatic("fo-landing-lights-on", "Landing lights ON", state => state.LeftLandingLightSelectorPosition == 2 && state.RightLandingLightSelectorPosition == 2, "pmdg landing-lights on", requireCommandExecution: true),
                 Observe("cabin-landing", "Cabin crew, prepare for landing", _ => true),
-                Observe("flaps-one-gate", "Flaps 1 point reached", state => ApproachDistanceReached(state, state.ApproachFlaps1DistanceNm) || state.IndicatedAltitudeFeet <= state.ApproachFlaps1AltitudeFeet),
+                Observe("flaps-one-gate", "Flaps 1 point reached", ApproachFlapsOneGateReached),
                 Automatic("fo-flaps-one", "Flaps 1", state => state.BoeingFlapsAtSetting(1), "pmdg flaps 1"),
+                Observe("flaps-five-gate", "Flaps 5 point reached", ApproachFlapsFiveGateReached),
                 Observe("flaps-five-speed", "Safe speed for flaps 5", state => BoeingApproachSpeedSafe(state, state.EffectiveApproachFlaps2SpeedKnots, 250)),
                 Automatic("fo-flaps-five", "Flaps 5", state => state.BoeingFlapsAtSetting(5), "pmdg flaps 5"),
                 Observe("gear-gate", "Gear-down point reached", ApproachGearGateReached),

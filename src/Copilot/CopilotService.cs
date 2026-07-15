@@ -351,7 +351,6 @@ internal sealed class CopilotService : Form
     private Label? _aircraftBadgeLabel;
     private Label? _adapterBadgeLabel;
     private Label? _flowBadgeLabel;
-    private Label? _simBriefBadgeLabel;
     private Label? _versionBadgeLabel;
     private PictureBox? _aircraftThumbnailBox;
     private Label? _aircraftCardTitleLabel;
@@ -9350,13 +9349,11 @@ internal sealed class CopilotService : Form
         _aircraftBadgeLabel = NewStatusBadge("AIRCRAFT WAITING", System.Drawing.Color.DimGray);
         _adapterBadgeLabel = NewStatusBadge("ADAPTER WAITING", System.Drawing.Color.DimGray);
         _flowBadgeLabel = NewStatusBadge("FLOW IDLE", System.Drawing.Color.DimGray);
-        _simBriefBadgeLabel = NewStatusBadge(SimBriefBadgeText(), SimBriefStatusColor());
         _versionBadgeLabel = NewStatusBadge($"v{GetApplicationVersion()}", System.Drawing.Color.FromArgb(40, 68, 106));
         topStatusBar.Controls.Add(_simBadgeLabel);
         topStatusBar.Controls.Add(_aircraftBadgeLabel);
         topStatusBar.Controls.Add(_adapterBadgeLabel);
         topStatusBar.Controls.Add(_flowBadgeLabel);
-        topStatusBar.Controls.Add(_simBriefBadgeLabel);
         topStatusBar.Controls.Add(_versionBadgeLabel);
         root.Controls.Add(topStatusBar);
 
@@ -9375,11 +9372,12 @@ internal sealed class CopilotService : Form
         {
             Dock = DockStyle.Top,
             AutoSize = true,
-            ColumnCount = 2,
+            ColumnCount = 3,
             Margin = new Padding(0, 0, 12, 0)
         };
         statusPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
         statusPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        statusPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 78));
         statusShell.Controls.Add(statusPanel, 0, 0);
         statusShell.Controls.Add(BuildAircraftCard(), 1, 0);
 
@@ -9390,20 +9388,75 @@ internal sealed class CopilotService : Form
         _adapterLabel = AddDashboardRow(statusPanel, "Aircraft adapter", "Connecting...");
         _recommendationLabel = AddDashboardRow(statusPanel, "Recommended flow", "Waiting for state...");
         _telemetryLabel = AddDashboardRow(statusPanel, "Current-step telemetry", "Waiting for state...");
+        var simBriefRow = statusPanel.RowCount;
         _simBriefStatusLabel = AddDashboardRow(statusPanel, "SimBrief", SimBriefStatusText());
+        _simBriefImportButton = new Button
+        {
+            Text = "Manage",
+            Width = 70,
+            Height = 25,
+            Margin = new Padding(4, 0, 0, 2),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = System.Drawing.Color.White,
+            ForeColor = System.Drawing.Color.FromArgb(40, 68, 106),
+            UseVisualStyleBackColor = false
+        };
+        _simBriefImportButton.FlatAppearance.BorderColor =
+            System.Drawing.Color.FromArgb(190, 198, 208);
+        _simBriefImportButton.Click += (_, _) => ShowSimBriefDialog();
+        statusPanel.Controls.Add(_simBriefImportButton, 2, simBriefRow);
         _versionLabel = AddDashboardRow(
             statusPanel,
             "Version",
             $"{GetApplicationVersion()} - checking GitHub releases...");
 
-        var settingsPanel = new FlowLayoutPanel
+        var settingsPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(10, 7, 10, 7),
+            BackColor = System.Drawing.Color.White,
+            Margin = new Padding(0, 0, 0, 14)
+        };
+        var flightSetupPanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
             AutoSize = true,
             FlowDirection = FlowDirection.LeftToRight,
-            Margin = new Padding(0, 0, 0, 14)
+            WrapContents = true,
+            Margin = new Padding(0, 0, 0, 4)
         };
-        settingsPanel.Controls.Add(new Label
+        var preferencesPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
+            Margin = new Padding(0, 2, 0, 0)
+        };
+        flightSetupPanel.Controls.Add(new Label
+        {
+            Text = "Flight setup",
+            AutoSize = false,
+            Width = 105,
+            Height = 26,
+            Font = new System.Drawing.Font(Font.FontFamily, 9, System.Drawing.FontStyle.Bold),
+            ForeColor = System.Drawing.Color.FromArgb(40, 68, 106),
+            Margin = new Padding(0, 7, 8, 0)
+        });
+        preferencesPanel.Controls.Add(new Label
+        {
+            Text = "Preferences",
+            AutoSize = false,
+            Width = 105,
+            Height = 26,
+            Font = new System.Drawing.Font(Font.FontFamily, 9, System.Drawing.FontStyle.Bold),
+            ForeColor = System.Drawing.Color.FromArgb(40, 68, 106),
+            Margin = new Padding(0, 7, 8, 0)
+        });
+        preferencesPanel.Controls.Add(new Label
         {
             Text = "Automation:",
             AutoSize = true,
@@ -9422,7 +9475,7 @@ internal sealed class CopilotService : Form
             _settings.AutomationPolicy = (AutomationPolicy)_automationPolicyBox.SelectedItem;
             SettingsStore.Save(_settings);
         };
-        settingsPanel.Controls.Add(_automationPolicyBox);
+        preferencesPanel.Controls.Add(_automationPolicyBox);
 
         _voiceCalloutsBox = new CheckBox
         {
@@ -9441,46 +9494,17 @@ internal sealed class CopilotService : Form
                 _voiceCalloutQueue?.Clear();
             }
         };
-        settingsPanel.Controls.Add(_voiceCalloutsBox);
-
-        _simBriefImportButton = new Button
-        {
-            Text = "Configure / Import SimBrief",
-            AutoSize = false,
-            Width = 190,
-            Height = 32,
-            Margin = new Padding(18, 2, 0, 2),
-            BackColor = System.Drawing.Color.FromArgb(40, 68, 106),
-            ForeColor = System.Drawing.Color.White,
-            FlatStyle = FlatStyle.Flat,
-            Font = new System.Drawing.Font(Font.FontFamily, 9, System.Drawing.FontStyle.Bold),
-            UseVisualStyleBackColor = false
-        };
-        _simBriefImportButton.FlatAppearance.BorderSize = 0;
-        _simBriefImportButton.FlatAppearance.MouseOverBackColor =
-            System.Drawing.Color.FromArgb(52, 92, 141);
-        _simBriefImportButton.Click += (_, _) => ShowSimBriefDialog();
-        settingsPanel.Controls.Add(_simBriefImportButton);
+        preferencesPanel.Controls.Add(_voiceCalloutsBox);
 
         var featureSettingsButton = new Button
         {
-            Text = "Approach profile & chaining",
+            Text = "Approach profile...",
             AutoSize = true,
-            Margin = new Padding(18, 2, 0, 0)
+            Margin = new Padding(8, 2, 8, 0)
         };
         featureSettingsButton.Click += (_, _) => ShowFeatureSettingsDialog();
-        settingsPanel.Controls.Add(featureSettingsButton);
 
-        var debugJumpButton = new Button
-        {
-            Text = "Debug jump to flow",
-            AutoSize = true,
-            Margin = new Padding(10, 2, 0, 0)
-        };
-        debugJumpButton.Click += (_, _) => ShowDebugJumpDialog();
-        settingsPanel.Controls.Add(debugJumpButton);
-
-        settingsPanel.Controls.Add(new Label
+        flightSetupPanel.Controls.Add(new Label
         {
             Text = "Transition altitude:",
             AutoSize = true,
@@ -9504,15 +9528,15 @@ internal sealed class CopilotService : Form
                 _state.TransitionAltitudeFeet = _settings.TransitionAltitudeFeet;
             }
         };
-        settingsPanel.Controls.Add(_transitionAltitudeBox);
-        settingsPanel.Controls.Add(new Label
+        flightSetupPanel.Controls.Add(_transitionAltitudeBox);
+        flightSetupPanel.Controls.Add(new Label
         {
             Text = "ft",
             AutoSize = true,
             Margin = new Padding(2, 7, 0, 0)
         });
 
-        settingsPanel.Controls.Add(new Label
+        flightSetupPanel.Controls.Add(new Label
         {
             Text = "V1:",
             AutoSize = true,
@@ -9542,15 +9566,15 @@ internal sealed class CopilotService : Form
                 _state.TakeoffV1SpeedKnots = _settings.TakeoffV1SpeedKnots;
             }
         };
-        settingsPanel.Controls.Add(_takeoffV1Box);
-        settingsPanel.Controls.Add(new Label
+        flightSetupPanel.Controls.Add(_takeoffV1Box);
+        flightSetupPanel.Controls.Add(new Label
         {
             Text = "kt",
             AutoSize = true,
             Margin = new Padding(2, 7, 0, 0)
         });
 
-        settingsPanel.Controls.Add(new Label
+        flightSetupPanel.Controls.Add(new Label
         {
             Text = "VR:",
             AutoSize = true,
@@ -9584,13 +9608,16 @@ internal sealed class CopilotService : Form
                     _settings.TakeoffRotateSpeedKnots;
             }
         };
-        settingsPanel.Controls.Add(_takeoffRotateBox);
-        settingsPanel.Controls.Add(new Label
+        flightSetupPanel.Controls.Add(_takeoffRotateBox);
+        flightSetupPanel.Controls.Add(new Label
         {
             Text = "kt",
             AutoSize = true,
             Margin = new Padding(2, 7, 0, 0)
         });
+        flightSetupPanel.Controls.Add(featureSettingsButton);
+        settingsPanel.Controls.Add(flightSetupPanel, 0, 0);
+        settingsPanel.Controls.Add(preferencesPanel, 0, 1);
         root.Controls.Add(settingsPanel);
 
         var timelineGroup = new GroupBox
@@ -9807,6 +9834,13 @@ internal sealed class CopilotService : Form
                 ? "Hide tools & diagnostics"
                 : "Show tools & diagnostics";
         };
+        var debugJumpButton = new Button
+        {
+            Text = "Debug jump to flow",
+            AutoSize = true
+        };
+        debugJumpButton.Click += (_, _) => ShowDebugJumpDialog();
+        actions.Controls.Add(debugJumpButton);
         actions.Controls.Add(NewCommandButton("FBW bridge status", "fbw-bridge-status"));
         actions.Controls.Add(NewCommandButton("External power ON", "external-power on"));
         actions.Controls.Add(NewCommandButton("External power OFF", "external-power off"));
@@ -9861,37 +9895,14 @@ internal sealed class CopilotService : Form
         !string.IsNullOrWhiteSpace(_settings.SimBriefPilotId)
         || !string.IsNullOrWhiteSpace(_settings.SimBriefUsername);
 
-    private string SimBriefBadgeText() => _simBriefFlightPlan != null
-        ? "SIMBRIEF IMPORTED"
-        : SimBriefConfigured
-            ? "SIMBRIEF READY"
-            : "SIMBRIEF NOT SET";
-
-    private System.Drawing.Color SimBriefStatusColor() => _simBriefFlightPlan != null
-        ? System.Drawing.Color.FromArgb(39, 130, 87)
-        : SimBriefConfigured
-            ? System.Drawing.Color.FromArgb(40, 68, 106)
-            : System.Drawing.Color.DimGray;
-
     private string SimBriefStatusText() => _simBriefFlightPlan != null
-        ? $"Imported {_simBriefFlightPlan.RouteLabel} — click Configure / Import SimBrief to review or refresh."
+        ? $"Imported {_simBriefFlightPlan.RouteLabel} - use Manage to review or refresh."
         : SimBriefConfigured
             ? "Configured and ready for on-demand import."
-            : "Not configured — click Configure / Import SimBrief.";
+            : "Not configured - use Manage to add a Pilot ID or username.";
 
     private void UpdateSimBriefStatus(string? temporaryStatus = null)
     {
-        if (_simBriefBadgeLabel != null)
-        {
-            _simBriefBadgeLabel.Text = temporaryStatus == null
-                ? SimBriefBadgeText()
-                : temporaryStatus.StartsWith("Importing", StringComparison.OrdinalIgnoreCase)
-                    ? "SIMBRIEF IMPORTING"
-                    : "SIMBRIEF UNAVAILABLE";
-            _simBriefBadgeLabel.BackColor = temporaryStatus == null
-                ? SimBriefStatusColor()
-                : System.Drawing.Color.FromArgb(180, 120, 30);
-        }
         if (_simBriefStatusLabel != null)
         {
             _simBriefStatusLabel.Text = temporaryStatus ?? SimBriefStatusText();

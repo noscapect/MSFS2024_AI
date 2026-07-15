@@ -9377,7 +9377,7 @@ internal sealed class CopilotService : Form
         };
         statusPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
         statusPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        statusPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 78));
+        statusPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
         statusShell.Controls.Add(statusPanel, 0, 0);
         statusShell.Controls.Add(BuildAircraftCard(), 1, 0);
 
@@ -9392,8 +9392,8 @@ internal sealed class CopilotService : Form
         _simBriefStatusLabel = AddDashboardRow(statusPanel, "SimBrief", SimBriefStatusText());
         _simBriefImportButton = new Button
         {
-            Text = "Manage",
-            Width = 70,
+            Text = "Manage SimBrief",
+            Width = 112,
             Height = 25,
             Margin = new Padding(4, 0, 0, 2),
             FlatStyle = FlatStyle.Flat,
@@ -9896,10 +9896,10 @@ internal sealed class CopilotService : Form
         || !string.IsNullOrWhiteSpace(_settings.SimBriefUsername);
 
     private string SimBriefStatusText() => _simBriefFlightPlan != null
-        ? $"Imported {_simBriefFlightPlan.RouteLabel} - use Manage to review or refresh."
+        ? $"Imported {_simBriefFlightPlan.RouteLabel} - use Manage SimBrief to review or refresh."
         : SimBriefConfigured
             ? "Configured and ready for on-demand import."
-            : "Not configured - use Manage to add a Pilot ID or username.";
+            : "Not configured - use Manage SimBrief to add a Pilot ID or username.";
 
     private void UpdateSimBriefStatus(string? temporaryStatus = null)
     {

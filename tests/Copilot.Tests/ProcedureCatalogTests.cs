@@ -41,6 +41,124 @@ public sealed class ProcedureCatalogTests
     }
 
     [TestMethod]
+    public void IniBuildsA330UsesA330ProcedureCatalog()
+    {
+        var state = new AircraftState { Title = "A330" };
+
+        var flows = ProcedureCatalog.ForAircraft(state);
+        var checklist = ProcedureCatalog.FindChecklist(state, flows[0].Id);
+
+        Assert.IsTrue(state.IsIniBuildsA330);
+        Assert.IsTrue(state.IsIniBuildsAirbusFamily);
+        Assert.IsTrue(state.IsSupportedA320);
+        Assert.AreEqual("iniBuilds A330", state.AircraftFamilyLabel);
+        Assert.AreEqual("1. Power Up & Initial Setup", flows[0].Name);
+        Assert.AreEqual(A330ProcedureLibrary.GateToGate.Count, flows.Count);
+        Assert.AreEqual(A330ChecklistLibrary.FindForProcedure(flows[0].Id)!.Name, checklist!.Name);
+    }
+
+    [TestMethod]
+    public void IniBuildsA321UsesA321ProcedureCatalog()
+    {
+        var state = new AircraftState { Title = "A321" };
+
+        var flows = ProcedureCatalog.ForAircraft(state);
+        var checklist = ProcedureCatalog.FindChecklist(state, flows[0].Id);
+
+        Assert.IsTrue(state.IsIniBuildsA321Lr);
+        Assert.AreEqual("1. Power Up & Initial Setup", flows[0].Name);
+        Assert.AreEqual(A321ProcedureLibrary.GateToGate.Count, flows.Count);
+        Assert.AreEqual(A321ChecklistLibrary.FindForProcedure(flows[0].Id)!.Name, checklist!.Name);
+    }
+
+    [TestMethod]
+    public void IniBuildsA321KeepsSignSelectorsAutoAfterPreflight()
+    {
+        var autoState = new AircraftState
+        {
+            Title = "A321",
+            SeatbeltSelectorPosition = 1,
+            NoSmokingSelectorPosition = 1
+        };
+
+        foreach (var flowIndex in new[] { 7, 9 })
+        {
+            var signSteps = A321ProcedureLibrary.GateToGate[flowIndex].Steps
+                .Where(step => step.Id.Contains("seatbelt")
+                               || step.Id.Contains("no-smoking"))
+                .ToList();
+
+            Assert.IsTrue(signSteps.Count >= 2);
+            Assert.IsTrue(signSteps.All(step => step.IsComplete(autoState)));
+            Assert.IsTrue(signSteps.All(step => step.Command != null
+                                                && step.Command.EndsWith(" auto")));
+        }
+
+        var shutdown = A321ProcedureLibrary.GateToGate[11];
+        var secureDecisionIndex = shutdown.Steps
+            .Select((step, index) => new { step.Id, index })
+            .Single(item => item.Id == "secure-decision")
+            .index;
+        var noSmokingAutoIndex = shutdown.Steps
+            .Select((step, index) => new { step.Id, index })
+            .Single(item => item.Id == "fo-no-smoking-auto")
+            .index;
+        var noSmokingOff = shutdown.Steps
+            .Select((step, index) => new { Step = step, index })
+            .Single(item => item.Step.Id == "secure-no-smoking-off");
+
+        Assert.IsTrue(noSmokingAutoIndex < secureDecisionIndex);
+        Assert.IsTrue(noSmokingOff.index > secureDecisionIndex);
+        Assert.AreEqual("no-smoking off", noSmokingOff.Step.Command);
+        Assert.IsTrue(noSmokingOff.Step.IsComplete(
+            new AircraftState { Title = "A321", NoSmokingSelectorPosition = 2 }));
+    }
+
+    [TestMethod]
+    public void FlyByWireA320UsesFbwProcedureCatalog()
+    {
+        var state = new AircraftState { Title = "FlyByWire A32NX" };
+
+        var flows = ProcedureCatalog.ForAircraft(state);
+        var checklist = ProcedureCatalog.FindChecklist(state, flows[0].Id);
+
+        Assert.IsTrue(state.IsFlyByWireA320Neo);
+        Assert.AreEqual("FlyByWire A32NX", state.AircraftFamilyLabel);
+        Assert.AreEqual("1. Power Up & Initial Setup", flows[0].Name);
+        Assert.AreEqual(FbwA320ProcedureLibrary.GateToGate.Count, flows.Count);
+        Assert.AreEqual(FbwA320ChecklistLibrary.FindForProcedure(flows[0].Id)!.Name, checklist!.Name);
+    }
+
+    [TestMethod]
+    public void FlyByWireA320Flow2UsesSeatbeltOnNotAuto()
+    {
+        var step = FbwA320ProcedureLibrary.GateToGate[1].Steps
+            .Single(item => item.Id == "fo-seatbelts-on");
+
+        Assert.AreEqual("Seatbelt signs ON", step.Label);
+        Assert.AreEqual("seatbelts on", step.Command);
+        Assert.IsTrue(step.IsComplete(new AircraftState { SeatbeltSignsOn = true }));
+        Assert.IsFalse(step.IsComplete(new AircraftState { SeatbeltSignsOn = false }));
+    }
+
+    [TestMethod]
+    public void FlyByWireA320ApproachAndShutdownUseSeatbeltSignState()
+    {
+        var approachStep = FbwA320ProcedureLibrary.GateToGate[9].Steps
+            .Single(item => item.Id == "fo-seatbelts-on");
+        var shutdownStep = FbwA320ProcedureLibrary.GateToGate[11].Steps
+            .Single(item => item.Id == "fo-seatbelts-off");
+
+        Assert.AreEqual("seatbelts on", approachStep.Command);
+        Assert.IsTrue(approachStep.IsComplete(new AircraftState { SeatbeltSignsOn = true }));
+        Assert.IsFalse(approachStep.IsComplete(new AircraftState { SeatbeltSignsOn = false }));
+
+        Assert.AreEqual("seatbelts off", shutdownStep.Command);
+        Assert.IsTrue(shutdownStep.IsComplete(new AircraftState { SeatbeltSignsOn = false }));
+        Assert.IsFalse(shutdownStep.IsComplete(new AircraftState { SeatbeltSignsOn = true }));
+    }
+
+    [TestMethod]
     public void FlyByWireA380XIsParkedAndNotExposedAsSupported()
     {
         var state = new AircraftState { Title = "FlyByWire A380X" };

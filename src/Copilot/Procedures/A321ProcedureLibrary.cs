@@ -2,7 +2,7 @@ using Msfs2024Ai.Copilot.Domain;
 
 namespace Msfs2024Ai.Copilot.Procedures;
 
-internal static class A320ProcedureLibrary
+internal static class A321ProcedureLibrary
 {
     public static IReadOnlyList<ProcedureDefinition> GateToGate =>
         new[]
@@ -449,10 +449,16 @@ internal static class A320ProcedureLibrary
                              && Math.Abs(state.VerticalSpeedFeetPerMinute) < 300),
                 Automatic(
                     "fo-seatbelts-cruise",
-                    "Seatbelt signs OFF in smooth cruise",
+                    "Seatbelt selector AUTO",
                     state => state.SeatbeltSelectorPosition.HasValue
-                             && Math.Abs(state.SeatbeltSelectorPosition.Value - 2) < 0.1,
-                    "seatbelts off")
+                             && Math.Abs(state.SeatbeltSelectorPosition.Value - 1) < 0.1,
+                    "seatbelts auto"),
+                Automatic(
+                    "fo-no-smoking-cruise",
+                    "No-smoking selector AUTO",
+                    state => state.NoSmokingSelectorPosition.HasValue
+                             && Math.Abs(state.NoSmokingSelectorPosition.Value - 1) < 0.1,
+                    "no-smoking auto")
             });
 
     public static ProcedureDefinition DescentPreparation { get; } =
@@ -503,11 +509,17 @@ internal static class A320ProcedureLibrary
                              && Math.Abs(state.AutobrakeLevel.Value - 1) < 0.1,
                     "autobrake low"),
                 Automatic(
-                    "fo-seatbelts-on",
-                    "Seatbelt signs ON",
+                    "fo-seatbelts-auto",
+                    "Seatbelt selector AUTO",
                     state => state.SeatbeltSelectorPosition.HasValue
-                             && Math.Abs(state.SeatbeltSelectorPosition.Value) < 0.1,
-                    "seatbelts on"),
+                             && Math.Abs(state.SeatbeltSelectorPosition.Value - 1) < 0.1,
+                    "seatbelts auto"),
+                Automatic(
+                    "fo-no-smoking-auto",
+                    "No-smoking selector AUTO",
+                    state => state.NoSmokingSelectorPosition.HasValue
+                             && Math.Abs(state.NoSmokingSelectorPosition.Value - 1) < 0.1,
+                    "no-smoking auto"),
                 Automatic(
                     "fo-landing-lights-on",
                     "Landing lights ON",
@@ -768,8 +780,10 @@ internal static class A320ProcedureLibrary
                     state => !state.BeaconOn,
                     "beacon off"),
                 Automatic("fo-fuel-pumps-off", "All six fuel pumps OFF", state => state.AllFuelPumpsOff, "fuel-pumps off"),
-                Automatic("fo-seatbelts-off", "Seatbelt signs OFF", state => state.SeatbeltSelectorPosition.HasValue && Math.Abs(state.SeatbeltSelectorPosition.Value - 2) < 0.1, "seatbelts off"),
+                Automatic("fo-seatbelts-auto", "Seatbelt selector AUTO", state => state.SeatbeltSelectorPosition.HasValue && Math.Abs(state.SeatbeltSelectorPosition.Value - 1) < 0.1, "seatbelts auto"),
+                Automatic("fo-no-smoking-auto", "No-smoking selector AUTO", state => state.NoSmokingSelectorPosition.HasValue && Math.Abs(state.NoSmokingSelectorPosition.Value - 1) < 0.1, "no-smoking auto"),
                 Manual("secure-decision", "Cold-and-dark secure requested", "Captain and First Officer: confirm continuation to final cold-and-dark secure.", CrewRole.Either),
+                Automatic("secure-no-smoking-off", "No-smoking selector OFF for final secure", state => state.NoSmokingSelectorPosition.HasValue && Math.Abs(state.NoSmokingSelectorPosition.Value - 2) < 0.1, "no-smoking off", CrewRole.Either),
                 Automatic(
                     "secure-oxygen",
                     "Crew oxygen OFF",

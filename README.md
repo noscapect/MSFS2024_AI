@@ -5,6 +5,7 @@ Simulator 2024:
 
 - **iniBuilds A320neo V2**
 - **iniBuilds A321LR**
+- **iniBuilds A330** *(experimental/work in progress)*
 - **FlyByWire A32NX**
 - **PMDG 737-800**
 
@@ -22,6 +23,10 @@ Captain actions, and speaks important callouts.
 > endorsed by Microsoft, Asobo Studio, iniBuilds, FlyByWire Simulations,
 > PMDG, Boeing, Airbus, or MobiFlight.
 
+> **Beta notice:** Versions below 1.0 are development releases. Stable aircraft
+> profiles have completed live validation, while profiles explicitly marked
+> experimental may contain incomplete flows and require manual intervention.
+
 ## Current capabilities
 
 - Complete flow from cold and dark through shutdown
@@ -29,7 +34,7 @@ Captain actions, and speaks important callouts.
   commands and independent readback are available
 - Monitoring of Captain actions without requiring app confirmations during
   takeoff, approach, landing, or taxi
-- Native iniBuilds A320-family and FlyByWire A32NX state monitoring through
+- Native iniBuilds Airbus-family and FlyByWire A32NX state monitoring through
   MobiFlight
 - PMDG 737-800 aircraft-family routing, Boeing procedures and PMDG NG3 SDK
   state/control integration
@@ -61,14 +66,24 @@ Voice callouts include engine-start monitoring, takeoff calls, landing gear up
 and down, minimums, spoilers, reverse green, and deceleration.
 
 The gameplay flow is defined in [docs/checklist.md](docs/checklist.md).
+Planned and deliberately deferred features are tracked in
+[docs/ROADMAP.md](docs/ROADMAP.md). The researched first scope for optional
+SimBrief support is documented in
+[docs/SIMBRIEF_INTEGRATION_PLAN.md](docs/SIMBRIEF_INTEGRATION_PLAN.md).
+
+The iniBuilds A321LR profile has completed live validation of all twelve flows.
+Its procedures, checklists, flap mappings, and sign-selector policy are kept in
+an aircraft-specific profile and protected by regression tests. See
+[docs/A321_SUPPORT_STATUS.md](docs/A321_SUPPORT_STATUS.md).
 
 ## Supported aircraft
 
 The application has moved from a single-aircraft A320 assistant to a
-multi-aircraft virtual first officer. The current public release supports:
+multi-aircraft virtual first officer. Current aircraft profiles are:
 
 - iniBuilds A320neo V2
 - iniBuilds A321LR
+- iniBuilds A330 *(experimental/work in progress; Flows 1-4 live validated)*
 - FlyByWire A32NX for MSFS 2024
 - PMDG 737-800
 
@@ -82,7 +97,7 @@ To run the application:
 - Windows 10 or Windows 11
 - Microsoft Flight Simulator 2024
 - A supported aircraft profile: iniBuilds A320neo V2, iniBuilds A321LR,
-  FlyByWire A32NX for MSFS 2024, or PMDG 737-800
+  iniBuilds A330, FlyByWire A32NX for MSFS 2024, or PMDG 737-800
 - MobiFlight WASM module installed in MSFS
 - .NET Framework 4.7.2 or newer
 
@@ -236,8 +251,10 @@ See [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Development status
 
-The iniBuilds A320neo V2 flow remains the mature baseline. FlyByWire A32NX,
-iniBuilds A321LR, and PMDG 737-800 support have been added through
-aircraft-specific adapters and procedure paths. Treat this as active
-development software and remain ready to operate the aircraft manually.
+The iniBuilds A320neo V2 and fully live-validated iniBuilds A321LR flows are
+mature baselines. FlyByWire A32NX and PMDG 737-800 are supported through their
+own procedure paths. iniBuilds A330 is included as an experimental beta
+profile: Flows 1-4 passed live testing, Flow 5 and Flow 6 remain partially
+validated, and Flows 7-12 are pending. Remain ready to operate an experimental
+aircraft manually.
 

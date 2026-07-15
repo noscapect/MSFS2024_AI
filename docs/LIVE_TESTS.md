@@ -1,5 +1,28 @@
 # Live test evidence
 
+## 2026-07-13 - iniBuilds A321LR end-to-end validation complete
+
+The iniBuilds A321LR has now completed live testing of all twelve flows in the
+current multi-aircraft application, from cold and dark through approach,
+landing, taxi-in, parking, and shutdown.
+
+Final corrections confirmed during this validation cycle:
+
+- Flow 7 uses the physical A321 flap-handle readback as the only clean-detent
+  authority. Generic surface SimVars may incorrectly report zero while the
+  cockpit lever remains at Flaps 1.
+- Flow 8 and Flow 10 keep seatbelt and no-smoking selectors in AUTO and verify
+  the selector positions instead of requiring a particular cabin-sign output.
+- Flow 12 leaves both selectors in AUTO during normal turnaround. NO SMOKING
+  moves to OFF only after final cold-and-dark secure is explicitly confirmed.
+- A321 procedures, checklists, flap commands, and sign mappings are now guarded
+  by a dedicated stable-profile regression suite.
+
+Result: **Flows 1 through 12 passed. A321LR support is considered stable and
+closed to unrelated aircraft-development changes.** Future A321 modifications
+require an A321 bug report or requested feature plus renewed affected-flow
+validation.
+
 ## 2026-07-01 - iniBuilds A321LR branch live test status
 
 Development branch: `feature/inibuilds-a321lr-support`.

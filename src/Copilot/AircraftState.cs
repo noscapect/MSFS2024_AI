@@ -1,3 +1,5 @@
+using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA321;
+
 namespace Msfs2024Ai.Copilot;
 
 internal sealed class AircraftState
@@ -26,8 +28,13 @@ internal sealed class AircraftState
     public bool Battery2On { get; set; }
     public double Battery1Voltage { get; set; }
     public double Battery2Voltage { get; set; }
+    public bool ApuBatteryOn { get; set; }
     public bool ExternalPowerAvailable { get; set; }
     public bool ExternalPowerOn { get; set; }
+    public bool ExternalPower1Available { get; set; }
+    public bool ExternalPower1On { get; set; }
+    public bool ExternalPower2Available { get; set; }
+    public bool ExternalPower2On { get; set; }
     public bool ExternalPowerAvailableUnindexed { get; set; }
     public bool ExternalPowerOnUnindexed { get; set; }
     public bool FbwA380ExternalPower1Available { get; set; }
@@ -206,8 +213,15 @@ internal sealed class AircraftState
         string.Equals(Title, "A321", StringComparison.OrdinalIgnoreCase)
         || Title.IndexOf("A321", StringComparison.OrdinalIgnoreCase) >= 0;
 
+    public bool IsIniBuildsA330 =>
+        string.Equals(Title, "A330", StringComparison.OrdinalIgnoreCase)
+        || Title.IndexOf("A330", StringComparison.OrdinalIgnoreCase) >= 0;
+
     public bool IsIniBuildsA320Family =>
         IsA320NeoV2 || IsIniBuildsA321Lr;
+
+    public bool IsIniBuildsAirbusFamily =>
+        IsIniBuildsA320Family || IsIniBuildsA330;
 
     public bool HasFlyByWireA380XSignature =>
         Title.IndexOf("A380X", StringComparison.OrdinalIgnoreCase) >= 0
@@ -229,7 +243,7 @@ internal sealed class AircraftState
         IsFlyByWireA320Neo || IsFlyByWireA380X;
 
     public bool IsSupportedA320 =>
-        IsIniBuildsA320Family || IsFlyByWireAirbus;
+        IsIniBuildsAirbusFamily || IsFlyByWireAirbus;
 
     public bool IsPmdg737 =>
         Title.IndexOf("PMDG", StringComparison.OrdinalIgnoreCase) >= 0
@@ -250,12 +264,14 @@ internal sealed class AircraftState
     public string AircraftFamilyLabel =>
         IsSupportedBoeing737
             ? "PMDG 737-800"
+            : IsIniBuildsA330
+                ? "iniBuilds A330"
             : IsFlyByWireA380X
                 ? "FlyByWire A380X"
             : IsFlyByWireA320Neo
                 ? "FlyByWire A32NX"
             : IsSupportedA320
-                ? "Airbus A320-family"
+                ? "Airbus"
                 : "Unsupported aircraft";
 
     public bool EnginesOff => !Engine1Running && !Engine2Running;
@@ -445,17 +461,11 @@ internal sealed class AircraftState
 
     private bool A321FlapsAtDetent(int detent)
     {
-        if (Math.Abs(FlapsHandleIndex - detent) < 0.1)
-        {
-            return true;
-        }
-
-        if (!FlapReadbackSane)
-        {
-            return FlapSurfacesMatchDetent(detent);
-        }
-
-        return false;
+        // The iniBuilds A321 can report both generic flap-surface SimVars as
+        // clean while its physical cockpit handle is still at detent 1. The
+        // handle index is therefore the authority for this aircraft; accepting
+        // the surface fallback here makes Flow 7 skip the retract command.
+        return A321ControlProfile.FlapsAtDetent(FlapsHandleIndex, detent);
     }
 
     private bool Boeing737FlapsAtDetent(int detent)

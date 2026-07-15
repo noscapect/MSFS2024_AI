@@ -47,22 +47,38 @@ Boeing aircraft profiles:
 
 - iniBuilds A320neo V2
 - iniBuilds A321LR
+- iniBuilds A330 *(experimental/work-in-progress beta profile)*
 - FlyByWire A32NX for MSFS 2024
 - PMDG 737-800
 
 iniBuilds command/state pairs and the mandatory momentary-command workflow are
-defined in `docs/NATIVE_CONTROL_STRATEGY.md`. The A321LR uses the shared
-iniBuilds A320-family adapter where its controls match the A320neo V2.
-FBW-specific mappings were added through the same normalized state/action model
-so procedures can stay shared.
+defined in `docs/NATIVE_CONTROL_STRATEGY.md`. Each supported aircraft has its
+own procedure and checklist library. The live-validated A321LR also owns an
+aircraft-specific control profile for its flap and sign-selector mappings;
+generic flap-surface fallbacks are forbidden for this aircraft. Experimental
+A330 work must use A330-specific code paths and may not weaken A321 completion
+conditions or command mappings. FBW-specific mappings use their own adapter
+and procedure libraries through the same normalized state/action model.
+
+### Stable-aircraft regression boundary
+
+The iniBuilds A321LR is a frozen, end-to-end validated profile. Changes for
+another aircraft must not alter `A321ProcedureLibrary`,
+`A321ChecklistLibrary`, or `A321ControlProfile`. Automated tests assert that
+aircraft detection selects all twelve dedicated A321 definitions, that the
+physical flap handle remains the only flap-detent authority, that live-tested
+flap commands remain unchanged, and that sign selectors are verified by their
+actual AUTO/OFF positions. Intentional A321 bug fixes or features may update
+this baseline only with matching tests and renewed live validation.
 
 Dormant FlyByWire A380X research code may exist in the repository for future
 development, but the aircraft is not exposed as a supported public profile.
 
 PMDG 737-800 support is implemented as a separate Boeing aircraft family.
-Airbus procedures remain in `A320ProcedureLibrary`; Boeing procedures live in
-`B737ProcedureLibrary`; `ProcedureCatalog` selects the correct catalog from the
-loaded aircraft so the user still sees one app. PMDG cockpit state is read from
+Airbus aircraft use separate A320, A321, A330, and FBW procedure libraries;
+Boeing procedures live in `B737ProcedureLibrary`. `ProcedureCatalog` selects
+the correct catalog from the loaded aircraft so the user still sees one app.
+PMDG cockpit state is read from
 the official `PMDG_NG3_Data` client-data area and controls are sent through
 `PMDG_NG3_Control` or aircraft-confirmed PMDG `ROTOR_BRAKE` switch events
 where required.

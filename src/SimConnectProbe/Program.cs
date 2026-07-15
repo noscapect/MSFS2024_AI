@@ -45,6 +45,7 @@ internal static class Program
 
         var powerUp = args.Any(arg => string.Equals(arg, "power-up", StringComparison.OrdinalIgnoreCase));
         var monitor = args.Any(arg => string.Equals(arg, "monitor-batteries", StringComparison.OrdinalIgnoreCase));
+        var monitorA330Batteries = args.Any(arg => string.Equals(arg, "monitor-a330-batteries", StringComparison.OrdinalIgnoreCase));
         var inspectBeforeStart = args.Any(
             arg => string.Equals(arg, "inspect-before-start", StringComparison.OrdinalIgnoreCase));
         var monitorBeforeStart = args.Any(
@@ -79,6 +80,7 @@ internal static class Program
         using var window = new SimConnectWindow(
             powerUp,
             monitor,
+            monitorA330Batteries,
             inspectBeforeStart || monitorBeforeStart,
             monitorBeforeStart,
             listLVars,
@@ -90,7 +92,7 @@ internal static class Program
 
         var timeout = new System.Windows.Forms.Timer
         {
-            Interval = monitor || monitorBeforeStart || monitorInputHash.HasValue ? 300_000 : 15_000
+            Interval = monitor || monitorA330Batteries || monitorBeforeStart || monitorInputHash.HasValue ? 900_000 : 15_000
         };
         timeout.Tick += (_, _) =>
         {
@@ -119,8 +121,10 @@ internal sealed class SimConnectWindow : Form
     private int _inputValuesReceived;
     private int _aircraftSnapshotsReceived;
     private AircraftData _latestAircraft;
+    private const string A330BatteryProbeClientName = "MSFS2024_AI_A330BatteryProbe";
     private readonly bool _powerUpRequested;
     private readonly bool _monitorRequested;
+    private readonly bool _monitorA330BatteriesRequested;
     private readonly bool _inspectBeforeStartRequested;
     private readonly bool _monitorBeforeStartRequested;
     private readonly bool _listLVarsRequested;
@@ -136,6 +140,12 @@ internal sealed class SimConnectWindow : Form
     private StreamWriter? _genericInputMonitorWriter;
     private System.Windows.Forms.Timer? _genericInputPollingTimer;
     private string? _lastGenericInputValue;
+    private StreamWriter? _a330BatteryMonitorWriter;
+    private System.Windows.Forms.Timer? _a330BatteryPollingTimer;
+    private bool _a330BatteryRuntimeInitialized;
+    private readonly Dictionary<string, float> _a330BatteryLVars = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
+    private string _a330ApuBatteryInputEventValue = string.Empty;
+    private DateTime _lastA330BatteryConsoleWriteUtc = DateTime.MinValue;
 
     [DllImport("SimConnect.dll", CallingConvention = CallingConvention.StdCall)]
     private static extern int SimConnect_SetInputEvent(
@@ -187,7 +197,8 @@ internal sealed class SimConnectWindow : Form
             [10520269035956244858UL] = "AIRLINER_FUEL_CTR_1",
             [6264123145813805775UL] = "AIRLINER_FUEL_CTR_2",
             [3693509800080360825UL] = "AIRLINER_FUEL_ENG2_R1",
-            [17604810245581348556UL] = "AIRLINER_FUEL_ENG2_R2"
+            [17604810245581348556UL] = "AIRLINER_FUEL_ENG2_R2",
+            [1712305263919831311UL] = "AIRLINER_SPOILER_LEVER"
         };
     private readonly Dictionary<Request, string> _inspectionRequests =
         new Dictionary<Request, string>();
@@ -260,19 +271,31 @@ internal sealed class SimConnectWindow : Form
         ExternalPower,
         QnhCaptain,
         QnhFirstOfficer,
+        A330ApuBatteryInputEvent,
         GenericInputMonitor = 800,
-        MobiFlightResponse = 900
+        MobiFlightResponse = 900,
+        MobiFlightRuntimeResponse = 901,
+        A330BatteryBat1LVar = 910,
+        A330BatteryBat2LVar = 911,
+        A330BatteryApuBatLVar = 912
     }
 
     private enum ClientDataArea
     {
         MobiFlightCommand = 900,
-        MobiFlightResponse = 901
+        MobiFlightResponse = 901,
+        MobiFlightRuntimeLVars = 910,
+        MobiFlightRuntimeCommand = 911,
+        MobiFlightRuntimeResponse = 912
     }
 
     private enum ClientDataDefinition
     {
-        MobiFlightMessage = 900
+        MobiFlightMessage = 900,
+        MobiFlightRuntimeMessage = 901,
+        A330BatteryBat1LVar = 910,
+        A330BatteryBat2LVar = 911,
+        A330BatteryApuBatLVar = 912
     }
 
     [StructLayout(LayoutKind.Sequential, CharSet = CharSet.Ansi, Pack = 1)]
@@ -292,13 +315,24 @@ internal sealed class SimConnectWindow : Form
         public double EnginesCombustion;
         public double Battery1;
         public double Battery2;
+        public double Battery3;
+        public double Battery1Voltage;
+        public double Battery2Voltage;
+        public double Battery3Voltage;
         public double ExternalPowerAvailable;
         public double ExternalPowerOn;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    private struct MobiFlightFloat
+    {
+        public float Value;
     }
 
     public SimConnectWindow(
         bool powerUpRequested,
         bool monitorRequested,
+        bool monitorA330BatteriesRequested,
         bool inspectBeforeStartRequested,
         bool monitorBeforeStartRequested,
         bool listLVarsRequested,
@@ -310,6 +344,7 @@ internal sealed class SimConnectWindow : Form
     {
         _powerUpRequested = powerUpRequested;
         _monitorRequested = monitorRequested;
+        _monitorA330BatteriesRequested = monitorA330BatteriesRequested;
         _inspectBeforeStartRequested = inspectBeforeStartRequested;
         _monitorBeforeStartRequested = monitorBeforeStartRequested;
         _listLVarsRequested = listLVarsRequested;
@@ -421,6 +456,10 @@ internal sealed class SimConnectWindow : Form
         sender.AddToDataDefinition(Definition.Aircraft, "GENERAL ENG COMBUSTION:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.Aircraft, "ELECTRICAL MASTER BATTERY:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.Aircraft, "ELECTRICAL MASTER BATTERY:2", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.Aircraft, "ELECTRICAL MASTER BATTERY:3", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.Aircraft, "ELECTRICAL BATTERY VOLTAGE:1", "Volts", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.Aircraft, "ELECTRICAL BATTERY VOLTAGE:2", "Volts", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.Aircraft, "ELECTRICAL BATTERY VOLTAGE:3", "Volts", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.Aircraft, "EXTERNAL POWER AVAILABLE:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.Aircraft, "EXTERNAL POWER ON:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.RegisterDataDefineStruct<AircraftData>(Definition.Aircraft);
@@ -527,6 +566,10 @@ internal sealed class SimConnectWindow : Form
             sender.SubscribeInputEvent(12398139814701135370UL);
             Console.WriteLine("MONITOR READY: click BAT 1 and BAT 2 in the cockpit.");
         }
+        if (_monitorA330BatteriesRequested)
+        {
+            StartA330BatteryMonitor(sender);
+        }
         if (!string.IsNullOrWhiteSpace(_bridgeCommand))
         {
             sender.SubscribeToCommBusEvent(CommBusEvent.BridgeResponse, "MSFS2024_AI_A320_RESPONSE");
@@ -569,7 +612,8 @@ internal sealed class SimConnectWindow : Form
         Console.WriteLine($"ATC model/type: {aircraft.AtcModel} / {aircraft.AtcType}");
         Console.WriteLine($"On ground: {aircraft.OnGround != 0}; ground speed: {aircraft.GroundVelocity:F1} kt");
         Console.WriteLine($"Engine 1 combustion: {aircraft.EnginesCombustion != 0}");
-        Console.WriteLine($"Batteries 1/2: {aircraft.Battery1 != 0}/{aircraft.Battery2 != 0}");
+        Console.WriteLine($"Batteries 1/2/3: {aircraft.Battery1 != 0}/{aircraft.Battery2 != 0}/{aircraft.Battery3 != 0}");
+        Console.WriteLine($"Battery volts 1/2/3: {aircraft.Battery1Voltage:F1}/{aircraft.Battery2Voltage:F1}/{aircraft.Battery3Voltage:F1}");
         Console.WriteLine($"External power available/on: {aircraft.ExternalPowerAvailable != 0}/{aircraft.ExternalPowerOn != 0}");
         _latestAircraft = aircraft;
         _aircraftSnapshotsReceived++;
@@ -587,6 +631,7 @@ internal sealed class SimConnectWindow : Form
                 return;
             }
         }
+        WriteA330BatterySnapshot("SimConnect");
 
         TryIssuePowerUp(sender);
         ExitWhenComplete();
@@ -707,6 +752,12 @@ internal sealed class SimConnectWindow : Form
                     $"{DateTime.UtcNow:O}\tpoll\t{EscapeTsv(name)}\t" +
                     $"{_monitorInputHash.Value}\t{data.eType}\t{EscapeTsv(value)}");
             }
+            return;
+        }
+        if (request == Request.A330ApuBatteryInputEvent)
+        {
+            _a330ApuBatteryInputEventValue = FormatValue(data.Value);
+            WriteA330BatterySnapshot("InputEvent:APU_BAT");
             return;
         }
 
@@ -836,6 +887,147 @@ internal sealed class SimConnectWindow : Form
         Console.WriteLine("MOBIFLIGHT: requesting aircraft LVar inventory.");
     }
 
+    private void StartA330BatteryMonitor(SimConnect sender)
+    {
+        var outputDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "artifacts");
+        Directory.CreateDirectory(outputDirectory);
+        var outputPath = Path.Combine(outputDirectory, "a330-battery-monitor.tsv");
+        _a330BatteryMonitorWriter = new StreamWriter(outputPath, false, Encoding.UTF8)
+        {
+            AutoFlush = true
+        };
+        _a330BatteryMonitorWriter.WriteLine(
+            "TimestampUtc\tSource\tBat1Sim\tBat2Sim\tBat3Sim\tBat1V\tBat2V\tBat3V\tBat1LVar\tBat2LVar\tApuBatLVar\tApuBatInputEvent");
+
+        InitializeMobiFlight(sender);
+        SendMobiFlightCommand(sender, $"MF.Clients.Add.{A330BatteryProbeClientName}");
+
+        _a330BatteryPollingTimer = new System.Windows.Forms.Timer { Interval = 250 };
+        _a330BatteryPollingTimer.Tick += (_, _) =>
+        {
+            sender.RequestDataOnSimObject(
+                Request.Aircraft,
+                Definition.Aircraft,
+                SimConnect.SIMCONNECT_OBJECT_ID_USER,
+                SIMCONNECT_PERIOD.ONCE,
+                SIMCONNECT_DATA_REQUEST_FLAG.DEFAULT,
+                0,
+                0,
+                0);
+            sender.GetInputEvent(Request.A330ApuBatteryInputEvent, 14438692519264741429UL);
+            WriteA330BatterySnapshot("Poll");
+        };
+        _a330BatteryPollingTimer.Start();
+
+        Console.WriteLine("A330 BATTERY MONITOR READY.");
+        Console.WriteLine("Please press BAT 1 ON, BAT 2 ON, APU BAT ON, then optionally reverse them.");
+        Console.WriteLine($"Monitor capture: {outputPath}");
+    }
+
+    private void InitializeA330BatteryRuntime(SimConnect sender)
+    {
+        if (_a330BatteryRuntimeInitialized)
+        {
+            return;
+        }
+
+        sender.MapClientDataNameToID($"{A330BatteryProbeClientName}.LVars", ClientDataArea.MobiFlightRuntimeLVars);
+        sender.CreateClientData(
+            ClientDataArea.MobiFlightRuntimeLVars,
+            4096,
+            SIMCONNECT_CREATE_CLIENT_DATA_FLAG.DEFAULT);
+        sender.MapClientDataNameToID($"{A330BatteryProbeClientName}.Command", ClientDataArea.MobiFlightRuntimeCommand);
+        sender.CreateClientData(
+            ClientDataArea.MobiFlightRuntimeCommand,
+            1024,
+            SIMCONNECT_CREATE_CLIENT_DATA_FLAG.DEFAULT);
+        sender.MapClientDataNameToID($"{A330BatteryProbeClientName}.Response", ClientDataArea.MobiFlightRuntimeResponse);
+        sender.CreateClientData(
+            ClientDataArea.MobiFlightRuntimeResponse,
+            1024,
+            SIMCONNECT_CREATE_CLIENT_DATA_FLAG.DEFAULT);
+
+        sender.AddToClientDataDefinition(ClientDataDefinition.MobiFlightRuntimeMessage, 0, 1024, 0, 0);
+        sender.RegisterStruct<SIMCONNECT_RECV_CLIENT_DATA, MobiFlightMessage>(ClientDataDefinition.MobiFlightRuntimeMessage);
+        sender.RequestClientData(
+            ClientDataArea.MobiFlightRuntimeResponse,
+            Request.MobiFlightRuntimeResponse,
+            ClientDataDefinition.MobiFlightRuntimeMessage,
+            SIMCONNECT_CLIENT_DATA_PERIOD.ON_SET,
+            SIMCONNECT_CLIENT_DATA_REQUEST_FLAG.CHANGED,
+            0,
+            0,
+            0);
+
+        RegisterA330BatteryLVar(sender, ClientDataDefinition.A330BatteryBat1LVar, Request.A330BatteryBat1LVar, 0);
+        RegisterA330BatteryLVar(sender, ClientDataDefinition.A330BatteryBat2LVar, Request.A330BatteryBat2LVar, sizeof(float));
+        RegisterA330BatteryLVar(sender, ClientDataDefinition.A330BatteryApuBatLVar, Request.A330BatteryApuBatLVar, 2 * sizeof(float));
+
+        SendMobiFlightRuntimeCommand(sender, "MF.SimVars.Add.(L:INI_OVHD_ELEC_BAT_1_PB_IS_AUTO_SWITCH)");
+        SendMobiFlightRuntimeCommand(sender, "MF.SimVars.Add.(L:INI_OVHD_ELEC_BAT_2_PB_IS_AUTO_SWITCH)");
+        SendMobiFlightRuntimeCommand(sender, "MF.SimVars.Add.(L:INI_OVHD_ELEC_BAT_3_PB_IS_AUTO_SWITCH)");
+        SendMobiFlightRuntimeCommand(sender, "MF.SimVars.Add.(L:AIRLINER_ELEC_APU_BAT_Position)");
+
+        _a330BatteryRuntimeInitialized = true;
+        Console.WriteLine("A330 BATTERY MONITOR: MobiFlight LVar runtime connected.");
+    }
+
+    private static void RegisterA330BatteryLVar(
+        SimConnect sender,
+        ClientDataDefinition definition,
+        Request request,
+        int offset)
+    {
+        sender.AddToClientDataDefinition(definition, (uint)offset, sizeof(float), 0, 0);
+        sender.RegisterStruct<SIMCONNECT_RECV_CLIENT_DATA, MobiFlightFloat>(definition);
+        sender.RequestClientData(
+            ClientDataArea.MobiFlightRuntimeLVars,
+            request,
+            definition,
+            SIMCONNECT_CLIENT_DATA_PERIOD.ON_SET,
+            SIMCONNECT_CLIENT_DATA_REQUEST_FLAG.DEFAULT,
+            0,
+            0,
+            0);
+    }
+
+    private static void SendMobiFlightRuntimeCommand(SimConnect sender, string command)
+    {
+        sender.SetClientData(
+            ClientDataArea.MobiFlightRuntimeCommand,
+            ClientDataDefinition.MobiFlightRuntimeMessage,
+            SIMCONNECT_CLIENT_DATA_SET_FLAG.DEFAULT,
+            0,
+            new MobiFlightMessage(command));
+    }
+
+    private void WriteA330BatterySnapshot(string source)
+    {
+        if (!_monitorA330BatteriesRequested || _a330BatteryMonitorWriter == null || !_aircraftReceived)
+        {
+            return;
+        }
+
+        _a330BatteryLVars.TryGetValue("BAT1", out var bat1LVar);
+        _a330BatteryLVars.TryGetValue("BAT2", out var bat2LVar);
+        _a330BatteryLVars.TryGetValue("APU_BAT", out var apuBatLVar);
+
+        _a330BatteryMonitorWriter.WriteLine(
+            $"{DateTime.UtcNow:O}\t{source}\t{_latestAircraft.Battery1:0.###}\t{_latestAircraft.Battery2:0.###}\t{_latestAircraft.Battery3:0.###}\t" +
+            $"{_latestAircraft.Battery1Voltage:0.###}\t{_latestAircraft.Battery2Voltage:0.###}\t{_latestAircraft.Battery3Voltage:0.###}\t" +
+            $"{bat1LVar:0.###}\t{bat2LVar:0.###}\t{apuBatLVar:0.###}\t{EscapeTsv(_a330ApuBatteryInputEventValue)}");
+
+        if ((DateTime.UtcNow - _lastA330BatteryConsoleWriteUtc).TotalSeconds >= 1)
+        {
+            _lastA330BatteryConsoleWriteUtc = DateTime.UtcNow;
+            Console.WriteLine(
+                $"A330 BAT probe | Sim BAT 1/2/3={_latestAircraft.Battery1:0}/{_latestAircraft.Battery2:0}/{_latestAircraft.Battery3:0} " +
+                $"V={_latestAircraft.Battery1Voltage:0.0}/{_latestAircraft.Battery2Voltage:0.0}/{_latestAircraft.Battery3Voltage:0.0} " +
+                $"LVars BAT1/BAT2/APU={bat1LVar:0.###}/{bat2LVar:0.###}/{apuBatLVar:0.###} " +
+                $"InputEvent APU={_a330ApuBatteryInputEventValue}");
+        }
+    }
+
     private static void SendMobiFlightCommand(SimConnect sender, string command)
     {
         sender.SetClientData(
@@ -848,13 +1040,27 @@ internal sealed class SimConnectWindow : Form
 
     private void OnClientData(SimConnect sender, SIMCONNECT_RECV_CLIENT_DATA data)
     {
-        if ((Request)data.dwRequestID != Request.MobiFlightResponse || data.dwData.Length == 0)
+        var request = (Request)data.dwRequestID;
+        if (request is Request.A330BatteryBat1LVar or Request.A330BatteryBat2LVar or Request.A330BatteryApuBatLVar)
+        {
+            var value = ((MobiFlightFloat)data.dwData[0]).Value;
+            var name = request == Request.A330BatteryBat1LVar
+                ? "BAT1"
+                : request == Request.A330BatteryBat2LVar
+                    ? "BAT2"
+                    : "APU_BAT";
+            _a330BatteryLVars[name] = value;
+            WriteA330BatterySnapshot($"LVar:{name}");
+            return;
+        }
+
+        if ((request != Request.MobiFlightResponse && request != Request.MobiFlightRuntimeResponse) || data.dwData.Length == 0)
         {
             return;
         }
 
         var response = ((MobiFlightMessage)data.dwData[0]).ToString();
-        if (string.Equals(response, "MF.Pong", StringComparison.OrdinalIgnoreCase))
+        if (request == Request.MobiFlightResponse && string.Equals(response, "MF.Pong", StringComparison.OrdinalIgnoreCase))
         {
             _mobiFlightReady = true;
             SendMobiFlightCommand(sender, "MF.DummyCmd");
@@ -862,14 +1068,22 @@ internal sealed class SimConnectWindow : Form
             return;
         }
 
-        if (string.Equals(response, "MF.LVars.List.Start", StringComparison.OrdinalIgnoreCase))
+        if (request == Request.MobiFlightResponse
+            && _monitorA330BatteriesRequested
+            && response.IndexOf(A330BatteryProbeClientName, StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            InitializeA330BatteryRuntime(sender);
+            return;
+        }
+
+        if (request == Request.MobiFlightResponse && string.Equals(response, "MF.LVars.List.Start", StringComparison.OrdinalIgnoreCase))
         {
             _lVarListStarted = true;
             _lVarNames.Clear();
             return;
         }
 
-        if (string.Equals(response, "MF.LVars.List.End", StringComparison.OrdinalIgnoreCase))
+        if (request == Request.MobiFlightResponse && string.Equals(response, "MF.LVars.List.End", StringComparison.OrdinalIgnoreCase))
         {
             WriteLVarInventory();
             _lVarListComplete = true;
@@ -877,7 +1091,7 @@ internal sealed class SimConnectWindow : Form
             return;
         }
 
-        if (_lVarListStarted && !string.IsNullOrWhiteSpace(response))
+        if (request == Request.MobiFlightResponse && _lVarListStarted && !string.IsNullOrWhiteSpace(response))
         {
             _lVarNames.Add(response.Trim());
         }

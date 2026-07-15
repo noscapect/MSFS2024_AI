@@ -125,6 +125,14 @@ internal sealed class AircraftIdentityResolver
                    || packageName.Contains("airbus");
         }
 
+        if (title.Contains("a330"))
+        {
+            return packageName.Contains("a330")
+                   || packageName.Contains("e330")
+                   || packageName.Contains("inibuild")
+                   || packageName.Contains("airbus");
+        }
+
         if (title.Contains("a320") || title.Contains("a20n"))
         {
             return packageName.Contains("a320")

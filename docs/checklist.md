@@ -28,8 +28,8 @@ diagnostics** or **Copy last diagnostic** when reporting a test issue.
 
 ## 1. Power Up & Initial Setup
 
-1. **Monitor:** Supported A320-family aircraft loaded: iniBuilds A320neo V2,
-   iniBuilds A321LR, or FlyByWire A32NX.
+1. **Monitor:** Supported Airbus aircraft loaded: iniBuilds A320neo V2,
+   iniBuilds A321LR, iniBuilds A330, or FlyByWire A32NX.
 2. **Monitor:** Aircraft stationary on the ground at 0.5 knots or less.
 3. **Monitor:** Both engines off.
 4. **Captain:** Turn BAT 1 and BAT 2 ON; detected from battery state.
@@ -180,6 +180,10 @@ After the flow completes, cruise monitoring remains active:
 - They return OFF only after five continuous smooth minutes with vertical
   speed within ±500 feet per minute.
 
+**iniBuilds A321LR exception:** Both seatbelt and no-smoking selectors remain
+in AUTO. The aircraft controls the cabin signs automatically; the app does not
+run turbulence-driven ON/OFF selector commands for this profile.
+
 ## 9. Descent Preparation
 
 Flow 9 is Captain-only.
@@ -204,7 +208,8 @@ after the aircraft is already below 10,000 feet.
    airborne aircraft already at or below 10,000 feet.
 2. **Monitor:** Wait until indicated altitude is at or below 10,000 feet.
 3. **F/O automatic:** Set landing autobrake LOW.
-4. **F/O automatic:** Turn seatbelt signs ON.
+4. **F/O automatic:** Turn seatbelt signs ON. On the iniBuilds A321LR, verify
+   the seatbelt and no-smoking selectors remain AUTO instead.
 5. **F/O automatic:** Turn both landing lights ON.
 6. **F/O automatic:** Set nose light to T.O. / landing position.
 7. **Monitor:** Approach configuration point at or inside 15 NM to touchdown
@@ -286,7 +291,8 @@ radar display selectors and engine anti-ice are not operated by this flow.
 6. **F/O automatic:** Set nose taxi light OFF.
 7. **F/O automatic:** Turn beacon OFF after engine shutdown.
 8. **F/O automatic:** Turn all six fuel pumps OFF.
-9. **F/O automatic:** Turn seatbelt signs OFF.
+9. **F/O automatic:** Turn seatbelt signs OFF. On the iniBuilds A321LR, keep
+   both seatbelt and no-smoking selectors in AUTO during normal turnaround.
 
 Doors and slides are treated as a real-world turnaround/ground-handling item
 and do not block the cockpit shutdown flow.
@@ -296,18 +302,20 @@ and do not block the cockpit shutdown flow.
 The app requests one explicit confirmation before removing electrical power.
 
 1. **Captain/F/O confirmation:** Continue to final cold-and-dark secure.
-2. **Automatic:** Turn crew oxygen OFF.
-3. **Automatic:** Turn emergency exit lights OFF.
-4. **Automatic:** Turn NAV & LOGO lights OFF.
-5. **Automatic:** Set ADIRS 1 OFF.
-6. **Automatic:** Set ADIRS 2 OFF.
-7. **Automatic:** Set ADIRS 3 OFF.
-8. **Automatic:** Turn APU BLEED OFF.
-9. **Monitor:** If external power is connected, require APU AVAIL and APU
+2. **A321 F/O automatic:** Set NO SMOKING from AUTO to OFF only now, after
+   passenger turnaround and final-secure authorization.
+3. **Automatic:** Turn crew oxygen OFF.
+4. **Automatic:** Turn emergency exit lights OFF.
+5. **Automatic:** Turn NAV & LOGO lights OFF.
+6. **Automatic:** Set ADIRS 1 OFF.
+7. **Automatic:** Set ADIRS 2 OFF.
+8. **Automatic:** Set ADIRS 3 OFF.
+9. **Automatic:** Turn APU BLEED OFF.
+10. **Monitor:** If external power is connected, require APU AVAIL and APU
    generator ON before disconnecting it.
-10. **Automatic:** Disconnect external power.
-11. **Automatic:** Turn APU MASTER OFF.
-12. **Monitor:** Wait until the APU intake/exhaust flap closes.
-13. **Automatic:** Turn BAT 1 OFF.
-14. **Automatic:** Turn BAT 2 OFF.
+11. **Automatic:** Disconnect external power.
+12. **Automatic:** Turn APU MASTER OFF.
+13. **Monitor:** Wait until the APU intake/exhaust flap closes.
+14. **Automatic:** Turn BAT 1 OFF.
+15. **Automatic:** Turn BAT 2 OFF.
 

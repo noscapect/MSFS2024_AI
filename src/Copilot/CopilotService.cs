@@ -346,10 +346,12 @@ internal sealed class CopilotService : Form
     private Label? _telemetryLabel;
     private Label? _versionLabel;
     private Label? _adapterLabel;
+    private Label? _simBriefStatusLabel;
     private Label? _simBadgeLabel;
     private Label? _aircraftBadgeLabel;
     private Label? _adapterBadgeLabel;
     private Label? _flowBadgeLabel;
+    private Label? _simBriefBadgeLabel;
     private Label? _versionBadgeLabel;
     private PictureBox? _aircraftThumbnailBox;
     private Label? _aircraftCardTitleLabel;
@@ -9344,11 +9346,13 @@ internal sealed class CopilotService : Form
         _aircraftBadgeLabel = NewStatusBadge("AIRCRAFT WAITING", System.Drawing.Color.DimGray);
         _adapterBadgeLabel = NewStatusBadge("ADAPTER WAITING", System.Drawing.Color.DimGray);
         _flowBadgeLabel = NewStatusBadge("FLOW IDLE", System.Drawing.Color.DimGray);
+        _simBriefBadgeLabel = NewStatusBadge(SimBriefBadgeText(), SimBriefStatusColor());
         _versionBadgeLabel = NewStatusBadge($"v{GetApplicationVersion()}", System.Drawing.Color.FromArgb(40, 68, 106));
         topStatusBar.Controls.Add(_simBadgeLabel);
         topStatusBar.Controls.Add(_aircraftBadgeLabel);
         topStatusBar.Controls.Add(_adapterBadgeLabel);
         topStatusBar.Controls.Add(_flowBadgeLabel);
+        topStatusBar.Controls.Add(_simBriefBadgeLabel);
         topStatusBar.Controls.Add(_versionBadgeLabel);
         root.Controls.Add(topStatusBar);
 
@@ -9382,6 +9386,7 @@ internal sealed class CopilotService : Form
         _adapterLabel = AddDashboardRow(statusPanel, "Aircraft adapter", "Connecting...");
         _recommendationLabel = AddDashboardRow(statusPanel, "Recommended flow", "Waiting for state...");
         _telemetryLabel = AddDashboardRow(statusPanel, "Current-step telemetry", "Waiting for state...");
+        _simBriefStatusLabel = AddDashboardRow(statusPanel, "SimBrief", SimBriefStatusText());
         _versionLabel = AddDashboardRow(
             statusPanel,
             "Version",
@@ -9434,6 +9439,25 @@ internal sealed class CopilotService : Form
         };
         settingsPanel.Controls.Add(_voiceCalloutsBox);
 
+        _simBriefImportButton = new Button
+        {
+            Text = "Configure / Import SimBrief",
+            AutoSize = false,
+            Width = 190,
+            Height = 32,
+            Margin = new Padding(18, 2, 0, 2),
+            BackColor = System.Drawing.Color.FromArgb(40, 68, 106),
+            ForeColor = System.Drawing.Color.White,
+            FlatStyle = FlatStyle.Flat,
+            Font = new System.Drawing.Font(Font.FontFamily, 9, System.Drawing.FontStyle.Bold),
+            UseVisualStyleBackColor = false
+        };
+        _simBriefImportButton.FlatAppearance.BorderSize = 0;
+        _simBriefImportButton.FlatAppearance.MouseOverBackColor =
+            System.Drawing.Color.FromArgb(52, 92, 141);
+        _simBriefImportButton.Click += (_, _) => ShowSimBriefDialog();
+        settingsPanel.Controls.Add(_simBriefImportButton);
+
         var featureSettingsButton = new Button
         {
             Text = "Approach & chaining settings",
@@ -9451,15 +9475,6 @@ internal sealed class CopilotService : Form
         };
         debugJumpButton.Click += (_, _) => ShowDebugJumpDialog();
         settingsPanel.Controls.Add(debugJumpButton);
-
-        _simBriefImportButton = new Button
-        {
-            Text = SimBriefButtonText(),
-            AutoSize = true,
-            Margin = new Padding(10, 2, 0, 0)
-        };
-        _simBriefImportButton.Click += (_, _) => ShowSimBriefDialog();
-        settingsPanel.Controls.Add(_simBriefImportButton);
 
         settingsPanel.Controls.Add(new Label
         {
@@ -9838,9 +9853,46 @@ internal sealed class CopilotService : Form
         root.Controls.Add(toolsShell);
     }
 
-    private string SimBriefButtonText() => _simBriefFlightPlan == null
-        ? "SimBrief"
-        : $"SimBrief: {_simBriefFlightPlan.RouteLabel}";
+    private bool SimBriefConfigured =>
+        !string.IsNullOrWhiteSpace(_settings.SimBriefPilotId)
+        || !string.IsNullOrWhiteSpace(_settings.SimBriefUsername);
+
+    private string SimBriefBadgeText() => _simBriefFlightPlan != null
+        ? "SIMBRIEF IMPORTED"
+        : SimBriefConfigured
+            ? "SIMBRIEF READY"
+            : "SIMBRIEF NOT SET";
+
+    private System.Drawing.Color SimBriefStatusColor() => _simBriefFlightPlan != null
+        ? System.Drawing.Color.FromArgb(39, 130, 87)
+        : SimBriefConfigured
+            ? System.Drawing.Color.FromArgb(40, 68, 106)
+            : System.Drawing.Color.DimGray;
+
+    private string SimBriefStatusText() => _simBriefFlightPlan != null
+        ? $"Imported {_simBriefFlightPlan.RouteLabel} — click Configure / Import SimBrief to review or refresh."
+        : SimBriefConfigured
+            ? "Configured and ready for on-demand import."
+            : "Not configured — click Configure / Import SimBrief.";
+
+    private void UpdateSimBriefStatus(string? temporaryStatus = null)
+    {
+        if (_simBriefBadgeLabel != null)
+        {
+            _simBriefBadgeLabel.Text = temporaryStatus == null
+                ? SimBriefBadgeText()
+                : temporaryStatus.StartsWith("Importing", StringComparison.OrdinalIgnoreCase)
+                    ? "SIMBRIEF IMPORTING"
+                    : "SIMBRIEF UNAVAILABLE";
+            _simBriefBadgeLabel.BackColor = temporaryStatus == null
+                ? SimBriefStatusColor()
+                : System.Drawing.Color.FromArgb(180, 120, 30);
+        }
+        if (_simBriefStatusLabel != null)
+        {
+            _simBriefStatusLabel.Text = temporaryStatus ?? SimBriefStatusText();
+        }
+    }
 
     private void ShowSimBriefDialog()
     {
@@ -9923,6 +9975,7 @@ internal sealed class CopilotService : Form
             _settings.SimBriefUsername = usernameBox.Text.Trim();
             _settings.SimBriefAutoImportOnNewFlight = autoImportBox.Checked;
             SettingsStore.Save(_settings);
+            UpdateSimBriefStatus();
         };
         saveButton.Click += (_, _) =>
         {
@@ -9967,6 +10020,7 @@ internal sealed class CopilotService : Form
         }
 
         _simBriefImportInProgress = true;
+        UpdateSimBriefStatus("Importing latest OFP...");
         try
         {
             var plan = await new SimBriefClient().FetchLatestAsync(
@@ -9974,7 +10028,7 @@ internal sealed class CopilotService : Form
                 _settings.SimBriefUsername);
             _simBriefFlightPlan = plan;
             SimBriefCacheStore.Save(plan);
-            if (_simBriefImportButton != null) _simBriefImportButton.Text = SimBriefButtonText();
+            UpdateSimBriefStatus();
             AppendDashboardLog($"SimBrief imported: {plan.RouteLabel} {plan.FlightNumber}".Trim());
             if (showReview) ReviewAndApplySimBrief(plan);
         }
@@ -9990,6 +10044,7 @@ internal sealed class CopilotService : Form
                     MessageBoxIcon.Warning);
             }
             AppendDashboardLog("SimBrief import unavailable; existing flight settings kept.");
+            UpdateSimBriefStatus("Unavailable — existing settings kept");
         }
         finally
         {

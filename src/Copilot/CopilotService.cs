@@ -337,6 +337,7 @@ internal sealed class CopilotService : Form
     private bool _pmdgExtinguisherTest2Completed;
     private bool _pmdgFireFaultInopActiveObserved;
     private bool _pmdgFireOverheatActiveObserved;
+    private bool _pmdgFireWarnCancellationObserved;
     private bool _pmdgExtinguisherTest1ActiveObserved;
     private bool _pmdgExtinguisherTest2ActiveObserved;
     private System.Windows.Forms.Timer? _reconnectTimer;
@@ -949,6 +950,8 @@ internal sealed class CopilotService : Form
         public float BrakePressureNeedle { get; set; }
         public byte GearLever { get; set; }
         public bool ParkingBrakeAnnunciated { get; set; }
+        public bool FireWarnLeftIlluminated { get; set; }
+        public bool FireWarnRightIlluminated { get; set; }
         public byte FireDetectionTestSwitch { get; set; }
         public bool FireEngine1OverheatIlluminated { get; set; }
         public bool FireEngine2OverheatIlluminated { get; set; }
@@ -4093,6 +4096,8 @@ internal sealed class CopilotService : Form
             BrakePressureNeedle = FloatAt(508),
             GearLever = ByteAt(506),
             ParkingBrakeAnnunciated = BoolAt(574),
+            FireWarnLeftIlluminated = BoolAt(388),
+            FireWarnRightIlluminated = BoolAt(389),
             FireDetectionTestSwitch = ByteAt(579),
             FireEngine1OverheatIlluminated = BoolAt(577),
             FireEngine2OverheatIlluminated = BoolAt(578),
@@ -4617,7 +4622,7 @@ internal sealed class CopilotService : Form
                 RunPmdgFireTest(696, 0, "FAULT/INOP detection", 3000);
                 break;
             case "pmdg fire-test overheat":
-                RunPmdgFireTest(696, 2, "OVHT/FIRE detection", 5000);
+                RunPmdgOverheatFireTest();
                 break;
             case "pmdg fire-test extinguisher-1":
                 RunPmdgFireTest(715, 0, "extinguisher 1", 3000);
@@ -5442,6 +5447,7 @@ internal sealed class CopilotService : Form
         _pmdgExtinguisherTest2Completed = false;
         _pmdgFireFaultInopActiveObserved = false;
         _pmdgFireOverheatActiveObserved = false;
+        _pmdgFireWarnCancellationObserved = false;
         _pmdgExtinguisherTest1ActiveObserved = false;
         _pmdgExtinguisherTest2ActiveObserved = false;
 
@@ -5509,6 +5515,15 @@ internal sealed class CopilotService : Form
         FinishOneShot();
     }
 
+    private void RunPmdgOverheatFireTest()
+    {
+        SendPmdgNg3Control(696, 2);
+        SchedulePmdgNg3Control(347, PmdgMouseLeftSingle, 2500);
+        SchedulePmdgNg3Control(696, 1, 5000);
+        AppLog.Write("Executed PMDG OVHT/FIRE test: held for 5.0 seconds with master FIRE WARN cancellation during the hold.");
+        FinishOneShot();
+    }
+
     private void ObservePmdgFireTests(PmdgNg3State state)
     {
         var fullOverheatFirePattern = state.FireHandle1Illuminated
@@ -5525,8 +5540,17 @@ internal sealed class CopilotService : Form
             && state.FireFaultIlluminated
             && state.FireApuDetectorInoperativeIlluminated)
             _pmdgFireFaultInopActiveObserved = true;
-        if (state.FireDetectionTestSwitch == 2 && fullOverheatFirePattern)
+        if (state.FireDetectionTestSwitch == 2
+            && fullOverheatFirePattern
+            && state.FireWarnLeftIlluminated
+            && state.FireWarnRightIlluminated)
             _pmdgFireOverheatActiveObserved = true;
+        if (state.FireDetectionTestSwitch == 2
+            && _pmdgFireOverheatActiveObserved
+            && !state.FireWarnLeftIlluminated
+            && !state.FireWarnRightIlluminated
+            && fullOverheatFirePattern)
+            _pmdgFireWarnCancellationObserved = true;
         if (state.FireExtinguisherTestSwitch == 0 && allExtinguisherLightsLit)
             _pmdgExtinguisherTest1ActiveObserved = true;
         if (state.FireExtinguisherTestSwitch == 2 && allExtinguisherLightsLit)
@@ -5534,7 +5558,9 @@ internal sealed class CopilotService : Form
 
         if (state.FireDetectionTestSwitch == 1 && _pmdgFireFaultInopActiveObserved)
             _pmdgFireFaultInopTestCompleted = true;
-        if (state.FireDetectionTestSwitch == 1 && _pmdgFireOverheatActiveObserved)
+        if (state.FireDetectionTestSwitch == 1
+            && _pmdgFireOverheatActiveObserved
+            && _pmdgFireWarnCancellationObserved)
             _pmdgFireOverheatTestCompleted = true;
         if (state.FireExtinguisherTestSwitch == 1 && _pmdgExtinguisherTest1ActiveObserved)
             _pmdgExtinguisherTest1Completed = true;

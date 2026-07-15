@@ -45,8 +45,10 @@ generic SimVars, but exact PMDG switch readback is not available yet.
   detection tests plus both extinguisher tests after electrical power is
   established. Each spring-loaded control is held, its complete annunciator
   pattern is verified, and its return to neutral is confirmed before the flow
-  advances. This uses PMDG SDK event/state definitions rather than generic
-  Airbus fire-test logic.
+  advances. During OVHT/FIRE, the First Officer pushes the master FIRE WARN
+  light to verify that the bell cancels while the remaining fire indications
+  stay illuminated. This uses PMDG SDK event/state definitions rather than
+  generic Airbus fire-test logic.
 
 ## First live-test target
 

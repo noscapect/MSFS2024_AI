@@ -19,6 +19,63 @@ public sealed class ProcedureCatalogTests
     }
 
     [TestMethod]
+    public void Pmdg737PowerUpIncludesAllFourVerifiedFireTests()
+    {
+        var flow = B737ProcedureLibrary.PowerUpAndInitialSetup;
+        var fireSteps = flow.Steps.Where(step => step.Id.Contains("fire") || step.Id.Contains("extinguisher")).ToList();
+
+        CollectionAssert.AreEqual(
+            new[] { "fo-fire-fault-inop-test", "fo-fire-overheat-test", "fo-extinguisher-test-1", "fo-extinguisher-test-2" },
+            fireSteps.Select(step => step.Id).ToArray());
+        Assert.IsTrue(fireSteps.All(step => step.Command?.StartsWith("pmdg fire-test", StringComparison.Ordinal) == true));
+        Assert.IsTrue(fireSteps[0].IsComplete(new AircraftState { PmdgFireFaultInopTestCompleted = true }));
+        Assert.IsTrue(fireSteps[1].IsComplete(new AircraftState { PmdgFireOverheatTestCompleted = true }));
+        Assert.IsTrue(fireSteps[2].IsComplete(new AircraftState { PmdgExtinguisherTest1Completed = true }));
+        Assert.IsTrue(fireSteps[3].IsComplete(new AircraftState { PmdgExtinguisherTest2Completed = true }));
+    }
+
+    [TestMethod]
+    public void Pmdg737FlapsFiveRequiresPositionAndScheduledSpeed()
+    {
+        var flow = B737ProcedureLibrary.ApproachAndLanding;
+        var flapsOneGate = flow.Steps.Single(step => step.Id == "flaps-one-gate");
+        var flapsFiveGate = flow.Steps.Single(step => step.Id == "flaps-five-gate");
+        var flapsFiveSpeed = flow.Steps.Single(step => step.Id == "flaps-five-speed");
+        var state = new AircraftState
+        {
+            Title = "PMDG 737-800",
+            IndicatedAltitudeFeet = 9500,
+            AltitudeAboveGroundFeet = 9500,
+            ApproachDistanceToTouchdownNm = 25,
+            ApproachFlaps1DistanceNm = 15,
+            ApproachFlaps1AltitudeFeet = 10000,
+            ApproachFlaps2DistanceNm = 12,
+            ApproachFlaps2AltitudeAglFeet = 4000,
+            ApproachFlaps2SpeedKnots = 190,
+            IndicatedAirspeedKnots = 185
+        };
+
+        Assert.IsFalse(flapsOneGate.IsComplete(state));
+        Assert.IsFalse(flapsFiveGate.IsComplete(state));
+        state.ApproachDistanceToTouchdownNm = 11.5;
+        Assert.IsTrue(flapsFiveGate.IsComplete(state));
+        Assert.IsTrue(flapsFiveSpeed.IsComplete(state));
+        state.IndicatedAirspeedKnots = 195;
+        Assert.IsFalse(flapsFiveSpeed.IsComplete(state));
+    }
+
+    [TestMethod]
+    public void Pmdg737AfterLandingTurnsTaxiLightOn()
+    {
+        var step = B737ProcedureLibrary.AfterLandingAndTaxi.Steps
+            .Single(item => item.Id == "fo-taxi-light-on");
+
+        Assert.AreEqual("pmdg taxi-light on", step.Command);
+        Assert.IsFalse(step.IsComplete(new AircraftState { Title = "PMDG 737-800", NoseLightSelectorPosition = 2 }));
+        Assert.IsTrue(step.IsComplete(new AircraftState { Title = "PMDG 737-800", NoseLightSelectorPosition = 1 }));
+    }
+
+    [TestMethod]
     public void Pmdg737PackageTitleUsesBoeingProcedureCatalog()
     {
         var state = new AircraftState { Title = "737-800 PAX BW TC" };
@@ -169,8 +226,10 @@ public sealed class ProcedureCatalogTests
         Assert.IsFalse(state.IsFlyByWireA380X);
         Assert.IsFalse(state.IsFlyByWireAirbus);
         Assert.IsFalse(state.IsSupportedAircraft);
-        Assert.AreEqual("1. Power Up & Initial Setup", flows[0].Name);
-        Assert.AreEqual(A320ProcedureLibrary.GateToGate.Count, flows.Count);
+        Assert.AreEqual(
+            0,
+            flows.Count,
+            "Parked/unsupported aircraft must not inherit the A320 procedure library.");
     }
 
     [TestMethod]

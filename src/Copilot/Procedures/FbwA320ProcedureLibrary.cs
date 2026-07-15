@@ -440,7 +440,7 @@ internal static class FbwA320ProcedureLibrary
             "8. Cruise",
             new[]
             {
-                Observe("cruise-established", "Cruise established", state => !state.OnGround && state.AltitudeAboveGroundFeet >= 10000 && Math.Abs(state.VerticalSpeedFeetPerMinute) < 300),
+                Observe("cruise-established", "Cruise established", state => state.CruiseEstablished),
                 Observe(
                     "smooth-cruise",
                     "Smooth cruise conditions",

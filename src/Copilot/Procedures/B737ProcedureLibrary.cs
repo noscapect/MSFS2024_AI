@@ -90,27 +90,38 @@ internal static class B737ProcedureLibrary
     private static bool ApproachDistanceReached(
         AircraftState state,
         int maximumDistanceNm) =>
+        ApproachDistanceAvailable(state)
+        && state.ApproachDistanceToTouchdownNm.GetValueOrDefault() <= maximumDistanceNm;
+
+    private static bool ApproachDistanceAvailable(AircraftState state) =>
         state.ApproachDistanceToTouchdownNm.HasValue
-        && state.ApproachDistanceToTouchdownNm.Value > 0
-        && state.ApproachDistanceToTouchdownNm.Value <= maximumDistanceNm;
+        && state.ApproachDistanceToTouchdownNm.Value > 0;
 
     private static bool ApproachGearGateReached(AircraftState state) =>
         ApproachDistanceReached(state, state.ApproachGearDistanceNm)
-            || (!state.ApproachDistanceToTouchdownNm.HasValue
+            || (!ApproachDistanceAvailable(state)
                 && state.AltitudeAboveGroundFeet <= state.ApproachGearAltitudeAglFeet);
+
+    private static bool ApproachFlapsOneGateReached(AircraftState state) =>
+        ApproachDistanceReached(state, state.ApproachFlaps1DistanceNm)
+            || (!ApproachDistanceAvailable(state)
+                && state.IndicatedAltitudeFeet <= state.ApproachFlaps1AltitudeFeet);
+
+    private static bool ApproachFlapsFiveGateReached(AircraftState state) =>
+        ApproachDistanceReached(state, state.ApproachFlaps2DistanceNm)
+            || (!ApproachDistanceAvailable(state)
+                && state.AltitudeAboveGroundFeet <= state.ApproachFlaps2AltitudeAglFeet);
 
     private static bool ApproachLandingConfigGateReached(AircraftState state) =>
         ApproachDistanceReached(state, state.ApproachLandingConfigDistanceNm)
-            || (!state.ApproachDistanceToTouchdownNm.HasValue
+            || (!ApproachDistanceAvailable(state)
                 && state.AltitudeAboveGroundFeet <= state.ApproachLandingConfigAltitudeAglFeet);
 
     private static bool BoeingApproachSpeedSafe(
         AircraftState state,
         int scheduledSpeedKnots,
         int absoluteLimitKnots) =>
-        state.IsSupportedBoeing737
-            ? state.IndicatedAirspeedKnots <= absoluteLimitKnots
-            : state.IndicatedAirspeedKnots <= scheduledSpeedKnots;
+        state.IndicatedAirspeedKnots <= Math.Min(scheduledSpeedKnots, absoluteLimitKnots);
 
     public static ProcedureDefinition PowerUpAndInitialSetup { get; } =
         new(
@@ -125,6 +136,10 @@ internal static class B737ProcedureLibrary
                 Manual("captain-standby-power", "STANDBY POWER AUTO", "Captain: verify STANDBY POWER is AUTO.", CrewRole.Captain),
                 Manual("captain-ground-power-available", "Ground power available", "Captain: connect ground power through PMDG ground services/EFB if GRD POWER AVAILABLE is not shown.", CrewRole.Captain, state => state.ExternalPowerAvailable),
                 Manual("captain-external-power", "Ground power ON", "Captain: switch GRD POWER ON and verify the aircraft is powered.", CrewRole.Captain, state => state.ExternalPowerOn),
+                Automatic("fo-fire-fault-inop-test", "Fire detection FAULT/INOP test", state => state.PmdgFireFaultInopTestCompleted, "pmdg fire-test fault-inop"),
+                Automatic("fo-fire-overheat-test", "Fire detection OVHT/FIRE test", state => state.PmdgFireOverheatTestCompleted, "pmdg fire-test overheat"),
+                Automatic("fo-extinguisher-test-1", "Extinguisher test 1", state => state.PmdgExtinguisherTest1Completed, "pmdg fire-test extinguisher-1"),
+                Automatic("fo-extinguisher-test-2", "Extinguisher test 2", state => state.PmdgExtinguisherTest2Completed, "pmdg fire-test extinguisher-2"),
                 Automatic("fo-irs-left", "Left IRS selector NAV", state => Math.Abs(state.Adirs1SelectorState - 2) < 0.1, "pmdg irs left nav"),
                 Automatic("fo-irs-right", "Right IRS selector NAV", state => Math.Abs(state.Adirs2SelectorState - 2) < 0.1, "pmdg irs right nav"),
                 Observe("irs-on-dc-extinguished", "IRS ON DC lights extinguished", state => state.PmdgIrsOnDcExtinguished),
@@ -145,7 +160,7 @@ internal static class B737ProcedureLibrary
                 Manual("captain-parking-brake", "Parking brake ON", "Captain: verify parking brake ON.", CrewRole.Captain, state => state.ParkingBrakeSet),
                 Manual("fmc-pos-init", "FMC POS INIT / IRS position set", "Captain: on the FMC POS INIT page, enter or copy the present position to SET IRS POS.", CrewRole.Captain),
                 Manual("fmc-route", "FMC route complete", "Captain: enter route, departure, arrival and performance data.", CrewRole.Captain),
-                Manual("fmc-perf", "FMC TAKEOFF REF complete", "Captain: enter V-speeds, transition altitude and takeoff flap setting.", CrewRole.Captain),
+                Observe("fmc-perf", "FMC TAKEOFF REF complete", state => state.BoeingFmcTakeoffReferenceComplete),
                 Automatic("fo-fuel-pumps", "Fuel pumps ON as required", state => state.FuelPumpsConfigured, "pmdg fuel-pumps on"),
                 Automatic("fo-seatbelts-auto", "Fasten belts AUTO", state => state.SeatbeltSelectorPosition.HasValue && Math.Abs(state.SeatbeltSelectorPosition.Value - 1) < 0.1, "pmdg seatbelts auto"),
                 Automatic("fo-no-smoking-auto", "No smoking AUTO", state => state.NoSmokingSelectorPosition.HasValue && Math.Abs(state.NoSmokingSelectorPosition.Value - 1) < 0.1, "pmdg no-smoking auto"),
@@ -268,7 +283,7 @@ internal static class B737ProcedureLibrary
             "8. 737 Cruise",
             new[]
             {
-                Observe("cruise-established", "Cruise established", state => !state.OnGround && state.AltitudeAboveGroundFeet >= 10000 && Math.Abs(state.VerticalSpeedFeetPerMinute) < 300),
+                Observe("cruise-established", "Cruise established", state => state.CruiseEstablished),
                 Observe("systems-monitor", "Systems monitored", _ => true)
             });
 
@@ -299,8 +314,9 @@ internal static class B737ProcedureLibrary
                 Automatic("fo-runway-turnoff-on", "Runway turnoff lights ON", state => state.RunwayTurnoffLightsOn, "pmdg runway-turnoff on"),
                 Automatic("fo-landing-lights-on", "Landing lights ON", state => state.LeftLandingLightSelectorPosition == 2 && state.RightLandingLightSelectorPosition == 2, "pmdg landing-lights on", requireCommandExecution: true),
                 Observe("cabin-landing", "Cabin crew, prepare for landing", _ => true),
-                Observe("flaps-one-gate", "Flaps 1 point reached", state => ApproachDistanceReached(state, state.ApproachFlaps1DistanceNm) || state.IndicatedAltitudeFeet <= state.ApproachFlaps1AltitudeFeet),
+                Observe("flaps-one-gate", "Flaps 1 point reached", ApproachFlapsOneGateReached),
                 Automatic("fo-flaps-one", "Flaps 1", state => state.BoeingFlapsAtSetting(1), "pmdg flaps 1"),
+                Observe("flaps-five-gate", "Flaps 5 point reached", ApproachFlapsFiveGateReached),
                 Observe("flaps-five-speed", "Safe speed for flaps 5", state => BoeingApproachSpeedSafe(state, state.EffectiveApproachFlaps2SpeedKnots, 250)),
                 Automatic("fo-flaps-five", "Flaps 5", state => state.BoeingFlapsAtSetting(5), "pmdg flaps 5"),
                 Observe("gear-gate", "Gear-down point reached", ApproachGearGateReached),
@@ -330,6 +346,7 @@ internal static class B737ProcedureLibrary
                 Observe("taxi-speed", "Taxi speed at or below 30 knots", state => state.OnGround && state.GroundSpeedKnots <= 30),
                 Automatic("fo-landing-lights-off", "Landing lights RETRACT", state => state.LeftLandingLightSelectorPosition == 0 && state.RightLandingLightSelectorPosition == 0, "pmdg landing-lights off", requireCommandExecution: true),
                 Automatic("fo-strobes-off", "Position lights STEADY", state => state.StrobeSelectorPosition.HasValue && Math.Abs(state.StrobeSelectorPosition.Value - 1) < 0.1, "pmdg strobes off"),
+                Automatic("fo-taxi-light-on", "Taxi light ON", state => state.NoseLightSelectorPosition.HasValue && state.NoseLightSelectorPosition.Value < 1.5, "pmdg taxi-light on"),
                 Automatic("fo-runway-turnoff-on", "Runway turnoff lights ON for taxi", state => state.RunwayTurnoffLightsOn, "pmdg runway-turnoff on"),
                 Automatic("fo-spoilers-down", "Speedbrake down", state => !state.GroundSpoilersArmed && !state.GroundSpoilersDeployed, "pmdg spoilers down"),
                 Automatic("fo-flaps-up", "Flaps UP", state => state.FlapsHandleIndex <= 0, "pmdg flaps clean"),

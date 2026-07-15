@@ -1,8 +1,9 @@
 # FBW A32NX control verification protocol
 
-Branch: `feature/fbw-a320neo-support`
-
-This document is the source-of-truth workflow for adding FBW A32NX support. Do not add controls by guessing LVars from behavior screenshots or generic MSFS SimVars first. Use the FBW source package and verify each control through the app bridge.
+This document is the source-of-truth workflow for maintaining FBW A32NX
+support. Do not add controls by guessing LVars from behavior screenshots or
+generic MSFS SimVars first. Use the FBW source package and verify each control
+through the app bridge.
 
 ## Source priority
 

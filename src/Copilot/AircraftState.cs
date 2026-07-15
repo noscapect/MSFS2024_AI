@@ -1,3 +1,4 @@
+using Msfs2024Ai.Copilot.AircraftAdapters;
 using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA321;
 
 namespace Msfs2024Ai.Copilot;
@@ -100,6 +101,27 @@ internal sealed class AircraftState
     public double IndicatedAirspeedKnots { get; set; }
     public int TakeoffV1SpeedKnots { get; set; }
     public int TakeoffRotateSpeedKnots { get; set; }
+    public int? TakeoffV2SpeedKnots { get; set; }
+    public string SimBriefFlightNumber { get; set; } = "";
+    public string SimBriefOriginIcao { get; set; } = "";
+    public string SimBriefDestinationIcao { get; set; } = "";
+    public string SimBriefAlternateIcao { get; set; } = "";
+    public string SimBriefOriginRunway { get; set; } = "";
+    public string SimBriefDestinationRunway { get; set; } = "";
+    public string SimBriefRoute { get; set; } = "";
+    public int? PlannedCruiseAltitudeFeet { get; set; }
+    public bool CruiseEstablished =>
+        !OnGround
+        && AltitudeAboveGroundFeet >= 10000
+        && Math.Abs(VerticalSpeedFeetPerMinute) < 300
+        && (!PlannedCruiseAltitudeFeet.HasValue
+            || Math.Abs(IndicatedAltitudeFeet - PlannedCruiseAltitudeFeet.Value) <= 1500);
+    public int? PlannedCostIndex { get; set; }
+    public int? PlannedTakeoffFlaps { get; set; }
+    public double? PlannedBlockFuelKilograms { get; set; }
+    public double ActualFuelKilograms { get; set; }
+    public string SimBriefFuelStatus { get; set; } = "No active SimBrief flight";
+    public string SimBriefTakeoffStatus { get; set; } = "No active SimBrief flight";
     public double? ApproachDistanceToTouchdownNm { get; set; }
     public string ApproachDistanceSource { get; set; } = "";
     public int ApproachFlaps1DistanceNm { get; set; } = 15;
@@ -114,14 +136,11 @@ internal sealed class AircraftState
     public int ApproachLandingConfigDistanceNm { get; set; } = 5;
     public int ApproachLandingConfigAltitudeAglFeet { get; set; } = 1800;
     public int ApproachLandingConfigSpeedKnots { get; set; } = 185;
-    public int EffectiveApproachFlaps1SpeedKnots =>
-        IsIniBuildsA321Lr ? 230 : ApproachFlaps1SpeedKnots;
-    public int EffectiveApproachFlaps2SpeedKnots =>
-        IsIniBuildsA321Lr ? 215 : ApproachFlaps2SpeedKnots;
-    public int EffectiveApproachFlaps3SpeedKnots =>
-        IsIniBuildsA321Lr ? 195 : ApproachLandingConfigSpeedKnots;
-    public int EffectiveApproachFlapsFullSpeedKnots =>
-        IsIniBuildsA321Lr ? 186 : ApproachLandingConfigSpeedKnots;
+    public int ApproachFlapsFullSpeedKnots { get; set; } = 185;
+    public int EffectiveApproachFlaps1SpeedKnots => ApproachFlaps1SpeedKnots;
+    public int EffectiveApproachFlaps2SpeedKnots => ApproachFlaps2SpeedKnots;
+    public int EffectiveApproachFlaps3SpeedKnots => ApproachLandingConfigSpeedKnots;
+    public int EffectiveApproachFlapsFullSpeedKnots => ApproachFlapsFullSpeedKnots;
     public double VerticalSpeedFeetPerMinute { get; set; }
     public double GForce { get; set; }
     public double RadioHeightFeet { get; set; }
@@ -133,6 +152,9 @@ internal sealed class AircraftState
     public double RightSpoilerPositionPercent { get; set; }
     public double FlapsHandleIndex { get; set; }
     public int? BoeingTakeoffFlaps { get; set; }
+    public int? BoeingFmcV1Knots { get; set; }
+    public int? BoeingFmcVrKnots { get; set; }
+    public bool BoeingFmcTakeoffReferenceComplete { get; set; }
     public int? BoeingLandingFlaps { get; set; }
     public int? BoeingLandingVrefKnots { get; set; }
     public double LeftFlapPositionPercent { get; set; }
@@ -186,6 +208,15 @@ internal sealed class AircraftState
     public bool ApuFireTestCompleted { get; set; }
     public bool Engine1FireTestCompleted { get; set; }
     public bool Engine2FireTestCompleted { get; set; }
+    public bool PmdgFireFaultInopTestCompleted { get; set; }
+    public bool PmdgFireOverheatTestCompleted { get; set; }
+    public bool PmdgExtinguisherTest1Completed { get; set; }
+    public bool PmdgExtinguisherTest2Completed { get; set; }
+    public bool PmdgFireTestsCompleted =>
+        PmdgFireFaultInopTestCompleted
+        && PmdgFireOverheatTestCompleted
+        && PmdgExtinguisherTest1Completed
+        && PmdgExtinguisherTest2Completed;
     public double? SeatbeltSelectorPosition { get; set; }
     public bool SeatbeltSignsOn { get; set; }
     public double? NoSmokingSelectorPosition { get; set; }
@@ -206,16 +237,14 @@ internal sealed class AircraftState
     public bool AnyRequiredDoorOpen =>
         Exits.Any(exit => exit.IsRequiredDoor && exit.OpenPercent > 0.5);
 
-    public bool IsA320NeoV2 =>
-        string.Equals(Title, "A320neo V2", StringComparison.OrdinalIgnoreCase);
+    public AircraftVariant Variant =>
+        AircraftVariantResolver.Resolve(Title, EnableExperimentalFlyByWireA380X);
 
-    public bool IsIniBuildsA321Lr =>
-        string.Equals(Title, "A321", StringComparison.OrdinalIgnoreCase)
-        || Title.IndexOf("A321", StringComparison.OrdinalIgnoreCase) >= 0;
+    public bool IsA320NeoV2 => Variant == AircraftVariant.IniBuildsA320NeoV2;
 
-    public bool IsIniBuildsA330 =>
-        string.Equals(Title, "A330", StringComparison.OrdinalIgnoreCase)
-        || Title.IndexOf("A330", StringComparison.OrdinalIgnoreCase) >= 0;
+    public bool IsIniBuildsA321Lr => Variant == AircraftVariant.IniBuildsA321Lr;
+
+    public bool IsIniBuildsA330 => Variant == AircraftVariant.IniBuildsA330;
 
     public bool IsIniBuildsA320Family =>
         IsA320NeoV2 || IsIniBuildsA321Lr;
@@ -224,20 +253,11 @@ internal sealed class AircraftState
         IsIniBuildsA320Family || IsIniBuildsA330;
 
     public bool HasFlyByWireA380XSignature =>
-        Title.IndexOf("A380X", StringComparison.OrdinalIgnoreCase) >= 0
-        || Title.IndexOf("A380-842", StringComparison.OrdinalIgnoreCase) >= 0
-        || Title.IndexOf("A380", StringComparison.OrdinalIgnoreCase) >= 0
-        && Title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0;
+        AircraftVariantResolver.HasFlyByWireA380XSignature(Title);
 
-    public bool IsFlyByWireA380X =>
-        EnableExperimentalFlyByWireA380X && HasFlyByWireA380XSignature;
+    public bool IsFlyByWireA380X => Variant == AircraftVariant.FlyByWireA380XExperimental;
 
-    public bool IsFlyByWireA320Neo =>
-        !IsFlyByWireA380X
-        && (Title.IndexOf("A32NX", StringComparison.OrdinalIgnoreCase) >= 0
-            || Title.IndexOf("A320", StringComparison.OrdinalIgnoreCase) >= 0
-            && Title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0
-            || string.Equals(Title, "FlyByWire A32NX", StringComparison.OrdinalIgnoreCase));
+    public bool IsFlyByWireA320Neo => Variant == AircraftVariant.FlyByWireA320Neo;
 
     public bool IsFlyByWireAirbus =>
         IsFlyByWireA320Neo || IsFlyByWireA380X;
@@ -245,16 +265,9 @@ internal sealed class AircraftState
     public bool IsSupportedA320 =>
         IsIniBuildsAirbusFamily || IsFlyByWireAirbus;
 
-    public bool IsPmdg737 =>
-        Title.IndexOf("PMDG", StringComparison.OrdinalIgnoreCase) >= 0
-        && Title.IndexOf("737", StringComparison.OrdinalIgnoreCase) >= 0
-        || Title.IndexOf("737-800", StringComparison.OrdinalIgnoreCase) >= 0
-        || Title.IndexOf("738", StringComparison.OrdinalIgnoreCase) >= 0;
+    public bool IsPmdg737 => IsPmdg737800;
 
-    public bool IsPmdg737800 =>
-        IsPmdg737
-        && (Title.IndexOf("737-800", StringComparison.OrdinalIgnoreCase) >= 0
-            || Title.IndexOf("738", StringComparison.OrdinalIgnoreCase) >= 0);
+    public bool IsPmdg737800 => Variant == AircraftVariant.Pmdg737800;
 
     public bool IsSupportedBoeing737 => IsPmdg737800;
 

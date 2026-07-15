@@ -53,7 +53,9 @@ Boeing aircraft profiles:
 
 iniBuilds command/state pairs and the mandatory momentary-command workflow are
 defined in `docs/NATIVE_CONTROL_STRATEGY.md`. Each supported aircraft has its
-own procedure and checklist library. The live-validated A321LR also owns an
+own procedure and checklist library. The iniBuilds A320neo V2 owns a dedicated
+fuel-pump control profile that locks its six live-verified commands and native
+readbacks away from the A321, A330 and FBW implementations. The live-validated A321LR also owns an
 aircraft-specific control profile for its flap and sign-selector mappings;
 generic flap-surface fallbacks are forbidden for this aircraft. Experimental
 A330 work must use A330-specific code paths and may not weaken A321 completion
@@ -83,10 +85,27 @@ the official `PMDG_NG3_Data` client-data area and controls are sent through
 `PMDG_NG3_Control` or aircraft-confirmed PMDG `ROTOR_BRAKE` switch events
 where required.
 
+The PMDG 737-800 is a frozen, gate-to-gate live-validated profile. Its twelve
+procedures and checklists are separate objects, every automatic command is
+required to remain in the dedicated `pmdg` command namespace, and no PMDG
+command may be shared with a released Airbus profile. A cryptographic
+gate-to-gate structure fingerprint detects unreviewed step, role, command, or
+checklist changes. Variant-routing tests also prevent another 737 or Airbus
+title from silently inheriting the PMDG implementation. Intentional PMDG
+changes require updated tests and renewed proportional live validation.
+
+These contracts prevent unrelated aircraft work from silently changing the
+released PMDG flow. Shared transport and normalized-domain changes still run
+the complete regression suite before release; no software test can guarantee
+compatibility with future simulator or aircraft updates.
+
 ### SimConnect transport
 
 Maintains the simulator connection, subscriptions, event transmission,
-reconnection, and raw telemetry. It contains no procedural decisions.
+reconnection, and raw telemetry. It contains no procedural decisions. A
+simulator disconnect invalidates all MobiFlight runtime registrations and
+cached native values; the ordered SimVar table is rebuilt before native
+readback is accepted after reconnecting.
 
 ### Flight telemetry and replay
 

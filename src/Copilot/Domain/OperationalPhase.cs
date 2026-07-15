@@ -64,9 +64,27 @@ internal static class OperationalPhaseDetector
 
         if (!state.OnGround
             && Math.Abs(state.VerticalSpeedFeetPerMinute) < 300
-            && state.AltitudeAboveGroundFeet >= 10000)
+            && state.AltitudeAboveGroundFeet >= 10000
+            && (!state.PlannedCruiseAltitudeFeet.HasValue
+                || Math.Abs(state.IndicatedAltitudeFeet - state.PlannedCruiseAltitudeFeet.Value) <= 1500))
         {
             return OperationalPhase.Cruise;
+        }
+
+        if (!state.OnGround
+            && state.PlannedCruiseAltitudeFeet.HasValue
+            && state.VerticalSpeedFeetPerMinute < -300
+            && state.IndicatedAltitudeFeet > 10000
+            && state.IndicatedAltitudeFeet < state.PlannedCruiseAltitudeFeet.Value - 1000)
+        {
+            return OperationalPhase.DescentPreparation;
+        }
+
+        if (!state.OnGround
+            && state.VerticalSpeedFeetPerMinute < -300
+            && state.IndicatedAltitudeFeet <= 10000)
+        {
+            return OperationalPhase.Descent;
         }
 
         return OperationalPhase.Unknown;

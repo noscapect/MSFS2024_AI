@@ -1,10 +1,16 @@
 # Application Flow Checklist
 
-This document mirrors the gate-to-gate flow concept implemented by the
-application. Airbus procedures live in
+This document describes the detailed Airbus gate-to-gate flow implemented by
+the application. Airbus procedures live in
 `src/Copilot/Procedures/A320ProcedureLibrary.cs`; Boeing 737 procedures live in
 `src/Copilot/Procedures/B737ProcedureLibrary.cs`. The application code is
 authoritative. Update this file whenever a flow changes.
+
+The PMDG 737-800 also has twelve gate-to-gate flows, but uses its own Boeing
+procedures, terminology, switch commands, PMDG NG3 SDK readbacks, approach
+schedule, and checklist library. It does not inherit these Airbus steps. Its
+released behavior and live-validation status are documented in
+`docs/PMDG_737_SUPPORT_PLAN.md`.
 
 An interrupted active flow is saved locally and restored at its exact step
 after restart. During restoration, transient milestones that have already

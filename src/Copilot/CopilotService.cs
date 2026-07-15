@@ -1,5 +1,7 @@
 using Microsoft.FlightSimulator.SimConnect;
+using Msfs2024Ai.Copilot.AircraftAdapters;
 using Msfs2024Ai.Copilot.AircraftAdapters.FbwA320;
+using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA320;
 using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA321;
 using Msfs2024Ai.Copilot.AircraftIdentity;
 using Msfs2024Ai.Copilot.Checklists;
@@ -8,6 +10,7 @@ using Msfs2024Ai.Copilot.Diagnostics;
 using Msfs2024Ai.Copilot.Domain;
 using Msfs2024Ai.Copilot.Procedures;
 using Msfs2024Ai.Copilot.Settings;
+using Msfs2024Ai.Copilot.SimBrief;
 using Msfs2024Ai.Copilot.Telemetry;
 using Msfs2024Ai.Copilot.Voice;
 using System.Collections.Concurrent;
@@ -328,6 +331,15 @@ internal sealed class CopilotService : Form
     private bool _apuFireTestCompleted;
     private bool _engine1FireTestCompleted;
     private bool _engine2FireTestCompleted;
+    private bool _pmdgFireFaultInopTestCompleted;
+    private bool _pmdgFireOverheatTestCompleted;
+    private bool _pmdgExtinguisherTest1Completed;
+    private bool _pmdgExtinguisherTest2Completed;
+    private bool _pmdgFireFaultInopActiveObserved;
+    private bool _pmdgFireOverheatActiveObserved;
+    private bool _pmdgFireWarnCancellationObserved;
+    private bool _pmdgExtinguisherTest1ActiveObserved;
+    private bool _pmdgExtinguisherTest2ActiveObserved;
     private System.Windows.Forms.Timer? _reconnectTimer;
     private bool _initialStateReceived;
     private bool _oneShotCommandExecuted;
@@ -344,6 +356,7 @@ internal sealed class CopilotService : Form
     private Label? _telemetryLabel;
     private Label? _versionLabel;
     private Label? _adapterLabel;
+    private Label? _simBriefStatusLabel;
     private Label? _simBadgeLabel;
     private Label? _aircraftBadgeLabel;
     private Label? _adapterBadgeLabel;
@@ -373,6 +386,9 @@ internal sealed class CopilotService : Form
     private ListBox? _flowList;
     private Button? _startSelectedFlowButton;
     private Button? _confirmCompletedButton;
+    private Button? _simBriefImportButton;
+    private ImportedFlightPlan? _simBriefFlightPlan;
+    private bool _simBriefImportInProgress;
 
     private enum Definition
     {
@@ -814,6 +830,7 @@ internal sealed class CopilotService : Form
         public double AtcRunwayStartDistanceMeters;
         public double GpsTargetDistanceMeters;
         public double GpsWaypointDistanceMeters;
+        public double TotalFuelWeightPounds;
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -933,7 +950,18 @@ internal sealed class CopilotService : Form
         public float BrakePressureNeedle { get; set; }
         public byte GearLever { get; set; }
         public bool ParkingBrakeAnnunciated { get; set; }
+        public bool FireWarnLeftIlluminated { get; set; }
+        public bool FireWarnRightIlluminated { get; set; }
         public byte FireDetectionTestSwitch { get; set; }
+        public bool FireEngine1OverheatIlluminated { get; set; }
+        public bool FireEngine2OverheatIlluminated { get; set; }
+        public bool FireHandle1Illuminated { get; set; }
+        public bool FireHandleApuIlluminated { get; set; }
+        public bool FireHandle2Illuminated { get; set; }
+        public bool FireWheelWellIlluminated { get; set; }
+        public bool FireFaultIlluminated { get; set; }
+        public bool FireApuDetectorInoperativeIlluminated { get; set; }
+        public byte FireExtinguisherTestSwitch { get; set; }
         public bool FireExtinguisherTestLeft { get; set; }
         public bool FireExtinguisherTestRight { get; set; }
         public bool FireExtinguisherTestApu { get; set; }
@@ -954,6 +982,7 @@ internal sealed class CopilotService : Form
         _settings = SettingsStore.Load();
         _flightTelemetryStore = new FlightTelemetryStore();
         _procedureSession = ProcedureSessionStore.Load();
+        _simBriefFlightPlan = _procedureSession.ActiveFlightPlan;
         foreach (var procedureId in _procedureSession.CompletedProcedureIds)
         {
             _completedProcedureIds.Add(procedureId);
@@ -1184,6 +1213,7 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "ATC RUNWAY START DISTANCE", "Meters", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "GPS TARGET DISTANCE", "Meters", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "GPS WP DISTANCE", "Meters", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "FUEL TOTAL QUANTITY WEIGHT", "Pounds", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.RegisterDataDefineStruct<AircraftData>(Definition.AircraftState);
         sender.MapClientEventToSimEvent(CopilotEvent.SetExternalPower, "SET_EXTERNAL_POWER");
         sender.MapClientEventToSimEvent(CopilotEvent.SetBeacon, "BEACON_LIGHTS_SET");
@@ -1650,6 +1680,7 @@ internal sealed class CopilotService : Form
             var raw = (PmdgNg3RawData)data.dwData[0];
             LogPmdgElectricalBytes(raw.Data);
             _pmdgNg3State = ParsePmdgNg3State(raw.Data);
+            ObservePmdgFireTests(_pmdgNg3State);
             LogPmdgElectricalChanges(_pmdgNg3State);
             LogPmdgAirStartChanges(_pmdgNg3State);
             if (!_pmdgNg3DataReady)
@@ -2205,12 +2236,11 @@ internal sealed class CopilotService : Form
             "MF.SimVars.Add.(L:INI_OVHD_ELEC_BAT_1_PB_IS_AUTO_SWITCH)");
         SendMobiFlightRuntimeCommand(
             "MF.SimVars.Add.(L:INI_OVHD_ELEC_BAT_2_PB_IS_AUTO_SWITCH)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_OUTER_TANK_LEFT_PUMP_ON)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_INNER_TANK_LEFT_PUMP_ON)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_CENTER_TANK_LEFT_PUMP_ON)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_CENTER_TANK_RIGHT_PUMP_ON)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_INNER_TANK_RIGHT_PUMP_ON)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_OUTER_TANK_RIGHT_PUMP_ON)");
+        foreach (var pump in A320FuelPumpProfile.Pumps)
+        {
+            SendMobiFlightRuntimeCommand(
+                $"MF.SimVars.Add.(L:{pump.ReadbackLVar})");
+        }
         SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_LOGO_LIGHT_SWITCH)");
         SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_APU_AVAILABLE)");
         SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_APU_MASTER_SWITCH)");
@@ -2773,34 +2803,20 @@ internal sealed class CopilotService : Form
 
         var raw = (AircraftData)data.dwData[0];
         var approachDistance = ResolveApproachDistance(raw);
+        var aircraftVariant = AircraftVariantResolver.Resolve(
+            raw.Title,
+            EnableExperimentalFlyByWireA380X);
+        var isIniBuildsA330 = aircraftVariant == AircraftVariant.IniBuildsA330;
         var isIniBuildsAirbusFamily =
-            raw.Title.Equals("A320neo V2", StringComparison.OrdinalIgnoreCase)
-            || raw.Title.Equals("A321", StringComparison.OrdinalIgnoreCase)
-            || raw.Title.IndexOf("A321", StringComparison.OrdinalIgnoreCase) >= 0
-            || raw.Title.Equals("A330", StringComparison.OrdinalIgnoreCase)
-            || raw.Title.IndexOf("A330", StringComparison.OrdinalIgnoreCase) >= 0;
-        var isIniBuildsA330 =
-            raw.Title.Equals("A330", StringComparison.OrdinalIgnoreCase)
-            || raw.Title.IndexOf("A330", StringComparison.OrdinalIgnoreCase) >= 0;
-        var hasFlyByWireA380XSignature =
-            raw.Title.IndexOf("A380X", StringComparison.OrdinalIgnoreCase) >= 0
-            || raw.Title.IndexOf("A380-842", StringComparison.OrdinalIgnoreCase) >= 0
-            || raw.Title.IndexOf("A380", StringComparison.OrdinalIgnoreCase) >= 0
-            && raw.Title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0;
+            aircraftVariant is AircraftVariant.IniBuildsA320NeoV2
+                or AircraftVariant.IniBuildsA321Lr
+                or AircraftVariant.IniBuildsA330;
         var isFlyByWireA380X =
-            EnableExperimentalFlyByWireA380X && hasFlyByWireA380XSignature;
+            aircraftVariant == AircraftVariant.FlyByWireA380XExperimental;
         var isFlyByWireA320Neo =
-            !hasFlyByWireA380XSignature
-            && (raw.Title.IndexOf("A32NX", StringComparison.OrdinalIgnoreCase) >= 0
-                || raw.Title.IndexOf("A320", StringComparison.OrdinalIgnoreCase) >= 0
-                && raw.Title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0
-                || string.Equals(raw.Title, "FlyByWire A32NX", StringComparison.OrdinalIgnoreCase));
+            aircraftVariant == AircraftVariant.FlyByWireA320Neo;
         var isFlyByWireAirbus = isFlyByWireA320Neo || isFlyByWireA380X;
-        var isPmdg737 =
-            raw.Title.IndexOf("PMDG", StringComparison.OrdinalIgnoreCase) >= 0
-            && raw.Title.IndexOf("737", StringComparison.OrdinalIgnoreCase) >= 0
-            || raw.Title.IndexOf("737-800", StringComparison.OrdinalIgnoreCase) >= 0
-            || raw.Title.IndexOf("738", StringComparison.OrdinalIgnoreCase) >= 0;
+        var isPmdg737 = aircraftVariant == AircraftVariant.Pmdg737800;
         var pmdg = _pmdgNg3State;
         if (isFlyByWireAirbus)
         {
@@ -2882,6 +2898,23 @@ internal sealed class CopilotService : Form
             || (pmdgApuAvailable
                 && _pmdgApuAvailableSinceUtc.HasValue
                 && nowUtc - _pmdgApuAvailableSinceUtc.Value >= PmdgApuBleedWarmup);
+        var approachSchedule = AircraftApproachProfiles.EffectiveSchedule(
+            raw.Title,
+            _settings.AircraftApproachOverrides);
+        var activePlan = _procedureSession.ActiveFlightPlan;
+        var plannedBlockFuelKg = SimBriefOperationalContext.BlockFuelKilograms(activePlan);
+        var actualFuelKg = raw.TotalFuelWeightPounds / 2.20462262185;
+        var plannedTakeoffFlaps = SimBriefOperationalContext.TakeoffFlapSetting(activePlan, aircraftVariant);
+        int? cockpitV1 = isPmdg737 && pmdg?.V1 > 0 ? pmdg.V1 : null;
+        int? cockpitVr = isPmdg737 && pmdg?.Vr > 0 ? pmdg.Vr : null;
+        int? cockpitFlaps = isPmdg737 && pmdg?.TakeoffFlaps > 0 ? pmdg.TakeoffFlaps : null;
+        var effectiveV1 = cockpitV1
+            ?? (activePlan?.TakeoffV1Knots is >= 80 and <= 219 ? activePlan.TakeoffV1Knots : null)
+            ?? _settings.TakeoffV1SpeedKnots;
+        var effectiveVr = cockpitVr
+            ?? (activePlan?.TakeoffVrKnots is >= 80 and <= 220 ? activePlan.TakeoffVrKnots : null)
+            ?? _settings.TakeoffRotateSpeedKnots;
+        effectiveVr = Math.Max(effectiveV1, effectiveVr);
 
         _state = new AircraftState
         {
@@ -3176,28 +3209,49 @@ internal sealed class CopilotService : Form
             FuelPump6State = isFlyByWireAirbus ? raw.FbwFuelPump6 : isPmdg737 && pmdg != null ? (pmdg.RightCenterFuelPump ? 1 : 0) : isIniBuildsA330 && A330FuelPumpInputEventsReady() ? _a330FuelPumpInputStates[5]!.Value : _nativeFuelPump6 ?? 0,
             AltitudeAboveGroundFeet = raw.AltitudeAboveGround,
             IndicatedAltitudeFeet = raw.IndicatedAltitude,
-            TransitionAltitudeFeet = _settings.TransitionAltitudeFeet,
+            TransitionAltitudeFeet = activePlan?.TransitionAltitudeFeet is >= 1000 and <= 20000
+                ? activePlan.TransitionAltitudeFeet.Value
+                : _settings.TransitionAltitudeFeet,
             CaptainAltimeterStandard = raw.CaptainBaroStandard != 0,
             FirstOfficerAltimeterStandard = raw.FirstOfficerBaroStandard != 0,
             IndicatedAirspeedKnots = raw.IndicatedAirspeed,
-            TakeoffV1SpeedKnots = _settings.TakeoffV1SpeedKnots,
-            TakeoffRotateSpeedKnots = _settings.TakeoffRotateSpeedKnots,
+            TakeoffV1SpeedKnots = effectiveV1,
+            TakeoffRotateSpeedKnots = effectiveVr,
+            TakeoffV2SpeedKnots = activePlan?.TakeoffV2Knots,
+            SimBriefFlightNumber = activePlan?.FlightNumber ?? "",
+            SimBriefOriginIcao = activePlan?.OriginIcao ?? "",
+            SimBriefDestinationIcao = activePlan?.DestinationIcao ?? "",
+            SimBriefAlternateIcao = activePlan?.AlternateIcao ?? "",
+            SimBriefOriginRunway = activePlan?.OriginRunway ?? "",
+            SimBriefDestinationRunway = activePlan?.DestinationRunway ?? "",
+            SimBriefRoute = activePlan?.Route ?? "",
+            PlannedCruiseAltitudeFeet = activePlan?.CruiseAltitudeFeet,
+            PlannedCostIndex = activePlan?.CostIndex,
+            PlannedTakeoffFlaps = plannedTakeoffFlaps,
+            PlannedBlockFuelKilograms = plannedBlockFuelKg,
+            ActualFuelKilograms = actualFuelKg,
+            SimBriefFuelStatus = SimBriefOperationalContext.FuelComparison(plannedBlockFuelKg, actualFuelKg),
+            BoeingFmcV1Knots = cockpitV1,
+            BoeingFmcVrKnots = cockpitVr,
+            BoeingFmcTakeoffReferenceComplete = isPmdg737 && pmdg?.FmcPerfInputComplete == true,
+            SimBriefTakeoffStatus = SimBriefOperationalContext.TakeoffComparison(activePlan, aircraftVariant, cockpitV1, cockpitVr, cockpitFlaps),
             ApproachDistanceToTouchdownNm = approachDistance.DistanceNm,
             ApproachDistanceSource = approachDistance.Source,
-            ApproachFlaps1DistanceNm = _settings.ApproachFlaps1DistanceNm,
-            ApproachFlaps1AltitudeFeet = _settings.ApproachFlaps1AltitudeFeet,
-            ApproachFlaps1SpeedKnots = _settings.ApproachFlaps1SpeedKnots,
-            ApproachFlaps2DistanceNm = _settings.ApproachFlaps2DistanceNm,
-            ApproachFlaps2AltitudeAglFeet = _settings.ApproachFlaps2AltitudeAglFeet,
-            ApproachFlaps2SpeedKnots = _settings.ApproachFlaps2SpeedKnots,
-            ApproachGearDistanceNm = _settings.ApproachGearDistanceNm,
-            ApproachGearAltitudeAglFeet = _settings.ApproachGearAltitudeAglFeet,
-            ApproachGearSpeedKnots = _settings.ApproachGearSpeedKnots,
-            ApproachLandingConfigDistanceNm = _settings.ApproachLandingConfigDistanceNm,
+            ApproachFlaps1DistanceNm = approachSchedule.Flaps1DistanceNm,
+            ApproachFlaps1AltitudeFeet = approachSchedule.Flaps1AltitudeFeet,
+            ApproachFlaps1SpeedKnots = approachSchedule.Flaps1SpeedKnots,
+            ApproachFlaps2DistanceNm = approachSchedule.Flaps2DistanceNm,
+            ApproachFlaps2AltitudeAglFeet = approachSchedule.Flaps2AltitudeAglFeet,
+            ApproachFlaps2SpeedKnots = approachSchedule.Flaps2SpeedKnots,
+            ApproachGearDistanceNm = approachSchedule.GearDistanceNm,
+            ApproachGearAltitudeAglFeet = approachSchedule.GearAltitudeAglFeet,
+            ApproachGearSpeedKnots = approachSchedule.GearSpeedKnots,
+            ApproachLandingConfigDistanceNm = approachSchedule.LandingConfigDistanceNm,
             ApproachLandingConfigAltitudeAglFeet =
-                _settings.ApproachLandingConfigAltitudeAglFeet,
+                approachSchedule.LandingConfigAltitudeAglFeet,
             ApproachLandingConfigSpeedKnots =
-                _settings.ApproachLandingConfigSpeedKnots,
+                approachSchedule.LandingConfigSpeedKnots,
+            ApproachFlapsFullSpeedKnots = approachSchedule.FlapsFullSpeedKnots,
             VerticalSpeedFeetPerMinute = raw.VerticalSpeed,
             GForce = raw.GForce,
             RadioHeightFeet = raw.RadioHeight,
@@ -3220,9 +3274,7 @@ internal sealed class CopilotService : Form
             FlapsHandleIndex = isIniBuildsA330 && _a330FlapsInputState.HasValue
                 ? _a330FlapsInputState.Value
                 : raw.FlapsHandleIndex,
-            BoeingTakeoffFlaps = isPmdg737 && pmdg != null && pmdg.TakeoffFlaps > 0
-                ? pmdg.TakeoffFlaps
-                : null,
+            BoeingTakeoffFlaps = cockpitFlaps ?? plannedTakeoffFlaps,
             BoeingLandingFlaps = isPmdg737 && pmdg != null && pmdg.LandingFlaps > 0
                 ? pmdg.LandingFlaps
                 : null,
@@ -3493,7 +3545,11 @@ internal sealed class CopilotService : Form
             },
             ApuFireTestCompleted = _apuFireTestCompleted,
             Engine1FireTestCompleted = _engine1FireTestCompleted,
-            Engine2FireTestCompleted = _engine2FireTestCompleted
+            Engine2FireTestCompleted = _engine2FireTestCompleted,
+            PmdgFireFaultInopTestCompleted = _pmdgFireFaultInopTestCompleted,
+            PmdgFireOverheatTestCompleted = _pmdgFireOverheatTestCompleted,
+            PmdgExtinguisherTest1Completed = _pmdgExtinguisherTest1Completed,
+            PmdgExtinguisherTest2Completed = _pmdgExtinguisherTest2Completed
         };
         UpdateTelemetrySanity(_state);
         UpdateCockpitDisplayReadiness(_state);
@@ -4040,7 +4096,18 @@ internal sealed class CopilotService : Form
             BrakePressureNeedle = FloatAt(508),
             GearLever = ByteAt(506),
             ParkingBrakeAnnunciated = BoolAt(574),
+            FireWarnLeftIlluminated = BoolAt(388),
+            FireWarnRightIlluminated = BoolAt(389),
             FireDetectionTestSwitch = ByteAt(579),
+            FireEngine1OverheatIlluminated = BoolAt(577),
+            FireEngine2OverheatIlluminated = BoolAt(578),
+            FireHandle1Illuminated = BoolAt(583),
+            FireHandleApuIlluminated = BoolAt(584),
+            FireHandle2Illuminated = BoolAt(585),
+            FireWheelWellIlluminated = BoolAt(586),
+            FireFaultIlluminated = BoolAt(587),
+            FireApuDetectorInoperativeIlluminated = BoolAt(588),
+            FireExtinguisherTestSwitch = ByteAt(592),
             FireExtinguisherTestLeft = BoolAt(593),
             FireExtinguisherTestRight = BoolAt(594),
             FireExtinguisherTestApu = BoolAt(595),
@@ -4551,6 +4618,18 @@ internal sealed class CopilotService : Form
             case "pmdg irs right nav":
                 SetPmdgIrsSelector(left: false, 2);
                 break;
+            case "pmdg fire-test fault-inop":
+                RunPmdgFireTest(696, 0, "FAULT/INOP detection", 3000);
+                break;
+            case "pmdg fire-test overheat":
+                RunPmdgOverheatFireTest();
+                break;
+            case "pmdg fire-test extinguisher-1":
+                RunPmdgFireTest(715, 0, "extinguisher 1", 3000);
+                break;
+            case "pmdg fire-test extinguisher-2":
+                RunPmdgFireTest(715, 2, "extinguisher 2", 3000);
+                break;
             case "pmdg logo on":
                 SetPmdgLogoLight(true);
                 break;
@@ -4728,7 +4807,8 @@ internal sealed class CopilotService : Form
 
         _cruiseSeatbeltMonitoring =
             string.Equals(definition.Id, "cruise", StringComparison.OrdinalIgnoreCase)
-            && !_state.IsIniBuildsA321Lr;
+            && !_state.IsIniBuildsA321Lr
+            && !_state.IsA320NeoV2;
         _smoothCruiseSinceUtc = null;
         _nextCruiseSeatbeltCommandUtc = DateTime.MinValue;
         _procedureRunner.Start(definition, _state);
@@ -5361,6 +5441,15 @@ internal sealed class CopilotService : Form
         _pmdgCommandedLandingLightUtc = null;
         _pmdgCommandedEmergencyExitSelector = null;
         _pmdgCommandedEmergencyExitUtc = null;
+        _pmdgFireFaultInopTestCompleted = false;
+        _pmdgFireOverheatTestCompleted = false;
+        _pmdgExtinguisherTest1Completed = false;
+        _pmdgExtinguisherTest2Completed = false;
+        _pmdgFireFaultInopActiveObserved = false;
+        _pmdgFireOverheatActiveObserved = false;
+        _pmdgFireWarnCancellationObserved = false;
+        _pmdgExtinguisherTest1ActiveObserved = false;
+        _pmdgExtinguisherTest2ActiveObserved = false;
 
         _fbwCommandedBattery1Auto = null;
         _fbwCommandedBattery2Auto = null;
@@ -5397,6 +5486,7 @@ internal sealed class CopilotService : Form
         ClearCommandedAircraftState();
         _completedProcedureIds.Clear();
         _procedureSession.ResetProgress(DateTime.UtcNow);
+        _simBriefFlightPlan = null;
         ProcedureSessionStore.Save(_procedureSession);
         _cruiseSeatbeltMonitoring = false;
         _smoothCruiseSinceUtc = null;
@@ -5408,7 +5498,74 @@ internal sealed class CopilotService : Form
         AppendDashboardLog(
             "New flight started: all saved flow progress was reset.");
         UpdateDashboard();
+        if (_settings.SimBriefAutoImportOnNewFlight
+            && (!string.IsNullOrWhiteSpace(_settings.SimBriefPilotId)
+                || !string.IsNullOrWhiteSpace(_settings.SimBriefUsername)))
+        {
+            _ = ImportLatestSimBriefAsync(showReview: true, automatic: true);
+        }
         FinishOneShot();
+    }
+
+    private void RunPmdgFireTest(uint eventOffset, uint testPosition, string label, int holdMilliseconds)
+    {
+        SendPmdgNg3Control(eventOffset, testPosition);
+        SchedulePmdgNg3Control(eventOffset, 1, holdMilliseconds);
+        AppLog.Write($"Executed PMDG {label} test; held for {holdMilliseconds / 1000.0:F1} seconds.");
+        FinishOneShot();
+    }
+
+    private void RunPmdgOverheatFireTest()
+    {
+        SendPmdgNg3Control(696, 2);
+        SchedulePmdgNg3Control(347, PmdgMouseLeftSingle, 2500);
+        SchedulePmdgNg3Control(696, 1, 5000);
+        AppLog.Write("Executed PMDG OVHT/FIRE test: held for 5.0 seconds with master FIRE WARN cancellation during the hold.");
+        FinishOneShot();
+    }
+
+    private void ObservePmdgFireTests(PmdgNg3State state)
+    {
+        var fullOverheatFirePattern = state.FireHandle1Illuminated
+            && state.FireHandleApuIlluminated
+            && state.FireHandle2Illuminated
+            && state.FireEngine1OverheatIlluminated
+            && state.FireEngine2OverheatIlluminated
+            && state.FireWheelWellIlluminated;
+        var allExtinguisherLightsLit = state.FireExtinguisherTestLeft
+            && state.FireExtinguisherTestRight
+            && state.FireExtinguisherTestApu;
+
+        if (state.FireDetectionTestSwitch == 0
+            && state.FireFaultIlluminated
+            && state.FireApuDetectorInoperativeIlluminated)
+            _pmdgFireFaultInopActiveObserved = true;
+        if (state.FireDetectionTestSwitch == 2
+            && fullOverheatFirePattern
+            && state.FireWarnLeftIlluminated
+            && state.FireWarnRightIlluminated)
+            _pmdgFireOverheatActiveObserved = true;
+        if (state.FireDetectionTestSwitch == 2
+            && _pmdgFireOverheatActiveObserved
+            && !state.FireWarnLeftIlluminated
+            && !state.FireWarnRightIlluminated
+            && fullOverheatFirePattern)
+            _pmdgFireWarnCancellationObserved = true;
+        if (state.FireExtinguisherTestSwitch == 0 && allExtinguisherLightsLit)
+            _pmdgExtinguisherTest1ActiveObserved = true;
+        if (state.FireExtinguisherTestSwitch == 2 && allExtinguisherLightsLit)
+            _pmdgExtinguisherTest2ActiveObserved = true;
+
+        if (state.FireDetectionTestSwitch == 1 && _pmdgFireFaultInopActiveObserved)
+            _pmdgFireFaultInopTestCompleted = true;
+        if (state.FireDetectionTestSwitch == 1
+            && _pmdgFireOverheatActiveObserved
+            && _pmdgFireWarnCancellationObserved)
+            _pmdgFireOverheatTestCompleted = true;
+        if (state.FireExtinguisherTestSwitch == 1 && _pmdgExtinguisherTest1ActiveObserved)
+            _pmdgExtinguisherTest1Completed = true;
+        if (state.FireExtinguisherTestSwitch == 1 && _pmdgExtinguisherTest2ActiveObserved)
+            _pmdgExtinguisherTest2Completed = true;
     }
 
     private void DebugJumpToFlowById(string id)
@@ -6113,6 +6270,11 @@ internal sealed class CopilotService : Form
 
     private void SetFuelPumps(bool desiredOn)
     {
+        if (_state?.IsA320NeoV2 == true)
+        {
+            SetIniBuildsA320FuelPumps(desiredOn);
+            return;
+        }
         if (_state?.IsFlyByWireAirbus == true)
         {
             SetFlyByWireFuelPumps(desiredOn);
@@ -6181,6 +6343,61 @@ internal sealed class CopilotService : Form
                     index + 1,
                     $"(L:{selectors[index]}) ! (>L:{selectors[index]}) " +
                     $"(L:{pressStates[index]}) ! (>L:{pressStates[index]})"));
+        }
+
+        _pendingFuelPumpSequence = new PendingFuelPumpSequence(toggles, desiredOn);
+        _fuelPumpSequenceTimer?.Dispose();
+        _fuelPumpSequenceTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+        _fuelPumpSequenceTimer.Tick += (_, _) => ExecuteNextFuelPumpToggle();
+        ExecuteNextFuelPumpToggle();
+    }
+
+    private void SetIniBuildsA320FuelPumps(bool desiredOn)
+    {
+        if (_state?.IsA320NeoV2 != true)
+        {
+            AppendDashboardLog(
+                "A320 fuel pumps blocked: the loaded aircraft is not the iniBuilds A320neo V2.");
+            FinishOneShot(3);
+            return;
+        }
+        if (!ValidateNativeInputAction("A320 fuel pumps"))
+        {
+            return;
+        }
+
+        var states = new[]
+        {
+            _state.FuelPump1State,
+            _state.FuelPump2State,
+            _state.FuelPump3State,
+            _state.FuelPump4State,
+            _state.FuelPump5State,
+            _state.FuelPump6State
+        };
+        var alreadyDesired = desiredOn
+            ? A320FuelPumpProfile.AreConfigured(states)
+            : A320FuelPumpProfile.AreAllOff(states);
+        if (alreadyDesired)
+        {
+            AppendDashboardLog(
+                $"A320 fuel pumps already {(desiredOn ? "ON" : "OFF")}.");
+            FinishOneShot();
+            return;
+        }
+
+        var toggles = new Queue<FuelPumpToggle>();
+        for (var index = 0; index < states.Length; index++)
+        {
+            if (A320FuelPumpProfile.IsOn(states[index]) == desiredOn)
+            {
+                continue;
+            }
+
+            toggles.Enqueue(
+                new FuelPumpToggle(
+                    index + 1,
+                    A320FuelPumpProfile.BuildToggleCommand(index)));
         }
 
         _pendingFuelPumpSequence = new PendingFuelPumpSequence(toggles, desiredOn);
@@ -9295,11 +9512,12 @@ internal sealed class CopilotService : Form
         {
             Dock = DockStyle.Top,
             AutoSize = true,
-            ColumnCount = 2,
+            ColumnCount = 3,
             Margin = new Padding(0, 0, 12, 0)
         };
         statusPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
         statusPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        statusPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
         statusShell.Controls.Add(statusPanel, 0, 0);
         statusShell.Controls.Add(BuildAircraftCard(), 1, 0);
 
@@ -9310,19 +9528,75 @@ internal sealed class CopilotService : Form
         _adapterLabel = AddDashboardRow(statusPanel, "Aircraft adapter", "Connecting...");
         _recommendationLabel = AddDashboardRow(statusPanel, "Recommended flow", "Waiting for state...");
         _telemetryLabel = AddDashboardRow(statusPanel, "Current-step telemetry", "Waiting for state...");
+        var simBriefRow = statusPanel.RowCount;
+        _simBriefStatusLabel = AddDashboardRow(statusPanel, "SimBrief", SimBriefStatusText());
+        _simBriefImportButton = new Button
+        {
+            Text = "Manage SimBrief",
+            Width = 112,
+            Height = 25,
+            Margin = new Padding(4, 0, 0, 2),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = System.Drawing.Color.White,
+            ForeColor = System.Drawing.Color.FromArgb(40, 68, 106),
+            UseVisualStyleBackColor = false
+        };
+        _simBriefImportButton.FlatAppearance.BorderColor =
+            System.Drawing.Color.FromArgb(190, 198, 208);
+        _simBriefImportButton.Click += (_, _) => ShowSimBriefDialog();
+        statusPanel.Controls.Add(_simBriefImportButton, 2, simBriefRow);
         _versionLabel = AddDashboardRow(
             statusPanel,
             "Version",
             $"{GetApplicationVersion()} - checking GitHub releases...");
 
-        var settingsPanel = new FlowLayoutPanel
+        var settingsPanel = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 1,
+            RowCount = 2,
+            Padding = new Padding(10, 7, 10, 7),
+            BackColor = System.Drawing.Color.White,
+            Margin = new Padding(0, 0, 0, 14)
+        };
+        var flightSetupPanel = new FlowLayoutPanel
         {
             Dock = DockStyle.Top,
             AutoSize = true,
             FlowDirection = FlowDirection.LeftToRight,
-            Margin = new Padding(0, 0, 0, 14)
+            WrapContents = true,
+            Margin = new Padding(0, 0, 0, 4)
         };
-        settingsPanel.Controls.Add(new Label
+        var preferencesPanel = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
+            Margin = new Padding(0, 2, 0, 0)
+        };
+        flightSetupPanel.Controls.Add(new Label
+        {
+            Text = "Flight setup",
+            AutoSize = false,
+            Width = 105,
+            Height = 26,
+            Font = new System.Drawing.Font(Font.FontFamily, 9, System.Drawing.FontStyle.Bold),
+            ForeColor = System.Drawing.Color.FromArgb(40, 68, 106),
+            Margin = new Padding(0, 7, 8, 0)
+        });
+        preferencesPanel.Controls.Add(new Label
+        {
+            Text = "Preferences",
+            AutoSize = false,
+            Width = 105,
+            Height = 26,
+            Font = new System.Drawing.Font(Font.FontFamily, 9, System.Drawing.FontStyle.Bold),
+            ForeColor = System.Drawing.Color.FromArgb(40, 68, 106),
+            Margin = new Padding(0, 7, 8, 0)
+        });
+        preferencesPanel.Controls.Add(new Label
         {
             Text = "Automation:",
             AutoSize = true,
@@ -9341,7 +9615,7 @@ internal sealed class CopilotService : Form
             _settings.AutomationPolicy = (AutomationPolicy)_automationPolicyBox.SelectedItem;
             SettingsStore.Save(_settings);
         };
-        settingsPanel.Controls.Add(_automationPolicyBox);
+        preferencesPanel.Controls.Add(_automationPolicyBox);
 
         _voiceCalloutsBox = new CheckBox
         {
@@ -9360,27 +9634,17 @@ internal sealed class CopilotService : Form
                 _voiceCalloutQueue?.Clear();
             }
         };
-        settingsPanel.Controls.Add(_voiceCalloutsBox);
+        preferencesPanel.Controls.Add(_voiceCalloutsBox);
 
         var featureSettingsButton = new Button
         {
-            Text = "Approach & chaining settings",
+            Text = "Approach profile...",
             AutoSize = true,
-            Margin = new Padding(18, 2, 0, 0)
+            Margin = new Padding(8, 2, 8, 0)
         };
         featureSettingsButton.Click += (_, _) => ShowFeatureSettingsDialog();
-        settingsPanel.Controls.Add(featureSettingsButton);
 
-        var debugJumpButton = new Button
-        {
-            Text = "Debug jump to flow",
-            AutoSize = true,
-            Margin = new Padding(10, 2, 0, 0)
-        };
-        debugJumpButton.Click += (_, _) => ShowDebugJumpDialog();
-        settingsPanel.Controls.Add(debugJumpButton);
-
-        settingsPanel.Controls.Add(new Label
+        flightSetupPanel.Controls.Add(new Label
         {
             Text = "Transition altitude:",
             AutoSize = true,
@@ -9404,15 +9668,15 @@ internal sealed class CopilotService : Form
                 _state.TransitionAltitudeFeet = _settings.TransitionAltitudeFeet;
             }
         };
-        settingsPanel.Controls.Add(_transitionAltitudeBox);
-        settingsPanel.Controls.Add(new Label
+        flightSetupPanel.Controls.Add(_transitionAltitudeBox);
+        flightSetupPanel.Controls.Add(new Label
         {
             Text = "ft",
             AutoSize = true,
             Margin = new Padding(2, 7, 0, 0)
         });
 
-        settingsPanel.Controls.Add(new Label
+        flightSetupPanel.Controls.Add(new Label
         {
             Text = "V1:",
             AutoSize = true,
@@ -9442,15 +9706,15 @@ internal sealed class CopilotService : Form
                 _state.TakeoffV1SpeedKnots = _settings.TakeoffV1SpeedKnots;
             }
         };
-        settingsPanel.Controls.Add(_takeoffV1Box);
-        settingsPanel.Controls.Add(new Label
+        flightSetupPanel.Controls.Add(_takeoffV1Box);
+        flightSetupPanel.Controls.Add(new Label
         {
             Text = "kt",
             AutoSize = true,
             Margin = new Padding(2, 7, 0, 0)
         });
 
-        settingsPanel.Controls.Add(new Label
+        flightSetupPanel.Controls.Add(new Label
         {
             Text = "VR:",
             AutoSize = true,
@@ -9484,13 +9748,16 @@ internal sealed class CopilotService : Form
                     _settings.TakeoffRotateSpeedKnots;
             }
         };
-        settingsPanel.Controls.Add(_takeoffRotateBox);
-        settingsPanel.Controls.Add(new Label
+        flightSetupPanel.Controls.Add(_takeoffRotateBox);
+        flightSetupPanel.Controls.Add(new Label
         {
             Text = "kt",
             AutoSize = true,
             Margin = new Padding(2, 7, 0, 0)
         });
+        flightSetupPanel.Controls.Add(featureSettingsButton);
+        settingsPanel.Controls.Add(flightSetupPanel, 0, 0);
+        settingsPanel.Controls.Add(preferencesPanel, 0, 1);
         root.Controls.Add(settingsPanel);
 
         var timelineGroup = new GroupBox
@@ -9707,6 +9974,13 @@ internal sealed class CopilotService : Form
                 ? "Hide tools & diagnostics"
                 : "Show tools & diagnostics";
         };
+        var debugJumpButton = new Button
+        {
+            Text = "Debug jump to flow",
+            AutoSize = true
+        };
+        debugJumpButton.Click += (_, _) => ShowDebugJumpDialog();
+        actions.Controls.Add(debugJumpButton);
         actions.Controls.Add(NewCommandButton("FBW bridge status", "fbw-bridge-status"));
         actions.Controls.Add(NewCommandButton("External power ON", "external-power on"));
         actions.Controls.Add(NewCommandButton("External power OFF", "external-power off"));
@@ -9755,6 +10029,289 @@ internal sealed class CopilotService : Form
         actions.Controls.Add(copyDiagnosticsButton);
         toolsShell.Controls.Add(actions);
         root.Controls.Add(toolsShell);
+    }
+
+    private bool SimBriefConfigured =>
+        !string.IsNullOrWhiteSpace(_settings.SimBriefPilotId)
+        || !string.IsNullOrWhiteSpace(_settings.SimBriefUsername);
+
+    private string SimBriefStatusText() => _simBriefFlightPlan != null
+        ? $"Active flight {_simBriefFlightPlan.RouteLabel} - use Manage SimBrief to review or refresh."
+        : SimBriefConfigured
+            ? "Configured and ready for on-demand import."
+            : "Not configured - use Manage SimBrief to add a Pilot ID or username.";
+
+    private void UpdateSimBriefStatus(string? temporaryStatus = null)
+    {
+        if (_simBriefStatusLabel != null)
+        {
+            _simBriefStatusLabel.Text = temporaryStatus ?? SimBriefStatusText();
+        }
+    }
+
+    private void ShowSimBriefDialog()
+    {
+        using var dialog = new Form
+        {
+            Text = "SimBrief flight plan",
+            Width = 560,
+            Height = 390,
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false
+        };
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(16),
+            ColumnCount = 2,
+            RowCount = 7
+        };
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 150));
+        layout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        dialog.Controls.Add(layout);
+
+        layout.Controls.Add(new Label
+        {
+            Text = "Free, read-only import of your latest generated SimBrief OFP. No API key or subscription is required.",
+            AutoSize = true,
+            MaximumSize = new System.Drawing.Size(500, 0),
+            Margin = new Padding(0, 0, 0, 14)
+        }, 0, 0);
+        layout.SetColumnSpan(layout.GetControlFromPosition(0, 0), 2);
+
+        layout.Controls.Add(new Label { Text = "Pilot ID (preferred)", AutoSize = true, Margin = new Padding(0, 7, 8, 0) }, 0, 1);
+        var pilotIdBox = new TextBox { Text = _settings.SimBriefPilotId, Dock = DockStyle.Top };
+        layout.Controls.Add(pilotIdBox, 1, 1);
+        layout.Controls.Add(new Label { Text = "Username", AutoSize = true, Margin = new Padding(0, 7, 8, 0) }, 0, 2);
+        var usernameBox = new TextBox { Text = _settings.SimBriefUsername, Dock = DockStyle.Top };
+        layout.Controls.Add(usernameBox, 1, 2);
+
+        var autoImportBox = new CheckBox
+        {
+            Text = "Import latest OFP when starting a new flight",
+            Checked = _settings.SimBriefAutoImportOnNewFlight,
+            AutoSize = true,
+            Margin = new Padding(0, 10, 0, 8)
+        };
+        layout.Controls.Add(autoImportBox, 1, 3);
+
+        var summary = new Label
+        {
+            Text = SimBriefSummary(_simBriefFlightPlan),
+            AutoSize = true,
+            MaximumSize = new System.Drawing.Size(500, 0),
+            Margin = new Padding(0, 10, 0, 12)
+        };
+        layout.Controls.Add(summary, 0, 4);
+        layout.SetColumnSpan(summary, 2);
+
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight
+        };
+        var importButton = new Button
+        {
+            Text = "Import latest flight",
+            AutoSize = true,
+            BackColor = System.Drawing.Color.FromArgb(39, 130, 87),
+            ForeColor = System.Drawing.Color.White,
+            FlatStyle = FlatStyle.Flat,
+            UseVisualStyleBackColor = false
+        };
+        var saveButton = new Button { Text = "Save settings", AutoSize = true };
+        var briefingButton = new Button
+        {
+            Text = "Review flight briefing",
+            AutoSize = true,
+            Enabled = _simBriefFlightPlan != null
+        };
+        var closeButton = new Button { Text = "Close", AutoSize = true };
+        Action saveSettings = () =>
+        {
+            _settings.SimBriefPilotId = pilotIdBox.Text.Trim();
+            _settings.SimBriefUsername = usernameBox.Text.Trim();
+            _settings.SimBriefAutoImportOnNewFlight = autoImportBox.Checked;
+            SettingsStore.Save(_settings);
+            UpdateSimBriefStatus();
+        };
+        saveButton.Click += (_, _) =>
+        {
+            saveSettings();
+            summary.Text = "SimBrief settings saved. " + SimBriefSummary(_simBriefFlightPlan);
+        };
+        importButton.Click += async (_, _) =>
+        {
+            saveSettings();
+            importButton.Enabled = false;
+            importButton.Text = "Importing...";
+            await ImportLatestSimBriefAsync(showReview: true, automatic: false);
+            summary.Text = SimBriefSummary(_simBriefFlightPlan);
+            briefingButton.Enabled = _simBriefFlightPlan != null;
+            importButton.Text = "Import latest flight";
+            importButton.Enabled = true;
+        };
+        briefingButton.Click += (_, _) => ShowSimBriefBriefing();
+        closeButton.Click += (_, _) => dialog.Close();
+        buttons.Controls.Add(importButton);
+        buttons.Controls.Add(briefingButton);
+        buttons.Controls.Add(saveButton);
+        buttons.Controls.Add(closeButton);
+        layout.Controls.Add(buttons, 0, 5);
+        layout.SetColumnSpan(buttons, 2);
+        dialog.AcceptButton = importButton;
+        dialog.CancelButton = closeButton;
+        dialog.ShowDialog(this);
+    }
+
+    private void ShowSimBriefBriefing()
+    {
+        var plan = _simBriefFlightPlan;
+        if (plan == null)
+        {
+            MessageBox.Show(this, "Import and activate a SimBrief flight first.", "Flight briefing", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            return;
+        }
+
+        var plannedFuel = SimBriefOperationalContext.BlockFuelKilograms(plan);
+        var actualFuel = _state?.ActualFuelKilograms ?? 0;
+        var fuelLine = plannedFuel.HasValue
+            ? $"Block fuel {plannedFuel.Value:N0} kg | aircraft {actualFuel:N0} kg | {_state?.SimBriefFuelStatus ?? "live fuel unavailable"}"
+            : "Block fuel unavailable in the imported OFP";
+        var takeoffLine =
+            $"Runway {plan.OriginRunway ?? "--"} | flaps {plan.TakeoffFlaps ?? "--"} | " +
+            $"V1 {plan.TakeoffV1Knots?.ToString() ?? "--"} | VR {plan.TakeoffVrKnots?.ToString() ?? "--"} | V2 {plan.TakeoffV2Knots?.ToString() ?? "--"}";
+        var cruiseLine =
+            $"Cruise {(plan.CruiseAltitudeFeet.HasValue ? $"FL{plan.CruiseAltitudeFeet.Value / 100:000}" : "--")} | " +
+            $"cost index {plan.CostIndex?.ToString() ?? "--"} | transition altitude {plan.TransitionAltitudeFeet?.ToString("N0") ?? "--"} ft";
+        var arrivalLine =
+            $"Destination {plan.DestinationIcao ?? "--"} runway {plan.DestinationRunway ?? "--"} | alternate {plan.AlternateIcao ?? "--"}";
+        var comparison = _state?.SimBriefTakeoffStatus ?? "Cockpit comparison available after aircraft connection";
+
+        MessageBox.Show(this,
+            $"{plan.RouteLabel}  {plan.FlightNumber}\nAircraft {plan.AircraftIcao} {plan.AircraftRegistration}\n\n" +
+            $"TAKEOFF\n{takeoffLine}\n{comparison}\n\n" +
+            $"FUEL\n{fuelLine}\n\n" +
+            $"CRUISE\n{cruiseLine}\n\n" +
+            $"ARRIVAL\n{arrivalLine}\n\nROUTE\n{plan.Route ?? "--"}",
+            "SimBrief operational briefing",
+            MessageBoxButtons.OK,
+            MessageBoxIcon.Information);
+    }
+
+    private async Task ImportLatestSimBriefAsync(bool showReview, bool automatic)
+    {
+        if (_simBriefImportInProgress) return;
+        if (IsProcedureActive(_procedureRunner.Status))
+        {
+            if (!automatic)
+            {
+                MessageBox.Show(this,
+                    "Finish, pause, or cancel the active procedure before reviewing a new SimBrief flight.",
+                    "SimBrief import",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+            }
+            return;
+        }
+
+        _simBriefImportInProgress = true;
+        UpdateSimBriefStatus("Importing latest OFP...");
+        try
+        {
+            var plan = await new SimBriefClient().FetchLatestAsync(
+                _settings.SimBriefPilotId,
+                _settings.SimBriefUsername);
+            SimBriefCacheStore.Save(plan);
+            AppendDashboardLog($"SimBrief imported: {plan.RouteLabel} {plan.FlightNumber}".Trim());
+            if (showReview)
+                ReviewAndApplySimBrief(plan);
+            else
+                ActivateSimBriefFlightPlan(plan);
+            UpdateSimBriefStatus();
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"SimBrief import failed: {ex}");
+            if (!automatic)
+            {
+                MessageBox.Show(this,
+                    $"The SimBrief flight could not be imported.\n\n{ex.Message}\n\nYour existing settings and cockpit flows were not changed.",
+                    "SimBrief unavailable",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Warning);
+            }
+            AppendDashboardLog("SimBrief import unavailable; existing flight settings kept.");
+            UpdateSimBriefStatus("Unavailable — existing settings kept");
+        }
+        finally
+        {
+            _simBriefImportInProgress = false;
+        }
+    }
+
+    private void ReviewAndApplySimBrief(ImportedFlightPlan plan)
+    {
+        var warnings = SimBriefImportValidator.Validate(
+            plan,
+            ExpectedSimBriefAircraftIcaos(),
+            DateTime.UtcNow);
+        var changes = new List<string>();
+        if (plan.TransitionAltitudeFeet is >= 1000 and <= 20000)
+            changes.Add($"Transition altitude: {plan.TransitionAltitudeFeet:N0} ft");
+        if (plan.TakeoffV1Knots is >= 80 and <= 219)
+            changes.Add($"V1: {plan.TakeoffV1Knots} kt");
+        if (plan.TakeoffVrKnots is >= 80 and <= 220)
+            changes.Add($"VR: {plan.TakeoffVrKnots} kt");
+
+        var message = SimBriefSummary(plan)
+            + (warnings.Count > 0 ? "\n\nWarnings:\n- " + string.Join("\n- ", warnings) : "")
+            + (changes.Count > 0
+                ? "\n\nApply these reviewed values to the app?\n- " + string.Join("\n- ", changes)
+                : "\n\nThis OFP contains no supported takeoff values to apply. It will remain available as a flight summary.");
+        if (changes.Count == 0)
+        {
+            MessageBox.Show(this, message, "SimBrief flight imported", MessageBoxButtons.OK, MessageBoxIcon.Information);
+            ActivateSimBriefFlightPlan(plan);
+            return;
+        }
+        if (MessageBox.Show(this, message, "Review SimBrief import", MessageBoxButtons.YesNo, MessageBoxIcon.Question, MessageBoxDefaultButton.Button2) != DialogResult.Yes)
+            return;
+
+        ActivateSimBriefFlightPlan(plan);
+        AppendDashboardLog("Reviewed SimBrief flight activated for this flight only.");
+    }
+
+    private void ActivateSimBriefFlightPlan(ImportedFlightPlan plan)
+    {
+        _simBriefFlightPlan = plan;
+        _procedureSession.ActiveFlightPlan = plan;
+        _procedureSession.SavedUtc = DateTime.UtcNow;
+        ProcedureSessionStore.Save(_procedureSession);
+    }
+
+    private IReadOnlyList<string> ExpectedSimBriefAircraftIcaos()
+    {
+        if (_state?.IsPmdg737800 == true) return new[] { "B738" };
+        if (_state?.IsIniBuildsA321Lr == true) return new[] { "A21N", "A321" };
+        if (_state?.IsIniBuildsA330 == true) return new[] { "A333", "A339" };
+        if (_state?.IsA320NeoV2 == true || _state?.IsFlyByWireA320Neo == true)
+            return new[] { "A20N" };
+        return Array.Empty<string>();
+    }
+
+    private static string SimBriefSummary(ImportedFlightPlan? plan)
+    {
+        if (plan == null) return "No SimBrief flight has been imported yet.";
+        var generated = plan.GeneratedUtc.HasValue
+            ? $"generated {plan.GeneratedUtc.Value.ToLocalTime():g}"
+            : "generation time unavailable";
+        var cruise = plan.CruiseAltitudeFeet.HasValue ? $"FL{plan.CruiseAltitudeFeet.Value / 100:000}" : "cruise n/a";
+        var runways = $"{(string.IsNullOrWhiteSpace(plan.OriginRunway) ? "--" : plan.OriginRunway)} -> {(string.IsNullOrWhiteSpace(plan.DestinationRunway) ? "--" : plan.DestinationRunway)}";
+        return $"{plan.RouteLabel}  {plan.FlightNumber}\nAircraft {plan.AircraftIcao} {plan.AircraftRegistration} | {cruise} | runways {runways}\n{generated}";
     }
 
     private void ShowDebugJumpDialog()
@@ -9857,9 +10414,9 @@ internal sealed class CopilotService : Form
     {
         using var dialog = new Form
         {
-            Text = "Approach schedule and flow chaining",
-            Width = 540,
-            Height = 650,
+            Text = "Aircraft approach profile and flow chaining",
+            Width = 590,
+            Height = 720,
             StartPosition = FormStartPosition.CenterParent,
             FormBorderStyle = FormBorderStyle.FixedDialog,
             MaximizeBox = false,
@@ -9876,6 +10433,49 @@ internal sealed class CopilotService : Form
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 60));
         dialog.Controls.Add(layout);
+
+        _settings.AircraftApproachOverrides ??= new List<AircraftApproachOverride>();
+        var aircraftProfile = AircraftApproachProfiles.Resolve(_state?.Title);
+        var savedOverride = _settings.AircraftApproachOverrides.LastOrDefault(item =>
+            string.Equals(item.ProfileKey, aircraftProfile.Key, StringComparison.OrdinalIgnoreCase));
+        var standardSchedule = aircraftProfile.StandardSchedule.Clone();
+        var displayedSchedule = (savedOverride?.Schedule ?? standardSchedule).Clone();
+
+        var profileRow = layout.RowCount++;
+        var profileLabel = new Label
+        {
+            Text = $"Loaded aircraft profile: {aircraftProfile.DisplayName}\n" +
+                   (savedOverride == null
+                       ? "Using the built-in standard baseline."
+                       : "Using a saved airline-specific override."),
+            AutoSize = true,
+            Font = new System.Drawing.Font(Font.FontFamily, 9, System.Drawing.FontStyle.Bold),
+            Margin = new Padding(0, 0, 0, 8)
+        };
+        layout.Controls.Add(profileLabel, 0, profileRow);
+        layout.SetColumnSpan(profileLabel, 3);
+
+        var noteRow = layout.RowCount++;
+        var profileNote = new Label
+        {
+            Text = "The baseline changes automatically with the detected aircraft. Airline, runway, weather and ATC procedures can differ; enable an override to save your own SOP for this aircraft only.",
+            AutoSize = true,
+            MaximumSize = new System.Drawing.Size(530, 0),
+            Margin = new Padding(0, 0, 0, 10)
+        };
+        layout.Controls.Add(profileNote, 0, noteRow);
+        layout.SetColumnSpan(profileNote, 3);
+
+        var overrideRow = layout.RowCount++;
+        var useOverride = new CheckBox
+        {
+            Text = $"Use airline-specific override for {aircraftProfile.DisplayName}",
+            Checked = savedOverride != null,
+            AutoSize = true,
+            Margin = new Padding(0, 4, 0, 10)
+        };
+        layout.Controls.Add(useOverride, 0, overrideRow);
+        layout.SetColumnSpan(useOverride, 3);
 
         NumericUpDown AddNumber(string label, int value, int minimum, int maximum, string unit)
         {
@@ -9907,40 +10507,61 @@ internal sealed class CopilotService : Form
 
         var flapDistance = AddNumber(
             "Flaps 1 target distance",
-            _settings.ApproachFlaps1DistanceNm, 3, 30, "NM");
+            displayedSchedule.Flaps1DistanceNm, 3, 30, "NM");
         var flapAltitude = AddNumber(
             "Flaps 1 maximum indicated altitude",
-            _settings.ApproachFlaps1AltitudeFeet, 1000, 20000, "ft");
+            displayedSchedule.Flaps1AltitudeFeet, 1000, 20000, "ft");
         var flapSpeed = AddNumber(
             "Flaps 1 max command speed",
-            _settings.ApproachFlaps1SpeedKnots, 100, 250, "kt");
+            displayedSchedule.Flaps1SpeedKnots, 100, 250, "kt");
         var flap2Distance = AddNumber(
             "Flaps 2 target distance",
-            _settings.ApproachFlaps2DistanceNm, 2, 25, "NM");
+            displayedSchedule.Flaps2DistanceNm, 2, 25, "NM");
         var flap2Altitude = AddNumber(
             "Flaps 2 maximum radio altitude",
-            _settings.ApproachFlaps2AltitudeAglFeet, 1000, 8000, "ft");
+            displayedSchedule.Flaps2AltitudeAglFeet, 1000, 8000, "ft");
         var flap2Speed = AddNumber(
             "Flaps 2 max command speed",
-            _settings.ApproachFlaps2SpeedKnots, 100, 230, "kt");
+            displayedSchedule.Flaps2SpeedKnots, 100, 230, "kt");
         var gearDistance = AddNumber(
             "Gear-down target distance",
-            _settings.ApproachGearDistanceNm, 2, 20, "NM");
+            displayedSchedule.GearDistanceNm, 2, 20, "NM");
         var gearAltitude = AddNumber(
             "Gear-down maximum radio altitude",
-            _settings.ApproachGearAltitudeAglFeet, 500, 5000, "ft");
+            displayedSchedule.GearAltitudeAglFeet, 500, 5000, "ft");
         var gearSpeed = AddNumber(
             "Gear-down target speed",
-            _settings.ApproachGearSpeedKnots, 100, 250, "kt");
+            displayedSchedule.GearSpeedKnots, 100, 250, "kt");
         var landingDistance = AddNumber(
             "Landing configuration target distance",
-            _settings.ApproachLandingConfigDistanceNm, 1, 15, "NM");
+            displayedSchedule.LandingConfigDistanceNm, 1, 15, "NM");
         var landingAltitude = AddNumber(
             "Landing configuration maximum radio altitude",
-            _settings.ApproachLandingConfigAltitudeAglFeet, 300, 3000, "ft");
+            displayedSchedule.LandingConfigAltitudeAglFeet, 300, 3000, "ft");
         var landingSpeed = AddNumber(
             "Landing config max command speed",
-            _settings.ApproachLandingConfigSpeedKnots, 100, 220, "kt");
+            displayedSchedule.LandingConfigSpeedKnots, 100, 220, "kt");
+        var flapsFullSpeed = AddNumber(
+            "Flaps FULL max command speed",
+            displayedSchedule.FlapsFullSpeedKnots, 100, 220, "kt");
+
+        var scheduleBoxes = new[]
+        {
+            flapDistance, flapAltitude, flapSpeed,
+            flap2Distance, flap2Altitude, flap2Speed,
+            gearDistance, gearAltitude, gearSpeed,
+            landingDistance, landingAltitude, landingSpeed, flapsFullSpeed
+        };
+        void UpdateScheduleEditing()
+        {
+            foreach (var box in scheduleBoxes) box.Enabled = useOverride.Checked;
+            profileLabel.Text = $"Loaded aircraft profile: {aircraftProfile.DisplayName}\n" +
+                (useOverride.Checked
+                    ? "Airline-specific override enabled."
+                    : "Using the built-in standard baseline.");
+        }
+        useOverride.CheckedChanged += (_, _) => UpdateScheduleEditing();
+        UpdateScheduleEditing();
 
         CheckBox AddCheck(string text, bool value)
         {
@@ -9978,25 +10599,23 @@ internal sealed class CopilotService : Form
             AutoSize = true
         };
         var save = new Button { Text = "Save", DialogResult = DialogResult.OK };
-        var defaults = new Button { Text = "Restore standard" };
+        var defaults = new Button { Text = "Use aircraft standard" };
         defaults.Click += (_, _) =>
         {
-            flapDistance.Value = 15;
-            flapAltitude.Value = 10000;
-            flapSpeed.Value = 230;
-            flap2Distance.Value = 10;
-            flap2Altitude.Value = 4000;
-            flap2Speed.Value = 200;
-            gearDistance.Value = 7;
-            gearAltitude.Value = 2500;
-            gearSpeed.Value = 210;
-            landingDistance.Value = 5;
-            landingAltitude.Value = 1800;
-            landingSpeed.Value = 185;
-            earlierChains.Checked = false;
-            flow6Chain.Checked = true;
-            flow10Chain.Checked = true;
-            flow11Chain.Checked = true;
+            useOverride.Checked = false;
+            flapDistance.Value = standardSchedule.Flaps1DistanceNm;
+            flapAltitude.Value = standardSchedule.Flaps1AltitudeFeet;
+            flapSpeed.Value = standardSchedule.Flaps1SpeedKnots;
+            flap2Distance.Value = standardSchedule.Flaps2DistanceNm;
+            flap2Altitude.Value = standardSchedule.Flaps2AltitudeAglFeet;
+            flap2Speed.Value = standardSchedule.Flaps2SpeedKnots;
+            gearDistance.Value = standardSchedule.GearDistanceNm;
+            gearAltitude.Value = standardSchedule.GearAltitudeAglFeet;
+            gearSpeed.Value = standardSchedule.GearSpeedKnots;
+            landingDistance.Value = standardSchedule.LandingConfigDistanceNm;
+            landingAltitude.Value = standardSchedule.LandingConfigAltitudeAglFeet;
+            landingSpeed.Value = standardSchedule.LandingConfigSpeedKnots;
+            flapsFullSpeed.Value = standardSchedule.FlapsFullSpeedKnots;
         };
         buttons.Controls.Add(save);
         buttons.Controls.Add(defaults);
@@ -10010,25 +10629,41 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        _settings.ApproachFlaps1DistanceNm = (int)flapDistance.Value;
-        _settings.ApproachFlaps1AltitudeFeet = (int)flapAltitude.Value;
-        _settings.ApproachFlaps1SpeedKnots = (int)flapSpeed.Value;
-        _settings.ApproachFlaps2DistanceNm = (int)flap2Distance.Value;
-        _settings.ApproachFlaps2AltitudeAglFeet = (int)flap2Altitude.Value;
-        _settings.ApproachFlaps2SpeedKnots = (int)flap2Speed.Value;
-        _settings.ApproachGearDistanceNm = (int)gearDistance.Value;
-        _settings.ApproachGearAltitudeAglFeet = (int)gearAltitude.Value;
-        _settings.ApproachGearSpeedKnots = (int)gearSpeed.Value;
-        _settings.ApproachLandingConfigDistanceNm = (int)landingDistance.Value;
-        _settings.ApproachLandingConfigAltitudeAglFeet = (int)landingAltitude.Value;
-        _settings.ApproachLandingConfigSpeedKnots = (int)landingSpeed.Value;
+        _settings.AircraftApproachOverrides.RemoveAll(item =>
+            string.Equals(item.ProfileKey, aircraftProfile.Key, StringComparison.OrdinalIgnoreCase));
+        if (useOverride.Checked)
+        {
+            _settings.AircraftApproachOverrides.Add(new AircraftApproachOverride
+            {
+                ProfileKey = aircraftProfile.Key,
+                Schedule = new ApproachScheduleSettings
+                {
+                    Flaps1DistanceNm = (int)flapDistance.Value,
+                    Flaps1AltitudeFeet = (int)flapAltitude.Value,
+                    Flaps1SpeedKnots = (int)flapSpeed.Value,
+                    Flaps2DistanceNm = (int)flap2Distance.Value,
+                    Flaps2AltitudeAglFeet = (int)flap2Altitude.Value,
+                    Flaps2SpeedKnots = (int)flap2Speed.Value,
+                    GearDistanceNm = (int)gearDistance.Value,
+                    GearAltitudeAglFeet = (int)gearAltitude.Value,
+                    GearSpeedKnots = (int)gearSpeed.Value,
+                    LandingConfigDistanceNm = (int)landingDistance.Value,
+                    LandingConfigAltitudeAglFeet = (int)landingAltitude.Value,
+                    LandingConfigSpeedKnots = (int)landingSpeed.Value,
+                    FlapsFullSpeedKnots = (int)flapsFullSpeed.Value
+                }
+            });
+        }
         _settings.AutoChainEarlierFlows = earlierChains.Checked;
         _settings.AutoChainFlow6To7 = flow6Chain.Checked;
         _settings.AutoChainFlow10To11 = flow10Chain.Checked;
         _settings.AutoChainFlow11To12 = flow11Chain.Checked;
         SettingsStore.Save(_settings);
         ApplyApproachSettingsToState();
-        AppendDashboardLog("Approach schedule and flow chaining settings saved.");
+        AppendDashboardLog(
+            useOverride.Checked
+                ? $"Airline-specific approach override saved for {aircraftProfile.DisplayName}."
+                : $"Aircraft-standard approach profile restored for {aircraftProfile.DisplayName}.");
     }
 
     private void ApplyApproachSettingsToState()
@@ -10037,21 +10672,25 @@ internal sealed class CopilotService : Form
         {
             return;
         }
-        _state.ApproachFlaps1DistanceNm = _settings.ApproachFlaps1DistanceNm;
-        _state.ApproachFlaps1AltitudeFeet = _settings.ApproachFlaps1AltitudeFeet;
-        _state.ApproachFlaps1SpeedKnots = _settings.ApproachFlaps1SpeedKnots;
-        _state.ApproachFlaps2DistanceNm = _settings.ApproachFlaps2DistanceNm;
-        _state.ApproachFlaps2AltitudeAglFeet = _settings.ApproachFlaps2AltitudeAglFeet;
-        _state.ApproachFlaps2SpeedKnots = _settings.ApproachFlaps2SpeedKnots;
-        _state.ApproachGearDistanceNm = _settings.ApproachGearDistanceNm;
-        _state.ApproachGearAltitudeAglFeet = _settings.ApproachGearAltitudeAglFeet;
-        _state.ApproachGearSpeedKnots = _settings.ApproachGearSpeedKnots;
+        var schedule = AircraftApproachProfiles.EffectiveSchedule(
+            _state.Title,
+            _settings.AircraftApproachOverrides);
+        _state.ApproachFlaps1DistanceNm = schedule.Flaps1DistanceNm;
+        _state.ApproachFlaps1AltitudeFeet = schedule.Flaps1AltitudeFeet;
+        _state.ApproachFlaps1SpeedKnots = schedule.Flaps1SpeedKnots;
+        _state.ApproachFlaps2DistanceNm = schedule.Flaps2DistanceNm;
+        _state.ApproachFlaps2AltitudeAglFeet = schedule.Flaps2AltitudeAglFeet;
+        _state.ApproachFlaps2SpeedKnots = schedule.Flaps2SpeedKnots;
+        _state.ApproachGearDistanceNm = schedule.GearDistanceNm;
+        _state.ApproachGearAltitudeAglFeet = schedule.GearAltitudeAglFeet;
+        _state.ApproachGearSpeedKnots = schedule.GearSpeedKnots;
         _state.ApproachLandingConfigDistanceNm =
-            _settings.ApproachLandingConfigDistanceNm;
+            schedule.LandingConfigDistanceNm;
         _state.ApproachLandingConfigAltitudeAglFeet =
-            _settings.ApproachLandingConfigAltitudeAglFeet;
+            schedule.LandingConfigAltitudeAglFeet;
         _state.ApproachLandingConfigSpeedKnots =
-            _settings.ApproachLandingConfigSpeedKnots;
+            schedule.LandingConfigSpeedKnots;
+        _state.ApproachFlapsFullSpeedKnots = schedule.FlapsFullSpeedKnots;
     }
 
     private void RefreshReplayFlightList()
@@ -11039,14 +11678,24 @@ internal sealed class CopilotService : Form
         var distance = state.ApproachDistanceToTouchdownNm.HasValue
             ? $" | DIST {state.ApproachDistanceToTouchdownNm.Value:F1} NM {state.ApproachDistanceSource}"
             : " | DIST n/a";
+        var simBrief = string.IsNullOrWhiteSpace(state.SimBriefDestinationIcao)
+            ? ""
+            : $" | OFP {state.SimBriefOriginIcao}-{state.SimBriefDestinationIcao} FL{state.PlannedCruiseAltitudeFeet / 100:000}";
         return stepId switch
         {
             "fo-v1" => $"{flight} | target V1 {state.TakeoffV1SpeedKnots} kt",
             "fo-rotate" => $"{flight} | target VR {state.TakeoffRotateSpeedKnots} kt",
+            "fmc-perf" => $"{flight} | {state.SimBriefTakeoffStatus}",
+            "cruise-established" => $"{flight}{simBrief}",
+            "captain-fmc-arrival" or "captain-briefing" => $"{flight}{distance}{simBrief}",
             "approach-config-start" =>
                 $"{flight} | trigger <={state.ApproachFlaps1AltitudeFeet:N0} ft indicated or distance gate",
             "flaps-one-speed" =>
                 $"{flight} | wait IAS <={state.EffectiveApproachFlaps1SpeedKnots} kt for CONFIG 1",
+            "flaps-five-gate" =>
+                $"{flight}{distance} | trigger <={state.ApproachFlaps2DistanceNm} NM; fallback <={state.ApproachFlaps2AltitudeAglFeet:N0} ft AGL only without distance",
+            "flaps-five-speed" =>
+                $"{flight} | wait IAS <={state.EffectiveApproachFlaps2SpeedKnots} kt for Flaps 5",
             "flaps-two-speed" =>
                 $"{flight} | wait IAS <={state.EffectiveApproachFlaps2SpeedKnots} kt for CONFIG 2",
             "gear-down-point" =>
@@ -11232,6 +11881,7 @@ internal sealed class CopilotService : Form
         Console.WriteLine("MSFS closed the SimConnect session.");
         AppLog.Write("MSFS closed the SimConnect session.");
         _mobiFlightReady = false;
+        ResetMobiFlightRuntimeAfterDisconnect();
         _simConnect?.Dispose();
         _simConnect = null;
         if (_connectionLabel != null)
@@ -11240,6 +11890,58 @@ internal sealed class CopilotService : Form
             _connectionLabel.ForeColor = System.Drawing.Color.DarkRed;
         }
         ScheduleReconnect();
+    }
+
+    private void ResetMobiFlightRuntimeAfterDisconnect()
+    {
+        // The WASM module survives a simulator connection restart, but this
+        // SimConnect client's data definitions do not. Force the complete
+        // runtime client and ordered SimVar table to be recreated after every
+        // reconnect instead of accepting values left from the previous
+        // session as current aircraft readback.
+        _mobiFlightRuntimeReady = false;
+        _mobiFlightRuntimeInitializedUtc = null;
+
+        _nativeBattery1On = null;
+        _nativeBattery2On = null;
+        _nativeFuelPump1 = null;
+        _nativeFuelPump2 = null;
+        _nativeFuelPump3 = null;
+        _nativeFuelPump4 = null;
+        _nativeFuelPump5 = null;
+        _nativeFuelPump6 = null;
+        _nativeNavLogoSelectorPosition = null;
+        _nativeApuAvailable = null;
+        _nativeApuMasterSwitch = null;
+        _nativeApuStartButton = null;
+        _nativeApuBleedButton = null;
+        _nativeApuGeneratorOn = null;
+        _nativeApuFlapPercent = null;
+        _nativeAdirs1State = null;
+        _nativeAdirs2State = null;
+        _nativeAdirs3State = null;
+        _nativeAdirsOnBattery = null;
+        _nativeCrewOxygen = null;
+        _nativeStrobeSelector = null;
+        _nativeSeatbeltSelector = null;
+        _nativeSeatbeltSignsOn = null;
+        _nativeNoSmokingSelector = null;
+        _nativeNoSmokingSignsOn = null;
+        _nativeEmergencyExitSelector = null;
+        _nativeSpoilersArmed = null;
+        _nativeAutobrakeLevel = null;
+        _nativeTcasAltitudeReporting = null;
+        _nativeGearHandlePosition = null;
+        _nativeWeatherRadarPwsSelector = null;
+        _nativeNoseLightSelector = null;
+        _nativeLeftLandingLightSelector = null;
+        _nativeRightLandingLightSelector = null;
+        _nativeTransponderAtcState = null;
+        _nativeTcasMode = null;
+        _nativeTransponderStandby = null;
+
+        AppLog.Write(
+            "MobiFlight runtime state cleared; full native readback registration required after reconnect.");
     }
 
     protected override void Dispose(bool disposing)

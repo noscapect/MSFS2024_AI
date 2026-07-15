@@ -1,3 +1,4 @@
+using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA320;
 using Msfs2024Ai.Copilot.Domain;
 
 namespace Msfs2024Ai.Copilot.Procedures;
@@ -178,8 +179,8 @@ internal static class A320ProcedureLibrary
                 Manual("mcdu-init-b", "MCDU INIT B complete", "Captain: enter zero fuel weight and block fuel, then confirm.", CrewRole.Captain),
                 Manual("mcdu-perf", "MCDU PERF complete", "Captain: enter V1, VR, V2, transition altitude and takeoff flap setting, then confirm.", CrewRole.Captain),
                 Automatic("fo-fuel-pumps", "All six fuel pumps ON", state => state.FuelPumpsConfigured, "fuel-pumps on"),
-                Automatic("fo-seatbelts-auto", "Seatbelt signs AUTO", state => state.SeatbeltSelectorPosition.HasValue && Math.Abs(state.SeatbeltSelectorPosition.Value - 1) < 0.1, "seatbelts auto"),
-                Automatic("fo-no-smoking-auto", "No smoking signs AUTO", state => state.NoSmokingSelectorPosition.HasValue && Math.Abs(state.NoSmokingSelectorPosition.Value - 1) < 0.1, "no-smoking auto"),
+                Automatic("fo-seatbelts-auto", "Seatbelt selector AUTO", state => A320CabinSignProfile.IsAuto(state.SeatbeltSelectorPosition), A320CabinSignProfile.SeatbeltsAutoCommand),
+                Automatic("fo-no-smoking-auto", "No smoking selector AUTO", state => A320CabinSignProfile.IsAuto(state.NoSmokingSelectorPosition), A320CabinSignProfile.NoSmokingAutoCommand),
                 Automatic("fo-emergency-lights-armed", "Emergency exit lights ARMED", state => state.EmergencyExitSelectorPosition.HasValue && Math.Abs(state.EmergencyExitSelectorPosition.Value - 1) < 0.1, "emergency-exit arm")
             });
 
@@ -440,7 +441,7 @@ internal static class A320ProcedureLibrary
             "8. Cruise",
             new[]
             {
-                Observe("cruise-established", "Cruise established", state => !state.OnGround && state.AltitudeAboveGroundFeet >= 10000 && Math.Abs(state.VerticalSpeedFeetPerMinute) < 300),
+                Observe("cruise-established", "Cruise established", state => state.CruiseEstablished),
                 Observe(
                     "smooth-cruise",
                     "Smooth cruise conditions",
@@ -449,10 +450,9 @@ internal static class A320ProcedureLibrary
                              && Math.Abs(state.VerticalSpeedFeetPerMinute) < 300),
                 Automatic(
                     "fo-seatbelts-cruise",
-                    "Seatbelt signs OFF in smooth cruise",
-                    state => state.SeatbeltSelectorPosition.HasValue
-                             && Math.Abs(state.SeatbeltSelectorPosition.Value - 2) < 0.1,
-                    "seatbelts off")
+                    "Seatbelt selector remains AUTO",
+                    state => A320CabinSignProfile.IsAuto(state.SeatbeltSelectorPosition),
+                    A320CabinSignProfile.SeatbeltsAutoCommand)
             });
 
     public static ProcedureDefinition DescentPreparation { get; } =
@@ -497,18 +497,6 @@ internal static class A320ProcedureLibrary
                     state => state.IndicatedAltitudeFeet <= 10000,
                     CrewRole.FirstOfficer),
                 Automatic(
-                    "fo-landing-autobrake-low",
-                    "Landing auto-brake LOW",
-                    state => state.AutobrakeLevel.HasValue
-                             && Math.Abs(state.AutobrakeLevel.Value - 1) < 0.1,
-                    "autobrake low"),
-                Automatic(
-                    "fo-seatbelts-on",
-                    "Seatbelt signs ON",
-                    state => state.SeatbeltSelectorPosition.HasValue
-                             && Math.Abs(state.SeatbeltSelectorPosition.Value) < 0.1,
-                    "seatbelts on"),
-                Automatic(
                     "fo-landing-lights-on",
                     "Landing lights ON",
                     state => state.LeftLandingLightSelectorPosition.HasValue
@@ -516,6 +504,17 @@ internal static class A320ProcedureLibrary
                              && Math.Abs(state.LeftLandingLightSelectorPosition.Value) < 0.1
                              && Math.Abs(state.RightLandingLightSelectorPosition.Value) < 0.1,
                     "landing-lights on"),
+                Automatic(
+                    "fo-landing-autobrake-low",
+                    "Landing auto-brake LOW",
+                    state => state.AutobrakeLevel.HasValue
+                             && Math.Abs(state.AutobrakeLevel.Value - 1) < 0.1,
+                    "autobrake low"),
+                Automatic(
+                    "fo-seatbelts-auto-approach",
+                    "Seatbelt selector remains AUTO",
+                    state => A320CabinSignProfile.IsAuto(state.SeatbeltSelectorPosition),
+                    A320CabinSignProfile.SeatbeltsAutoCommand),
                 Automatic(
                     "fo-nose-light-takeoff",
                     "Nose light T.O.",
@@ -768,7 +767,7 @@ internal static class A320ProcedureLibrary
                     state => !state.BeaconOn,
                     "beacon off"),
                 Automatic("fo-fuel-pumps-off", "All six fuel pumps OFF", state => state.AllFuelPumpsOff, "fuel-pumps off"),
-                Automatic("fo-seatbelts-off", "Seatbelt signs OFF", state => state.SeatbeltSelectorPosition.HasValue && Math.Abs(state.SeatbeltSelectorPosition.Value - 2) < 0.1, "seatbelts off"),
+                Automatic("fo-seatbelts-auto-shutdown", "Seatbelt selector remains AUTO", state => A320CabinSignProfile.IsAuto(state.SeatbeltSelectorPosition), A320CabinSignProfile.SeatbeltsAutoCommand),
                 Manual("secure-decision", "Cold-and-dark secure requested", "Captain and First Officer: confirm continuation to final cold-and-dark secure.", CrewRole.Either),
                 Automatic(
                     "secure-oxygen",

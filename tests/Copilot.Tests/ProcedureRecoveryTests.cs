@@ -274,7 +274,7 @@ public sealed class ProcedureRecoveryTests
     }
 
     [TestMethod]
-    public void ApproachFlowDoesNotSetAutobrakeBeforeDescentGate()
+    public void ApproachFlowDoesNotConfigureAircraftBeforeDescentGate()
     {
         var commands = new List<string>();
         var runner = new ProcedureRunner(
@@ -286,7 +286,9 @@ public sealed class ProcedureRecoveryTests
             OnGround = false,
             VerticalSpeedFeetPerMinute = 0,
             IndicatedAltitudeFeet = 12000,
-            AutobrakeLevel = 0
+            AutobrakeLevel = 0,
+            LeftLandingLightSelectorPosition = 2,
+            RightLandingLightSelectorPosition = 2
         };
 
         runner.Start(A320ProcedureLibrary.ApproachAndLanding, state);
@@ -298,11 +300,11 @@ public sealed class ProcedureRecoveryTests
         state.IndicatedAltitudeFeet = 9500;
         runner.Update(state);
 
-        Assert.AreEqual("fo-landing-autobrake-low", runner.CurrentStep?.Id);
+        Assert.AreEqual("fo-landing-lights-on", runner.CurrentStep?.Id);
         Thread.Sleep(2600);
         runner.Update(state);
 
-        CollectionAssert.AreEqual(new[] { "autobrake low" }, commands);
+        CollectionAssert.AreEqual(new[] { "landing-lights on" }, commands);
     }
 
     [TestMethod]

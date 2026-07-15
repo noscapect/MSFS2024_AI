@@ -66,7 +66,7 @@ internal static class A321ChecklistLibrary
                 new ChecklistItem("Flaps", "RETRACTED", state => state.FlapsHandleIndex <= 0),
                 Unknown("Thrust", "CL")),
             Checklist("cruise", "Cruise Verification",
-                new ChecklistItem("Cruise", "ESTABLISHED", state => !state.OnGround && state.AltitudeAboveGroundFeet >= 10000 && Math.Abs(state.VerticalSpeedFeetPerMinute) < 300),
+                new ChecklistItem("Cruise", "ESTABLISHED", state => state.CruiseEstablished),
                 new ChecklistItem(
                     "Signs selectors",
                     "AUTO/AUTO",

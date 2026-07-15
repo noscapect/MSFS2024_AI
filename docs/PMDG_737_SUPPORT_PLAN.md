@@ -1,58 +1,73 @@
-# PMDG 737-800 support notes
+# PMDG 737-800 support status
 
-Goal: add PMDG 737-800 support without mixing Boeing procedures into the
-existing Airbus A320-family flow.
+Status: gate-to-gate implementation completed and live validated for v0.8.1.
 
-## Branch status
-
-Development branch: `feature/pmdg-737-800-support`.
-
-The app now detects the PMDG 737-800 as a separate Boeing aircraft family and
-loads a Boeing-specific 12-flow procedure/checklist set. The user still sees
-one app and one flow selector; the app chooses the Airbus or Boeing procedure
-catalog from the loaded aircraft title.
+The app detects the PMDG 737-800 as a separate Boeing aircraft profile and
+loads a Boeing-specific twelve-flow procedure and checklist set. The user sees
+the same application and flow selector used by supported Airbus aircraft, but
+the PMDG profile does not inherit Airbus cockpit commands or procedures.
 
 ## Required PMDG SDK setting
 
-PMDG exposes cockpit state through its NG3 SDK client-data channel. The PMDG
-package includes the official SDK header and sample under:
-
-`Community\pmdg-aircraft-738\Documentation\SDK`
-
-For live testing, enable the PMDG data broadcast in the aircraft options file:
+PMDG exposes authoritative cockpit state through its NG3 SDK client-data
+channel. Enable the data broadcast in the PMDG aircraft options file:
 
 ```ini
 [SDK]
 EnableDataBroadcast=1
 ```
 
-The app shows `PMDG SDK OK` when the `PMDG_NG3_Data` client-data broadcast is
-received. If it shows `PMDG SDK WAITING`, the aircraft can still expose some
-generic SimVars, but exact PMDG switch readback is not available yet.
+The dashboard shows `PMDG SDK OK` after `PMDG_NG3_Data` is received. Exact
+switch verification is unavailable while it shows `PMDG SDK WAITING`.
 
-## Implementation approach
+## Implementation boundary
 
-- Airbus procedure code remains in `A320ProcedureLibrary`.
-- Boeing procedure code lives separately in `B737ProcedureLibrary`.
-- Aircraft-family routing is centralized in `ProcedureCatalog`.
-- Boeing checklist verification lives in `B737ChecklistLibrary`.
-- PMDG SDK state is normalized into the existing `AircraftState` model where
-  concepts overlap: battery, ground power, IRS, APU, fuel pumps, lights,
-  signs, speedbrake, autobrake, gear, transponder and fire-test indicators.
-- PMDG commands use the official `PMDG_NG3_Control` client-data channel where
-  PMDG SDK events are known.
+- Boeing procedures live only in `B737ProcedureLibrary`.
+- Boeing checklist verification lives only in `B737ChecklistLibrary`.
+- `ProcedureCatalog` selects the PMDG catalog only for the explicit
+  `Pmdg737800` aircraft variant.
+- Every PMDG automatic procedure command uses the dedicated `pmdg` namespace.
+- PMDG switch state is read from `PMDG_NG3_Data`; controls use
+  `PMDG_NG3_Control` or Behavior Viewer-confirmed `ROTOR_BRAKE` events.
+- Released-aircraft tests verify dedicated routing, prohibit shared procedure
+  or step objects, prohibit shared Airbus/PMDG commands, and fingerprint every
+  PMDG step, role, command, manual instruction, and checklist item.
 
-## First live-test target
+This makes unrelated aircraft work fail regression testing if it changes the
+released PMDG flow contract. Shared transport or domain changes still require
+the complete test suite and proportional PMDG review before release.
 
-Start cold and dark at a gate and test through, but not including, takeoff:
+## Operational details
 
-1. 737 Power Up & Initial Setup
-2. 737 FMC & Pre-Flight
-3. 737 APU Start & Pushback
-4. 737 Engine Start Sequence
-5. 737 After Start & Taxi
-6. 737 Before Takeoff
+- Flow 1 performs the FAULT/INOP, OVHT/FIRE, extinguisher 1, and extinguisher 2
+  tests after electrical power is established. Spring-loaded controls are
+  held, full annunciator patterns and neutral release are verified, and the
+  master FIRE WARN light is pressed during OVHT/FIRE to verify bell cancel.
+- Electrical transfer verifies actual APU or engine-generator bus power before
+  ground power is removed.
+- Fuel-pump logic enables the four main pumps and enables center pumps only
+  when center-tank fuel requires them.
+- IRS, packs, isolation valve, hydraulics, lights, transponder/TCAS, flaps,
+  speedbrake, autobrake, and landing gear use PMDG-specific commands and
+  readbacks.
+- The approach schedule uses runway distance when available: Flaps 1 by 15 NM,
+  Flaps 5 at or inside 12 NM and at 190 knots or less, followed by dedicated
+  gear, Flaps 15, and landing-flap gates. Altitude gates are fallbacks only
+  when usable runway-distance data is unavailable.
+- Flow 11 retracts landing lights, selects steady position lights, turns the
+  taxi light on, keeps runway-turnoff lights on for taxi, stows speedbrake,
+  retracts flaps, starts the APU, and establishes APU bleed.
 
-Expect some PMDG event parameters to need live adjustment. The branch is
-structured so those fixes stay inside the Boeing/PMDG path and do not affect
-the iniBuilds or FlyByWire Airbus flows.
+## SimBrief behavior
+
+When an OFP is active, the PMDG profile receives the same route, runway, fuel,
+and cruise briefing as other aircraft. It also compares SimBrief V1, VR, and
+takeoff flap data with PMDG FMC TAKEOFF REF readback. These are advisory
+comparisons only; SimBrief never operates the FMC or blocks a flow.
+
+## Validation status
+
+All twelve PMDG flows have been exercised gate-to-gate in MSFS 2024. The v0.8.1
+release additionally includes regression coverage for the complete flow
+structure, fire-test sequence, approach scheduling, APU bus-power transfer,
+configuration detents, FMC landing data, and after-landing taxi-light action.

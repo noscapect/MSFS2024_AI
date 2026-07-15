@@ -1,8 +1,6 @@
 # FBW A32NX support notes
 
-Branch: `feature/fbw-a320neo-support`
-
-Status: merged for version 0.6.0.
+Status: released; original development completed for version 0.6.0.
 
 Goal: add FlyByWire A32NX support without destabilizing the iniBuilds A320neo
 V2 app.

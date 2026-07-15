@@ -45,6 +45,11 @@ if ([string]::IsNullOrWhiteSpace($version)) {
 }
 $tag = "v$version"
 
+$branch = git branch --show-current
+if ($LASTEXITCODE -ne 0 -or $branch -ne "main") {
+    throw "Releases must be published from the main branch (current: $branch)."
+}
+
 $status = git status --porcelain
 if ($LASTEXITCODE -ne 0) {
     throw "Git status failed."

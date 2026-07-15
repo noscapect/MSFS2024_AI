@@ -1,4 +1,5 @@
 using Microsoft.FlightSimulator.SimConnect;
+using Msfs2024Ai.Copilot.AircraftAdapters;
 using Msfs2024Ai.Copilot.AircraftAdapters.FbwA320;
 using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA320;
 using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA321;
@@ -2779,34 +2780,20 @@ internal sealed class CopilotService : Form
 
         var raw = (AircraftData)data.dwData[0];
         var approachDistance = ResolveApproachDistance(raw);
+        var aircraftVariant = AircraftVariantResolver.Resolve(
+            raw.Title,
+            EnableExperimentalFlyByWireA380X);
+        var isIniBuildsA330 = aircraftVariant == AircraftVariant.IniBuildsA330;
         var isIniBuildsAirbusFamily =
-            raw.Title.Equals("A320neo V2", StringComparison.OrdinalIgnoreCase)
-            || raw.Title.Equals("A321", StringComparison.OrdinalIgnoreCase)
-            || raw.Title.IndexOf("A321", StringComparison.OrdinalIgnoreCase) >= 0
-            || raw.Title.Equals("A330", StringComparison.OrdinalIgnoreCase)
-            || raw.Title.IndexOf("A330", StringComparison.OrdinalIgnoreCase) >= 0;
-        var isIniBuildsA330 =
-            raw.Title.Equals("A330", StringComparison.OrdinalIgnoreCase)
-            || raw.Title.IndexOf("A330", StringComparison.OrdinalIgnoreCase) >= 0;
-        var hasFlyByWireA380XSignature =
-            raw.Title.IndexOf("A380X", StringComparison.OrdinalIgnoreCase) >= 0
-            || raw.Title.IndexOf("A380-842", StringComparison.OrdinalIgnoreCase) >= 0
-            || raw.Title.IndexOf("A380", StringComparison.OrdinalIgnoreCase) >= 0
-            && raw.Title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0;
+            aircraftVariant is AircraftVariant.IniBuildsA320NeoV2
+                or AircraftVariant.IniBuildsA321Lr
+                or AircraftVariant.IniBuildsA330;
         var isFlyByWireA380X =
-            EnableExperimentalFlyByWireA380X && hasFlyByWireA380XSignature;
+            aircraftVariant == AircraftVariant.FlyByWireA380XExperimental;
         var isFlyByWireA320Neo =
-            !hasFlyByWireA380XSignature
-            && (raw.Title.IndexOf("A32NX", StringComparison.OrdinalIgnoreCase) >= 0
-                || raw.Title.IndexOf("A320", StringComparison.OrdinalIgnoreCase) >= 0
-                && raw.Title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0
-                || string.Equals(raw.Title, "FlyByWire A32NX", StringComparison.OrdinalIgnoreCase));
+            aircraftVariant == AircraftVariant.FlyByWireA320Neo;
         var isFlyByWireAirbus = isFlyByWireA320Neo || isFlyByWireA380X;
-        var isPmdg737 =
-            raw.Title.IndexOf("PMDG", StringComparison.OrdinalIgnoreCase) >= 0
-            && raw.Title.IndexOf("737", StringComparison.OrdinalIgnoreCase) >= 0
-            || raw.Title.IndexOf("737-800", StringComparison.OrdinalIgnoreCase) >= 0
-            || raw.Title.IndexOf("738", StringComparison.OrdinalIgnoreCase) >= 0;
+        var isPmdg737 = aircraftVariant == AircraftVariant.Pmdg737800;
         var pmdg = _pmdgNg3State;
         if (isFlyByWireAirbus)
         {

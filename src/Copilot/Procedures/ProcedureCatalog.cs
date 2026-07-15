@@ -1,3 +1,4 @@
+using Msfs2024Ai.Copilot.AircraftAdapters;
 using Msfs2024Ai.Copilot.Checklists;
 
 namespace Msfs2024Ai.Copilot.Procedures;
@@ -15,46 +16,54 @@ internal static class ProcedureCatalog
 
     private static AircraftProcedureLibrary ResolveLibrary(AircraftState? state)
     {
-        if (state?.IsSupportedBoeing737 == true)
+        if (state == null)
         {
-            return new AircraftProcedureLibrary(
-                B737ProcedureLibrary.GateToGate,
-                B737ProcedureLibrary.Find,
-                B737ChecklistLibrary.FindForProcedure);
+            return A320Library();
         }
 
-        if (state?.IsIniBuildsA330 == true)
+        switch (state.Variant)
         {
-            return new AircraftProcedureLibrary(
+            case AircraftVariant.Pmdg737800:
+                return new AircraftProcedureLibrary(
+                    B737ProcedureLibrary.GateToGate,
+                    B737ProcedureLibrary.Find,
+                    B737ChecklistLibrary.FindForProcedure);
+            case AircraftVariant.IniBuildsA330:
+                return new AircraftProcedureLibrary(
                 A330ProcedureLibrary.GateToGate,
                 A330ProcedureLibrary.Find,
                 A330ChecklistLibrary.FindForProcedure);
-        }
-
-        if (state?.IsIniBuildsA321Lr == true)
-        {
-            return new AircraftProcedureLibrary(
+            case AircraftVariant.IniBuildsA321Lr:
+                return new AircraftProcedureLibrary(
                 A321ProcedureLibrary.GateToGate,
                 A321ProcedureLibrary.Find,
                 A321ChecklistLibrary.FindForProcedure);
-        }
-
-        if (state?.IsFlyByWireA320Neo == true)
-        {
-            return new AircraftProcedureLibrary(
+            case AircraftVariant.FlyByWireA320Neo:
+                return new AircraftProcedureLibrary(
                 FbwA320ProcedureLibrary.GateToGate,
                 FbwA320ProcedureLibrary.Find,
                 FbwA320ChecklistLibrary.FindForProcedure);
+            case AircraftVariant.IniBuildsA320NeoV2:
+                return A320Library();
+            default:
+                return AircraftProcedureLibrary.Unsupported;
         }
+    }
 
-        return new AircraftProcedureLibrary(
+    private static AircraftProcedureLibrary A320Library() =>
+        new(
             A320ProcedureLibrary.GateToGate,
             A320ProcedureLibrary.Find,
             A320ChecklistLibrary.FindForProcedure);
-    }
 
     private sealed class AircraftProcedureLibrary
     {
+        public static AircraftProcedureLibrary Unsupported { get; } =
+            new(
+                Array.Empty<ProcedureDefinition>(),
+                _ => null,
+                _ => null);
+
         public AircraftProcedureLibrary(
             IReadOnlyList<ProcedureDefinition> procedures,
             Func<string, ProcedureDefinition?> findProcedure,

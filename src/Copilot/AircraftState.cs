@@ -1,3 +1,4 @@
+using Msfs2024Ai.Copilot.AircraftAdapters;
 using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA321;
 
 namespace Msfs2024Ai.Copilot;
@@ -203,16 +204,14 @@ internal sealed class AircraftState
     public bool AnyRequiredDoorOpen =>
         Exits.Any(exit => exit.IsRequiredDoor && exit.OpenPercent > 0.5);
 
-    public bool IsA320NeoV2 =>
-        string.Equals(Title, "A320neo V2", StringComparison.OrdinalIgnoreCase);
+    public AircraftVariant Variant =>
+        AircraftVariantResolver.Resolve(Title, EnableExperimentalFlyByWireA380X);
 
-    public bool IsIniBuildsA321Lr =>
-        string.Equals(Title, "A321", StringComparison.OrdinalIgnoreCase)
-        || Title.IndexOf("A321", StringComparison.OrdinalIgnoreCase) >= 0;
+    public bool IsA320NeoV2 => Variant == AircraftVariant.IniBuildsA320NeoV2;
 
-    public bool IsIniBuildsA330 =>
-        string.Equals(Title, "A330", StringComparison.OrdinalIgnoreCase)
-        || Title.IndexOf("A330", StringComparison.OrdinalIgnoreCase) >= 0;
+    public bool IsIniBuildsA321Lr => Variant == AircraftVariant.IniBuildsA321Lr;
+
+    public bool IsIniBuildsA330 => Variant == AircraftVariant.IniBuildsA330;
 
     public bool IsIniBuildsA320Family =>
         IsA320NeoV2 || IsIniBuildsA321Lr;
@@ -221,20 +220,11 @@ internal sealed class AircraftState
         IsIniBuildsA320Family || IsIniBuildsA330;
 
     public bool HasFlyByWireA380XSignature =>
-        Title.IndexOf("A380X", StringComparison.OrdinalIgnoreCase) >= 0
-        || Title.IndexOf("A380-842", StringComparison.OrdinalIgnoreCase) >= 0
-        || Title.IndexOf("A380", StringComparison.OrdinalIgnoreCase) >= 0
-        && Title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0;
+        AircraftVariantResolver.HasFlyByWireA380XSignature(Title);
 
-    public bool IsFlyByWireA380X =>
-        EnableExperimentalFlyByWireA380X && HasFlyByWireA380XSignature;
+    public bool IsFlyByWireA380X => Variant == AircraftVariant.FlyByWireA380XExperimental;
 
-    public bool IsFlyByWireA320Neo =>
-        !IsFlyByWireA380X
-        && (Title.IndexOf("A32NX", StringComparison.OrdinalIgnoreCase) >= 0
-            || Title.IndexOf("A320", StringComparison.OrdinalIgnoreCase) >= 0
-            && Title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0
-            || string.Equals(Title, "FlyByWire A32NX", StringComparison.OrdinalIgnoreCase));
+    public bool IsFlyByWireA320Neo => Variant == AircraftVariant.FlyByWireA320Neo;
 
     public bool IsFlyByWireAirbus =>
         IsFlyByWireA320Neo || IsFlyByWireA380X;
@@ -242,16 +232,9 @@ internal sealed class AircraftState
     public bool IsSupportedA320 =>
         IsIniBuildsAirbusFamily || IsFlyByWireAirbus;
 
-    public bool IsPmdg737 =>
-        Title.IndexOf("PMDG", StringComparison.OrdinalIgnoreCase) >= 0
-        && Title.IndexOf("737", StringComparison.OrdinalIgnoreCase) >= 0
-        || Title.IndexOf("737-800", StringComparison.OrdinalIgnoreCase) >= 0
-        || Title.IndexOf("738", StringComparison.OrdinalIgnoreCase) >= 0;
+    public bool IsPmdg737 => IsPmdg737800;
 
-    public bool IsPmdg737800 =>
-        IsPmdg737
-        && (Title.IndexOf("737-800", StringComparison.OrdinalIgnoreCase) >= 0
-            || Title.IndexOf("738", StringComparison.OrdinalIgnoreCase) >= 0);
+    public bool IsPmdg737800 => Variant == AircraftVariant.Pmdg737800;
 
     public bool IsSupportedBoeing737 => IsPmdg737800;
 

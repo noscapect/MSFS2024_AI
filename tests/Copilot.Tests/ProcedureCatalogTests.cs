@@ -169,8 +169,10 @@ public sealed class ProcedureCatalogTests
         Assert.IsFalse(state.IsFlyByWireA380X);
         Assert.IsFalse(state.IsFlyByWireAirbus);
         Assert.IsFalse(state.IsSupportedAircraft);
-        Assert.AreEqual("1. Power Up & Initial Setup", flows[0].Name);
-        Assert.AreEqual(A320ProcedureLibrary.GateToGate.Count, flows.Count);
+        Assert.AreEqual(
+            0,
+            flows.Count,
+            "Parked/unsupported aircraft must not inherit the A320 procedure library.");
     }
 
     [TestMethod]

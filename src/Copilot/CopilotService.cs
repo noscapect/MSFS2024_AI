@@ -4733,7 +4733,8 @@ internal sealed class CopilotService : Form
 
         _cruiseSeatbeltMonitoring =
             string.Equals(definition.Id, "cruise", StringComparison.OrdinalIgnoreCase)
-            && !_state.IsIniBuildsA321Lr;
+            && !_state.IsIniBuildsA321Lr
+            && !_state.IsA320NeoV2;
         _smoothCruiseSinceUtc = null;
         _nextCruiseSeatbeltCommandUtc = DateTime.MinValue;
         _procedureRunner.Start(definition, _state);

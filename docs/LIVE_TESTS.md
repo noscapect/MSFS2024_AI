@@ -1,5 +1,23 @@
 # Live test evidence
 
+## 2026-07-15 - PMDG 737-800 end-to-end validation complete
+
+The PMDG 737-800 has completed live testing of all twelve Boeing-specific
+flows from cold and dark through shutdown. The completed implementation uses
+PMDG NG3 SDK readbacks and PMDG/Behavior Viewer-confirmed controls for power,
+fire tests, IRS, pneumatics, engines, hydraulics, lights, TCAS, landing gear,
+flaps, speedbrake, autobrake, approach, and after-landing cleanup.
+
+Final corrections in the v0.8.1 validation cycle include the complete four-part
+fire-warning test with bell cancellation, position-and-speed-gated Flaps 5,
+and taxi-light selection immediately after leaving the runway. Released-profile
+tests freeze the twelve-flow structure and reject PMDG commands leaking into or
+from an Airbus procedure library.
+
+Result: **Flows 1 through 12 passed. PMDG 737-800 support is considered stable
+and protected from unrelated aircraft-development changes.** Future PMDG
+changes require explicit contract review and renewed affected-flow validation.
+
 ## 2026-07-13 - iniBuilds A321LR end-to-end validation complete
 
 The iniBuilds A321LR has now completed live testing of all twelve flows in the

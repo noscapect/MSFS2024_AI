@@ -6,8 +6,9 @@ profiles remain protected by their aircraft-specific regression tests.
 
 ## Current development
 
-1. SimBrief latest-OFP integration: first read-only import pass implemented;
-   live account/OFP validation and UX refinement remain.
+1. SimBrief latest-OFP integration is released as an optional read-only
+   operational briefing. Future work may add more advisory comparisons after
+   live validation, without allowing network data to control cockpit systems.
 
 ## Later enhancements
 

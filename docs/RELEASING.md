@@ -9,14 +9,15 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 The script:
 
-1. Reads the application version from `src/Copilot/Copilot.csproj`.
-2. Requires a clean Git working tree.
-3. Builds the Release application.
-4. Runs the automated tests.
-5. Packages the application and installation instructions.
-6. Generates a SHA-256 checksum.
-7. Creates and pushes the matching `vX.Y.Z` Git tag.
-8. Creates the public GitHub release and uploads both assets.
+1. Requires the checked-out branch to be `main`.
+2. Reads the application version from `src/Copilot/Copilot.csproj`.
+3. Requires a clean Git working tree.
+4. Builds the Release application.
+5. Runs the automated tests, including released-aircraft isolation contracts.
+6. Packages the application and installation instructions.
+7. Generates a SHA-256 checksum.
+8. Creates and pushes the matching `vX.Y.Z` Git tag.
+9. Creates the public GitHub release and uploads both assets.
 
 GitHub authentication is read from the existing Windows Git credential for
 `https://github.com`. The access token is never printed or written into the

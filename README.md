@@ -38,6 +38,8 @@ Captain actions, and speaks important callouts.
   MobiFlight
 - PMDG 737-800 aircraft-family routing, Boeing procedures and PMDG NG3 SDK
   state/control integration
+- Gate-to-gate live validation of all twelve PMDG 737-800 flows, protected by
+  dedicated routing, command-namespace, checklist, and flow-contract tests
 - Verification after every automatic aircraft action
 - Optional Windows offline voice callouts
 - Persistent preflight settings for V1, VR, and transition altitude
@@ -81,6 +83,11 @@ The iniBuilds A321LR profile has completed live validation of all twelve flows.
 Its procedures, checklists, flap mappings, and sign-selector policy are kept in
 an aircraft-specific profile and protected by regression tests. See
 [docs/A321_SUPPORT_STATUS.md](docs/A321_SUPPORT_STATUS.md).
+
+The PMDG 737-800 profile has also completed live validation of all twelve
+flows. Boeing procedures and commands remain isolated from every Airbus
+profile and are guarded by released-aircraft regression contracts. See
+[docs/PMDG_737_SUPPORT_PLAN.md](docs/PMDG_737_SUPPORT_PLAN.md).
 
 ## Supported aircraft
 
@@ -149,6 +156,14 @@ approach schedule and flow-handoff options. Completed recordings can be
 selected at the bottom of the dashboard and replayed at 10x speed; replay
 never transmits cockpit commands. Use `New flight / Reset progress` before a
 new sector when the previous flight's saved progress is still displayed.
+
+Use **Manage SimBrief** to configure a free SimBrief Pilot ID or username,
+import the latest generated OFP, review its operational briefing, and activate
+it for the current flight. Import is read-only and optional: it needs no API
+key or paid account, never writes to an aircraft FMC/MCDU, and never blocks a
+flow when SimBrief is unavailable. The active OFP provides route/runway,
+cruise, fuel, and takeoff-reference comparisons; PMDG flights additionally
+compare imported V1, VR, and flap data with the 737 FMC when available.
 
 Settings are stored in:
 

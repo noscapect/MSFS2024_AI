@@ -84,6 +84,38 @@ public sealed class AircraftIsolationTests
     }
 
     [TestMethod]
+    public void PmdgAutomaticActionsUseOnlyTheDedicatedPmdgCommandNamespace()
+    {
+        var commands = B737ProcedureLibrary.GateToGate
+            .SelectMany(procedure => procedure.Steps)
+            .Where(step => step.Kind == ProcedureStepKind.AutomaticAction)
+            .Select(step => step.Command)
+            .Where(command => !string.IsNullOrWhiteSpace(command))
+            .ToArray();
+
+        Assert.IsTrue(commands.Length > 0, "The PMDG profile must contain automatic actions.");
+        Assert.IsTrue(
+            commands.All(command => command!.StartsWith("pmdg ", StringComparison.Ordinal)),
+            "A PMDG automatic action escaped the dedicated 'pmdg' command namespace.");
+
+        var otherAircraftCommands = new[]
+            {
+                A320ProcedureLibrary.GateToGate,
+                A321ProcedureLibrary.GateToGate,
+                FbwA320ProcedureLibrary.GateToGate
+            }
+            .SelectMany(library => library)
+            .SelectMany(procedure => procedure.Steps)
+            .Select(step => step.Command)
+            .Where(command => !string.IsNullOrWhiteSpace(command))
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.IsFalse(
+            commands.Any(otherAircraftCommands.Contains),
+            "A PMDG automatic command is shared with a released Airbus profile.");
+    }
+
+    [TestMethod]
     public void UnsupportedAircraftCannotInheritA320Flows()
     {
         var state = new AircraftState { Title = "Future aircraft not yet implemented" };

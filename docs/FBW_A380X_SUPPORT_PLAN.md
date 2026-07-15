@@ -1,6 +1,7 @@
 # FBW A380X support notes
 
-Branch: `feature/fbw-a380-support`
+Status: parked research only. The public app keeps this aircraft hidden and
+unsupported until a future dedicated development effort is completed.
 
 Goal: add FlyByWire A380X support by reusing the proven FlyByWire Airbus
 adapter where the upstream A380X source shares A32NX local variables, while

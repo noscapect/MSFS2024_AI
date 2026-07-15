@@ -208,11 +208,13 @@ internal sealed class AircraftState
     public bool ApuFireTestCompleted { get; set; }
     public bool Engine1FireTestCompleted { get; set; }
     public bool Engine2FireTestCompleted { get; set; }
+    public bool PmdgFireFaultInopTestCompleted { get; set; }
     public bool PmdgFireOverheatTestCompleted { get; set; }
     public bool PmdgExtinguisherTest1Completed { get; set; }
     public bool PmdgExtinguisherTest2Completed { get; set; }
     public bool PmdgFireTestsCompleted =>
-        PmdgFireOverheatTestCompleted
+        PmdgFireFaultInopTestCompleted
+        && PmdgFireOverheatTestCompleted
         && PmdgExtinguisherTest1Completed
         && PmdgExtinguisherTest2Completed;
     public double? SeatbeltSelectorPosition { get; set; }

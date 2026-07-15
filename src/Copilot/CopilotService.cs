@@ -331,9 +331,14 @@ internal sealed class CopilotService : Form
     private bool _apuFireTestCompleted;
     private bool _engine1FireTestCompleted;
     private bool _engine2FireTestCompleted;
+    private bool _pmdgFireFaultInopTestCompleted;
     private bool _pmdgFireOverheatTestCompleted;
     private bool _pmdgExtinguisherTest1Completed;
     private bool _pmdgExtinguisherTest2Completed;
+    private bool _pmdgFireFaultInopActiveObserved;
+    private bool _pmdgFireOverheatActiveObserved;
+    private bool _pmdgExtinguisherTest1ActiveObserved;
+    private bool _pmdgExtinguisherTest2ActiveObserved;
     private System.Windows.Forms.Timer? _reconnectTimer;
     private bool _initialStateReceived;
     private bool _oneShotCommandExecuted;
@@ -945,9 +950,14 @@ internal sealed class CopilotService : Form
         public byte GearLever { get; set; }
         public bool ParkingBrakeAnnunciated { get; set; }
         public byte FireDetectionTestSwitch { get; set; }
+        public bool FireEngine1OverheatIlluminated { get; set; }
+        public bool FireEngine2OverheatIlluminated { get; set; }
         public bool FireHandle1Illuminated { get; set; }
         public bool FireHandleApuIlluminated { get; set; }
         public bool FireHandle2Illuminated { get; set; }
+        public bool FireWheelWellIlluminated { get; set; }
+        public bool FireFaultIlluminated { get; set; }
+        public bool FireApuDetectorInoperativeIlluminated { get; set; }
         public byte FireExtinguisherTestSwitch { get; set; }
         public bool FireExtinguisherTestLeft { get; set; }
         public bool FireExtinguisherTestRight { get; set; }
@@ -3533,6 +3543,7 @@ internal sealed class CopilotService : Form
             ApuFireTestCompleted = _apuFireTestCompleted,
             Engine1FireTestCompleted = _engine1FireTestCompleted,
             Engine2FireTestCompleted = _engine2FireTestCompleted,
+            PmdgFireFaultInopTestCompleted = _pmdgFireFaultInopTestCompleted,
             PmdgFireOverheatTestCompleted = _pmdgFireOverheatTestCompleted,
             PmdgExtinguisherTest1Completed = _pmdgExtinguisherTest1Completed,
             PmdgExtinguisherTest2Completed = _pmdgExtinguisherTest2Completed
@@ -4083,9 +4094,14 @@ internal sealed class CopilotService : Form
             GearLever = ByteAt(506),
             ParkingBrakeAnnunciated = BoolAt(574),
             FireDetectionTestSwitch = ByteAt(579),
+            FireEngine1OverheatIlluminated = BoolAt(577),
+            FireEngine2OverheatIlluminated = BoolAt(578),
             FireHandle1Illuminated = BoolAt(583),
             FireHandleApuIlluminated = BoolAt(584),
             FireHandle2Illuminated = BoolAt(585),
+            FireWheelWellIlluminated = BoolAt(586),
+            FireFaultIlluminated = BoolAt(587),
+            FireApuDetectorInoperativeIlluminated = BoolAt(588),
             FireExtinguisherTestSwitch = ByteAt(592),
             FireExtinguisherTestLeft = BoolAt(593),
             FireExtinguisherTestRight = BoolAt(594),
@@ -4597,14 +4613,17 @@ internal sealed class CopilotService : Form
             case "pmdg irs right nav":
                 SetPmdgIrsSelector(left: false, 2);
                 break;
+            case "pmdg fire-test fault-inop":
+                RunPmdgFireTest(696, 0, "FAULT/INOP detection", 3000);
+                break;
             case "pmdg fire-test overheat":
-                RunPmdgFireTest(696, 2, "fire/overheat detection", 2500);
+                RunPmdgFireTest(696, 2, "OVHT/FIRE detection", 5000);
                 break;
             case "pmdg fire-test extinguisher-1":
-                RunPmdgFireTest(715, 0, "extinguisher 1", 1500);
+                RunPmdgFireTest(715, 0, "extinguisher 1", 3000);
                 break;
             case "pmdg fire-test extinguisher-2":
-                RunPmdgFireTest(715, 2, "extinguisher 2", 1500);
+                RunPmdgFireTest(715, 2, "extinguisher 2", 3000);
                 break;
             case "pmdg logo on":
                 SetPmdgLogoLight(true);
@@ -5417,9 +5436,14 @@ internal sealed class CopilotService : Form
         _pmdgCommandedLandingLightUtc = null;
         _pmdgCommandedEmergencyExitSelector = null;
         _pmdgCommandedEmergencyExitUtc = null;
+        _pmdgFireFaultInopTestCompleted = false;
         _pmdgFireOverheatTestCompleted = false;
         _pmdgExtinguisherTest1Completed = false;
         _pmdgExtinguisherTest2Completed = false;
+        _pmdgFireFaultInopActiveObserved = false;
+        _pmdgFireOverheatActiveObserved = false;
+        _pmdgExtinguisherTest1ActiveObserved = false;
+        _pmdgExtinguisherTest2ActiveObserved = false;
 
         _fbwCommandedBattery1Auto = null;
         _fbwCommandedBattery2Auto = null;
@@ -5487,18 +5511,34 @@ internal sealed class CopilotService : Form
 
     private void ObservePmdgFireTests(PmdgNg3State state)
     {
-        var allFireHandlesLit = state.FireHandle1Illuminated
+        var fullOverheatFirePattern = state.FireHandle1Illuminated
             && state.FireHandleApuIlluminated
-            && state.FireHandle2Illuminated;
+            && state.FireHandle2Illuminated
+            && state.FireEngine1OverheatIlluminated
+            && state.FireEngine2OverheatIlluminated
+            && state.FireWheelWellIlluminated;
         var allExtinguisherLightsLit = state.FireExtinguisherTestLeft
             && state.FireExtinguisherTestRight
             && state.FireExtinguisherTestApu;
 
-        if (state.FireDetectionTestSwitch == 2 && allFireHandlesLit)
-            _pmdgFireOverheatTestCompleted = true;
+        if (state.FireDetectionTestSwitch == 0
+            && state.FireFaultIlluminated
+            && state.FireApuDetectorInoperativeIlluminated)
+            _pmdgFireFaultInopActiveObserved = true;
+        if (state.FireDetectionTestSwitch == 2 && fullOverheatFirePattern)
+            _pmdgFireOverheatActiveObserved = true;
         if (state.FireExtinguisherTestSwitch == 0 && allExtinguisherLightsLit)
-            _pmdgExtinguisherTest1Completed = true;
+            _pmdgExtinguisherTest1ActiveObserved = true;
         if (state.FireExtinguisherTestSwitch == 2 && allExtinguisherLightsLit)
+            _pmdgExtinguisherTest2ActiveObserved = true;
+
+        if (state.FireDetectionTestSwitch == 1 && _pmdgFireFaultInopActiveObserved)
+            _pmdgFireFaultInopTestCompleted = true;
+        if (state.FireDetectionTestSwitch == 1 && _pmdgFireOverheatActiveObserved)
+            _pmdgFireOverheatTestCompleted = true;
+        if (state.FireExtinguisherTestSwitch == 1 && _pmdgExtinguisherTest1ActiveObserved)
+            _pmdgExtinguisherTest1Completed = true;
+        if (state.FireExtinguisherTestSwitch == 1 && _pmdgExtinguisherTest2ActiveObserved)
             _pmdgExtinguisherTest2Completed = true;
     }
 

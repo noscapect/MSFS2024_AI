@@ -19,18 +19,19 @@ public sealed class ProcedureCatalogTests
     }
 
     [TestMethod]
-    public void Pmdg737PowerUpIncludesAllThreeVerifiedFireTests()
+    public void Pmdg737PowerUpIncludesAllFourVerifiedFireTests()
     {
         var flow = B737ProcedureLibrary.PowerUpAndInitialSetup;
         var fireSteps = flow.Steps.Where(step => step.Id.Contains("fire") || step.Id.Contains("extinguisher")).ToList();
 
         CollectionAssert.AreEqual(
-            new[] { "fo-fire-overheat-test", "fo-extinguisher-test-1", "fo-extinguisher-test-2" },
+            new[] { "fo-fire-fault-inop-test", "fo-fire-overheat-test", "fo-extinguisher-test-1", "fo-extinguisher-test-2" },
             fireSteps.Select(step => step.Id).ToArray());
         Assert.IsTrue(fireSteps.All(step => step.Command?.StartsWith("pmdg fire-test", StringComparison.Ordinal) == true));
-        Assert.IsTrue(fireSteps[0].IsComplete(new AircraftState { PmdgFireOverheatTestCompleted = true }));
-        Assert.IsTrue(fireSteps[1].IsComplete(new AircraftState { PmdgExtinguisherTest1Completed = true }));
-        Assert.IsTrue(fireSteps[2].IsComplete(new AircraftState { PmdgExtinguisherTest2Completed = true }));
+        Assert.IsTrue(fireSteps[0].IsComplete(new AircraftState { PmdgFireFaultInopTestCompleted = true }));
+        Assert.IsTrue(fireSteps[1].IsComplete(new AircraftState { PmdgFireOverheatTestCompleted = true }));
+        Assert.IsTrue(fireSteps[2].IsComplete(new AircraftState { PmdgExtinguisherTest1Completed = true }));
+        Assert.IsTrue(fireSteps[3].IsComplete(new AircraftState { PmdgExtinguisherTest2Completed = true }));
     }
 
     [TestMethod]

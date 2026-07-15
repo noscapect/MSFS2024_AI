@@ -2889,6 +2889,9 @@ internal sealed class CopilotService : Form
             || (pmdgApuAvailable
                 && _pmdgApuAvailableSinceUtc.HasValue
                 && nowUtc - _pmdgApuAvailableSinceUtc.Value >= PmdgApuBleedWarmup);
+        var approachSchedule = AircraftApproachProfiles.EffectiveSchedule(
+            raw.Title,
+            _settings.AircraftApproachOverrides);
 
         _state = new AircraftState
         {
@@ -3191,20 +3194,21 @@ internal sealed class CopilotService : Form
             TakeoffRotateSpeedKnots = _settings.TakeoffRotateSpeedKnots,
             ApproachDistanceToTouchdownNm = approachDistance.DistanceNm,
             ApproachDistanceSource = approachDistance.Source,
-            ApproachFlaps1DistanceNm = _settings.ApproachFlaps1DistanceNm,
-            ApproachFlaps1AltitudeFeet = _settings.ApproachFlaps1AltitudeFeet,
-            ApproachFlaps1SpeedKnots = _settings.ApproachFlaps1SpeedKnots,
-            ApproachFlaps2DistanceNm = _settings.ApproachFlaps2DistanceNm,
-            ApproachFlaps2AltitudeAglFeet = _settings.ApproachFlaps2AltitudeAglFeet,
-            ApproachFlaps2SpeedKnots = _settings.ApproachFlaps2SpeedKnots,
-            ApproachGearDistanceNm = _settings.ApproachGearDistanceNm,
-            ApproachGearAltitudeAglFeet = _settings.ApproachGearAltitudeAglFeet,
-            ApproachGearSpeedKnots = _settings.ApproachGearSpeedKnots,
-            ApproachLandingConfigDistanceNm = _settings.ApproachLandingConfigDistanceNm,
+            ApproachFlaps1DistanceNm = approachSchedule.Flaps1DistanceNm,
+            ApproachFlaps1AltitudeFeet = approachSchedule.Flaps1AltitudeFeet,
+            ApproachFlaps1SpeedKnots = approachSchedule.Flaps1SpeedKnots,
+            ApproachFlaps2DistanceNm = approachSchedule.Flaps2DistanceNm,
+            ApproachFlaps2AltitudeAglFeet = approachSchedule.Flaps2AltitudeAglFeet,
+            ApproachFlaps2SpeedKnots = approachSchedule.Flaps2SpeedKnots,
+            ApproachGearDistanceNm = approachSchedule.GearDistanceNm,
+            ApproachGearAltitudeAglFeet = approachSchedule.GearAltitudeAglFeet,
+            ApproachGearSpeedKnots = approachSchedule.GearSpeedKnots,
+            ApproachLandingConfigDistanceNm = approachSchedule.LandingConfigDistanceNm,
             ApproachLandingConfigAltitudeAglFeet =
-                _settings.ApproachLandingConfigAltitudeAglFeet,
+                approachSchedule.LandingConfigAltitudeAglFeet,
             ApproachLandingConfigSpeedKnots =
-                _settings.ApproachLandingConfigSpeedKnots,
+                approachSchedule.LandingConfigSpeedKnots,
+            ApproachFlapsFullSpeedKnots = approachSchedule.FlapsFullSpeedKnots,
             VerticalSpeedFeetPerMinute = raw.VerticalSpeed,
             GForce = raw.GForce,
             RadioHeightFeet = raw.RadioHeight,
@@ -9460,7 +9464,7 @@ internal sealed class CopilotService : Form
 
         var featureSettingsButton = new Button
         {
-            Text = "Approach & chaining settings",
+            Text = "Approach profile & chaining",
             AutoSize = true,
             Margin = new Padding(18, 2, 0, 0)
         };
@@ -10220,9 +10224,9 @@ internal sealed class CopilotService : Form
     {
         using var dialog = new Form
         {
-            Text = "Approach schedule and flow chaining",
-            Width = 540,
-            Height = 650,
+            Text = "Aircraft approach profile and flow chaining",
+            Width = 590,
+            Height = 720,
             StartPosition = FormStartPosition.CenterParent,
             FormBorderStyle = FormBorderStyle.FixedDialog,
             MaximizeBox = false,
@@ -10239,6 +10243,49 @@ internal sealed class CopilotService : Form
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 90));
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 60));
         dialog.Controls.Add(layout);
+
+        _settings.AircraftApproachOverrides ??= new List<AircraftApproachOverride>();
+        var aircraftProfile = AircraftApproachProfiles.Resolve(_state?.Title);
+        var savedOverride = _settings.AircraftApproachOverrides.LastOrDefault(item =>
+            string.Equals(item.ProfileKey, aircraftProfile.Key, StringComparison.OrdinalIgnoreCase));
+        var standardSchedule = aircraftProfile.StandardSchedule.Clone();
+        var displayedSchedule = (savedOverride?.Schedule ?? standardSchedule).Clone();
+
+        var profileRow = layout.RowCount++;
+        var profileLabel = new Label
+        {
+            Text = $"Loaded aircraft profile: {aircraftProfile.DisplayName}\n" +
+                   (savedOverride == null
+                       ? "Using the built-in standard baseline."
+                       : "Using a saved airline-specific override."),
+            AutoSize = true,
+            Font = new System.Drawing.Font(Font.FontFamily, 9, System.Drawing.FontStyle.Bold),
+            Margin = new Padding(0, 0, 0, 8)
+        };
+        layout.Controls.Add(profileLabel, 0, profileRow);
+        layout.SetColumnSpan(profileLabel, 3);
+
+        var noteRow = layout.RowCount++;
+        var profileNote = new Label
+        {
+            Text = "The baseline changes automatically with the detected aircraft. Airline, runway, weather and ATC procedures can differ; enable an override to save your own SOP for this aircraft only.",
+            AutoSize = true,
+            MaximumSize = new System.Drawing.Size(530, 0),
+            Margin = new Padding(0, 0, 0, 10)
+        };
+        layout.Controls.Add(profileNote, 0, noteRow);
+        layout.SetColumnSpan(profileNote, 3);
+
+        var overrideRow = layout.RowCount++;
+        var useOverride = new CheckBox
+        {
+            Text = $"Use airline-specific override for {aircraftProfile.DisplayName}",
+            Checked = savedOverride != null,
+            AutoSize = true,
+            Margin = new Padding(0, 4, 0, 10)
+        };
+        layout.Controls.Add(useOverride, 0, overrideRow);
+        layout.SetColumnSpan(useOverride, 3);
 
         NumericUpDown AddNumber(string label, int value, int minimum, int maximum, string unit)
         {
@@ -10270,40 +10317,61 @@ internal sealed class CopilotService : Form
 
         var flapDistance = AddNumber(
             "Flaps 1 target distance",
-            _settings.ApproachFlaps1DistanceNm, 3, 30, "NM");
+            displayedSchedule.Flaps1DistanceNm, 3, 30, "NM");
         var flapAltitude = AddNumber(
             "Flaps 1 maximum indicated altitude",
-            _settings.ApproachFlaps1AltitudeFeet, 1000, 20000, "ft");
+            displayedSchedule.Flaps1AltitudeFeet, 1000, 20000, "ft");
         var flapSpeed = AddNumber(
             "Flaps 1 max command speed",
-            _settings.ApproachFlaps1SpeedKnots, 100, 250, "kt");
+            displayedSchedule.Flaps1SpeedKnots, 100, 250, "kt");
         var flap2Distance = AddNumber(
             "Flaps 2 target distance",
-            _settings.ApproachFlaps2DistanceNm, 2, 25, "NM");
+            displayedSchedule.Flaps2DistanceNm, 2, 25, "NM");
         var flap2Altitude = AddNumber(
             "Flaps 2 maximum radio altitude",
-            _settings.ApproachFlaps2AltitudeAglFeet, 1000, 8000, "ft");
+            displayedSchedule.Flaps2AltitudeAglFeet, 1000, 8000, "ft");
         var flap2Speed = AddNumber(
             "Flaps 2 max command speed",
-            _settings.ApproachFlaps2SpeedKnots, 100, 230, "kt");
+            displayedSchedule.Flaps2SpeedKnots, 100, 230, "kt");
         var gearDistance = AddNumber(
             "Gear-down target distance",
-            _settings.ApproachGearDistanceNm, 2, 20, "NM");
+            displayedSchedule.GearDistanceNm, 2, 20, "NM");
         var gearAltitude = AddNumber(
             "Gear-down maximum radio altitude",
-            _settings.ApproachGearAltitudeAglFeet, 500, 5000, "ft");
+            displayedSchedule.GearAltitudeAglFeet, 500, 5000, "ft");
         var gearSpeed = AddNumber(
             "Gear-down target speed",
-            _settings.ApproachGearSpeedKnots, 100, 250, "kt");
+            displayedSchedule.GearSpeedKnots, 100, 250, "kt");
         var landingDistance = AddNumber(
             "Landing configuration target distance",
-            _settings.ApproachLandingConfigDistanceNm, 1, 15, "NM");
+            displayedSchedule.LandingConfigDistanceNm, 1, 15, "NM");
         var landingAltitude = AddNumber(
             "Landing configuration maximum radio altitude",
-            _settings.ApproachLandingConfigAltitudeAglFeet, 300, 3000, "ft");
+            displayedSchedule.LandingConfigAltitudeAglFeet, 300, 3000, "ft");
         var landingSpeed = AddNumber(
             "Landing config max command speed",
-            _settings.ApproachLandingConfigSpeedKnots, 100, 220, "kt");
+            displayedSchedule.LandingConfigSpeedKnots, 100, 220, "kt");
+        var flapsFullSpeed = AddNumber(
+            "Flaps FULL max command speed",
+            displayedSchedule.FlapsFullSpeedKnots, 100, 220, "kt");
+
+        var scheduleBoxes = new[]
+        {
+            flapDistance, flapAltitude, flapSpeed,
+            flap2Distance, flap2Altitude, flap2Speed,
+            gearDistance, gearAltitude, gearSpeed,
+            landingDistance, landingAltitude, landingSpeed, flapsFullSpeed
+        };
+        void UpdateScheduleEditing()
+        {
+            foreach (var box in scheduleBoxes) box.Enabled = useOverride.Checked;
+            profileLabel.Text = $"Loaded aircraft profile: {aircraftProfile.DisplayName}\n" +
+                (useOverride.Checked
+                    ? "Airline-specific override enabled."
+                    : "Using the built-in standard baseline.");
+        }
+        useOverride.CheckedChanged += (_, _) => UpdateScheduleEditing();
+        UpdateScheduleEditing();
 
         CheckBox AddCheck(string text, bool value)
         {
@@ -10341,25 +10409,23 @@ internal sealed class CopilotService : Form
             AutoSize = true
         };
         var save = new Button { Text = "Save", DialogResult = DialogResult.OK };
-        var defaults = new Button { Text = "Restore standard" };
+        var defaults = new Button { Text = "Use aircraft standard" };
         defaults.Click += (_, _) =>
         {
-            flapDistance.Value = 15;
-            flapAltitude.Value = 10000;
-            flapSpeed.Value = 230;
-            flap2Distance.Value = 10;
-            flap2Altitude.Value = 4000;
-            flap2Speed.Value = 200;
-            gearDistance.Value = 7;
-            gearAltitude.Value = 2500;
-            gearSpeed.Value = 210;
-            landingDistance.Value = 5;
-            landingAltitude.Value = 1800;
-            landingSpeed.Value = 185;
-            earlierChains.Checked = false;
-            flow6Chain.Checked = true;
-            flow10Chain.Checked = true;
-            flow11Chain.Checked = true;
+            useOverride.Checked = false;
+            flapDistance.Value = standardSchedule.Flaps1DistanceNm;
+            flapAltitude.Value = standardSchedule.Flaps1AltitudeFeet;
+            flapSpeed.Value = standardSchedule.Flaps1SpeedKnots;
+            flap2Distance.Value = standardSchedule.Flaps2DistanceNm;
+            flap2Altitude.Value = standardSchedule.Flaps2AltitudeAglFeet;
+            flap2Speed.Value = standardSchedule.Flaps2SpeedKnots;
+            gearDistance.Value = standardSchedule.GearDistanceNm;
+            gearAltitude.Value = standardSchedule.GearAltitudeAglFeet;
+            gearSpeed.Value = standardSchedule.GearSpeedKnots;
+            landingDistance.Value = standardSchedule.LandingConfigDistanceNm;
+            landingAltitude.Value = standardSchedule.LandingConfigAltitudeAglFeet;
+            landingSpeed.Value = standardSchedule.LandingConfigSpeedKnots;
+            flapsFullSpeed.Value = standardSchedule.FlapsFullSpeedKnots;
         };
         buttons.Controls.Add(save);
         buttons.Controls.Add(defaults);
@@ -10373,25 +10439,41 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        _settings.ApproachFlaps1DistanceNm = (int)flapDistance.Value;
-        _settings.ApproachFlaps1AltitudeFeet = (int)flapAltitude.Value;
-        _settings.ApproachFlaps1SpeedKnots = (int)flapSpeed.Value;
-        _settings.ApproachFlaps2DistanceNm = (int)flap2Distance.Value;
-        _settings.ApproachFlaps2AltitudeAglFeet = (int)flap2Altitude.Value;
-        _settings.ApproachFlaps2SpeedKnots = (int)flap2Speed.Value;
-        _settings.ApproachGearDistanceNm = (int)gearDistance.Value;
-        _settings.ApproachGearAltitudeAglFeet = (int)gearAltitude.Value;
-        _settings.ApproachGearSpeedKnots = (int)gearSpeed.Value;
-        _settings.ApproachLandingConfigDistanceNm = (int)landingDistance.Value;
-        _settings.ApproachLandingConfigAltitudeAglFeet = (int)landingAltitude.Value;
-        _settings.ApproachLandingConfigSpeedKnots = (int)landingSpeed.Value;
+        _settings.AircraftApproachOverrides.RemoveAll(item =>
+            string.Equals(item.ProfileKey, aircraftProfile.Key, StringComparison.OrdinalIgnoreCase));
+        if (useOverride.Checked)
+        {
+            _settings.AircraftApproachOverrides.Add(new AircraftApproachOverride
+            {
+                ProfileKey = aircraftProfile.Key,
+                Schedule = new ApproachScheduleSettings
+                {
+                    Flaps1DistanceNm = (int)flapDistance.Value,
+                    Flaps1AltitudeFeet = (int)flapAltitude.Value,
+                    Flaps1SpeedKnots = (int)flapSpeed.Value,
+                    Flaps2DistanceNm = (int)flap2Distance.Value,
+                    Flaps2AltitudeAglFeet = (int)flap2Altitude.Value,
+                    Flaps2SpeedKnots = (int)flap2Speed.Value,
+                    GearDistanceNm = (int)gearDistance.Value,
+                    GearAltitudeAglFeet = (int)gearAltitude.Value,
+                    GearSpeedKnots = (int)gearSpeed.Value,
+                    LandingConfigDistanceNm = (int)landingDistance.Value,
+                    LandingConfigAltitudeAglFeet = (int)landingAltitude.Value,
+                    LandingConfigSpeedKnots = (int)landingSpeed.Value,
+                    FlapsFullSpeedKnots = (int)flapsFullSpeed.Value
+                }
+            });
+        }
         _settings.AutoChainEarlierFlows = earlierChains.Checked;
         _settings.AutoChainFlow6To7 = flow6Chain.Checked;
         _settings.AutoChainFlow10To11 = flow10Chain.Checked;
         _settings.AutoChainFlow11To12 = flow11Chain.Checked;
         SettingsStore.Save(_settings);
         ApplyApproachSettingsToState();
-        AppendDashboardLog("Approach schedule and flow chaining settings saved.");
+        AppendDashboardLog(
+            useOverride.Checked
+                ? $"Airline-specific approach override saved for {aircraftProfile.DisplayName}."
+                : $"Aircraft-standard approach profile restored for {aircraftProfile.DisplayName}.");
     }
 
     private void ApplyApproachSettingsToState()
@@ -10400,21 +10482,25 @@ internal sealed class CopilotService : Form
         {
             return;
         }
-        _state.ApproachFlaps1DistanceNm = _settings.ApproachFlaps1DistanceNm;
-        _state.ApproachFlaps1AltitudeFeet = _settings.ApproachFlaps1AltitudeFeet;
-        _state.ApproachFlaps1SpeedKnots = _settings.ApproachFlaps1SpeedKnots;
-        _state.ApproachFlaps2DistanceNm = _settings.ApproachFlaps2DistanceNm;
-        _state.ApproachFlaps2AltitudeAglFeet = _settings.ApproachFlaps2AltitudeAglFeet;
-        _state.ApproachFlaps2SpeedKnots = _settings.ApproachFlaps2SpeedKnots;
-        _state.ApproachGearDistanceNm = _settings.ApproachGearDistanceNm;
-        _state.ApproachGearAltitudeAglFeet = _settings.ApproachGearAltitudeAglFeet;
-        _state.ApproachGearSpeedKnots = _settings.ApproachGearSpeedKnots;
+        var schedule = AircraftApproachProfiles.EffectiveSchedule(
+            _state.Title,
+            _settings.AircraftApproachOverrides);
+        _state.ApproachFlaps1DistanceNm = schedule.Flaps1DistanceNm;
+        _state.ApproachFlaps1AltitudeFeet = schedule.Flaps1AltitudeFeet;
+        _state.ApproachFlaps1SpeedKnots = schedule.Flaps1SpeedKnots;
+        _state.ApproachFlaps2DistanceNm = schedule.Flaps2DistanceNm;
+        _state.ApproachFlaps2AltitudeAglFeet = schedule.Flaps2AltitudeAglFeet;
+        _state.ApproachFlaps2SpeedKnots = schedule.Flaps2SpeedKnots;
+        _state.ApproachGearDistanceNm = schedule.GearDistanceNm;
+        _state.ApproachGearAltitudeAglFeet = schedule.GearAltitudeAglFeet;
+        _state.ApproachGearSpeedKnots = schedule.GearSpeedKnots;
         _state.ApproachLandingConfigDistanceNm =
-            _settings.ApproachLandingConfigDistanceNm;
+            schedule.LandingConfigDistanceNm;
         _state.ApproachLandingConfigAltitudeAglFeet =
-            _settings.ApproachLandingConfigAltitudeAglFeet;
+            schedule.LandingConfigAltitudeAglFeet;
         _state.ApproachLandingConfigSpeedKnots =
-            _settings.ApproachLandingConfigSpeedKnots;
+            schedule.LandingConfigSpeedKnots;
+        _state.ApproachFlapsFullSpeedKnots = schedule.FlapsFullSpeedKnots;
     }
 
     private void RefreshReplayFlightList()

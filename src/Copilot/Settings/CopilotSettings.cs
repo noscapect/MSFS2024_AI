@@ -24,6 +24,7 @@ public sealed class CopilotSettings
     public int ApproachLandingConfigDistanceNm { get; set; } = 5;
     public int ApproachLandingConfigAltitudeAglFeet { get; set; } = 1800;
     public int ApproachLandingConfigSpeedKnots { get; set; } = 185;
+    public List<AircraftApproachOverride> AircraftApproachOverrides { get; set; } = new();
     public bool AutoChainEarlierFlows { get; set; }
     public bool AutoChainFlow6To7 { get; set; } = true;
     public bool AutoChainFlow10To11 { get; set; } = true;

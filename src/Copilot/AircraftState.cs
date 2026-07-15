@@ -114,14 +114,11 @@ internal sealed class AircraftState
     public int ApproachLandingConfigDistanceNm { get; set; } = 5;
     public int ApproachLandingConfigAltitudeAglFeet { get; set; } = 1800;
     public int ApproachLandingConfigSpeedKnots { get; set; } = 185;
-    public int EffectiveApproachFlaps1SpeedKnots =>
-        IsIniBuildsA321Lr ? 230 : ApproachFlaps1SpeedKnots;
-    public int EffectiveApproachFlaps2SpeedKnots =>
-        IsIniBuildsA321Lr ? 215 : ApproachFlaps2SpeedKnots;
-    public int EffectiveApproachFlaps3SpeedKnots =>
-        IsIniBuildsA321Lr ? 195 : ApproachLandingConfigSpeedKnots;
-    public int EffectiveApproachFlapsFullSpeedKnots =>
-        IsIniBuildsA321Lr ? 186 : ApproachLandingConfigSpeedKnots;
+    public int ApproachFlapsFullSpeedKnots { get; set; } = 185;
+    public int EffectiveApproachFlaps1SpeedKnots => ApproachFlaps1SpeedKnots;
+    public int EffectiveApproachFlaps2SpeedKnots => ApproachFlaps2SpeedKnots;
+    public int EffectiveApproachFlaps3SpeedKnots => ApproachLandingConfigSpeedKnots;
+    public int EffectiveApproachFlapsFullSpeedKnots => ApproachFlapsFullSpeedKnots;
     public double VerticalSpeedFeetPerMinute { get; set; }
     public double GForce { get; set; }
     public double RadioHeightFeet { get; set; }

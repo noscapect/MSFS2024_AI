@@ -46,6 +46,8 @@ Captain actions, and speaks important callouts.
   imported takeoff values are applied
 - A distance-aware standard approach schedule that can be overridden for flap,
   gear, and landing-configuration gates
+- Aircraft-specific standard approach profiles selected automatically for the
+  loaded aircraft, with separately saved airline-SOP overrides per profile
 - Configurable automatic chaining between Flow 6 to 7, Flow 10 to 11, Flow 11
   to 12, and optional earlier-flow handoffs
 - One-second flight telemetry recording with 10x replay for procedure testing;

@@ -1,5 +1,6 @@
 using Microsoft.FlightSimulator.SimConnect;
 using Msfs2024Ai.Copilot.AircraftAdapters.FbwA320;
+using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA320;
 using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA321;
 using Msfs2024Ai.Copilot.AircraftIdentity;
 using Msfs2024Ai.Copilot.Checklists;
@@ -2205,12 +2206,11 @@ internal sealed class CopilotService : Form
             "MF.SimVars.Add.(L:INI_OVHD_ELEC_BAT_1_PB_IS_AUTO_SWITCH)");
         SendMobiFlightRuntimeCommand(
             "MF.SimVars.Add.(L:INI_OVHD_ELEC_BAT_2_PB_IS_AUTO_SWITCH)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_OUTER_TANK_LEFT_PUMP_ON)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_INNER_TANK_LEFT_PUMP_ON)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_CENTER_TANK_LEFT_PUMP_ON)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_CENTER_TANK_RIGHT_PUMP_ON)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_INNER_TANK_RIGHT_PUMP_ON)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_OUTER_TANK_RIGHT_PUMP_ON)");
+        foreach (var pump in A320FuelPumpProfile.Pumps)
+        {
+            SendMobiFlightRuntimeCommand(
+                $"MF.SimVars.Add.(L:{pump.ReadbackLVar})");
+        }
         SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_LOGO_LIGHT_SWITCH)");
         SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_APU_AVAILABLE)");
         SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_APU_MASTER_SWITCH)");
@@ -6113,6 +6113,11 @@ internal sealed class CopilotService : Form
 
     private void SetFuelPumps(bool desiredOn)
     {
+        if (_state?.IsA320NeoV2 == true)
+        {
+            SetIniBuildsA320FuelPumps(desiredOn);
+            return;
+        }
         if (_state?.IsFlyByWireAirbus == true)
         {
             SetFlyByWireFuelPumps(desiredOn);
@@ -6181,6 +6186,61 @@ internal sealed class CopilotService : Form
                     index + 1,
                     $"(L:{selectors[index]}) ! (>L:{selectors[index]}) " +
                     $"(L:{pressStates[index]}) ! (>L:{pressStates[index]})"));
+        }
+
+        _pendingFuelPumpSequence = new PendingFuelPumpSequence(toggles, desiredOn);
+        _fuelPumpSequenceTimer?.Dispose();
+        _fuelPumpSequenceTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+        _fuelPumpSequenceTimer.Tick += (_, _) => ExecuteNextFuelPumpToggle();
+        ExecuteNextFuelPumpToggle();
+    }
+
+    private void SetIniBuildsA320FuelPumps(bool desiredOn)
+    {
+        if (_state?.IsA320NeoV2 != true)
+        {
+            AppendDashboardLog(
+                "A320 fuel pumps blocked: the loaded aircraft is not the iniBuilds A320neo V2.");
+            FinishOneShot(3);
+            return;
+        }
+        if (!ValidateNativeInputAction("A320 fuel pumps"))
+        {
+            return;
+        }
+
+        var states = new[]
+        {
+            _state.FuelPump1State,
+            _state.FuelPump2State,
+            _state.FuelPump3State,
+            _state.FuelPump4State,
+            _state.FuelPump5State,
+            _state.FuelPump6State
+        };
+        var alreadyDesired = desiredOn
+            ? A320FuelPumpProfile.AreConfigured(states)
+            : A320FuelPumpProfile.AreAllOff(states);
+        if (alreadyDesired)
+        {
+            AppendDashboardLog(
+                $"A320 fuel pumps already {(desiredOn ? "ON" : "OFF")}.");
+            FinishOneShot();
+            return;
+        }
+
+        var toggles = new Queue<FuelPumpToggle>();
+        for (var index = 0; index < states.Length; index++)
+        {
+            if (A320FuelPumpProfile.IsOn(states[index]) == desiredOn)
+            {
+                continue;
+            }
+
+            toggles.Enqueue(
+                new FuelPumpToggle(
+                    index + 1,
+                    A320FuelPumpProfile.BuildToggleCommand(index)));
         }
 
         _pendingFuelPumpSequence = new PendingFuelPumpSequence(toggles, desiredOn);
@@ -11232,6 +11292,7 @@ internal sealed class CopilotService : Form
         Console.WriteLine("MSFS closed the SimConnect session.");
         AppLog.Write("MSFS closed the SimConnect session.");
         _mobiFlightReady = false;
+        ResetMobiFlightRuntimeAfterDisconnect();
         _simConnect?.Dispose();
         _simConnect = null;
         if (_connectionLabel != null)
@@ -11240,6 +11301,58 @@ internal sealed class CopilotService : Form
             _connectionLabel.ForeColor = System.Drawing.Color.DarkRed;
         }
         ScheduleReconnect();
+    }
+
+    private void ResetMobiFlightRuntimeAfterDisconnect()
+    {
+        // The WASM module survives a simulator connection restart, but this
+        // SimConnect client's data definitions do not. Force the complete
+        // runtime client and ordered SimVar table to be recreated after every
+        // reconnect instead of accepting values left from the previous
+        // session as current aircraft readback.
+        _mobiFlightRuntimeReady = false;
+        _mobiFlightRuntimeInitializedUtc = null;
+
+        _nativeBattery1On = null;
+        _nativeBattery2On = null;
+        _nativeFuelPump1 = null;
+        _nativeFuelPump2 = null;
+        _nativeFuelPump3 = null;
+        _nativeFuelPump4 = null;
+        _nativeFuelPump5 = null;
+        _nativeFuelPump6 = null;
+        _nativeNavLogoSelectorPosition = null;
+        _nativeApuAvailable = null;
+        _nativeApuMasterSwitch = null;
+        _nativeApuStartButton = null;
+        _nativeApuBleedButton = null;
+        _nativeApuGeneratorOn = null;
+        _nativeApuFlapPercent = null;
+        _nativeAdirs1State = null;
+        _nativeAdirs2State = null;
+        _nativeAdirs3State = null;
+        _nativeAdirsOnBattery = null;
+        _nativeCrewOxygen = null;
+        _nativeStrobeSelector = null;
+        _nativeSeatbeltSelector = null;
+        _nativeSeatbeltSignsOn = null;
+        _nativeNoSmokingSelector = null;
+        _nativeNoSmokingSignsOn = null;
+        _nativeEmergencyExitSelector = null;
+        _nativeSpoilersArmed = null;
+        _nativeAutobrakeLevel = null;
+        _nativeTcasAltitudeReporting = null;
+        _nativeGearHandlePosition = null;
+        _nativeWeatherRadarPwsSelector = null;
+        _nativeNoseLightSelector = null;
+        _nativeLeftLandingLightSelector = null;
+        _nativeRightLandingLightSelector = null;
+        _nativeTransponderAtcState = null;
+        _nativeTcasMode = null;
+        _nativeTransponderStandby = null;
+
+        AppLog.Write(
+            "MobiFlight runtime state cleared; full native readback registration required after reconnect.");
     }
 
     protected override void Dispose(bool disposing)

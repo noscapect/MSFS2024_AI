@@ -47,6 +47,9 @@ generic SimVars, but exact PMDG switch readback is not available yet.
   usable runway-distance readback exists. Gear, Flaps 15, and landing flaps
   then continue through their separate distance/AGL and speed gates so the
   aircraft is configured by the stabilized-approach gate.
+- After landing, once reverse is stowed and taxi speed is reached, Flow 11
+  retracts the landing lights, selects steady position lights, turns the taxi
+  light on, and keeps the runway-turnoff lights on for taxi to the stand.
 - Flow 1 performs and independently verifies the FAULT/INOP and OVHT/FIRE
   detection tests plus both extinguisher tests after electrical power is
   established. Each spring-loaded control is held, its complete annunciator

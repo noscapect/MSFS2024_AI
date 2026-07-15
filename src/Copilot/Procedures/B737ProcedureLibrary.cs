@@ -346,6 +346,7 @@ internal static class B737ProcedureLibrary
                 Observe("taxi-speed", "Taxi speed at or below 30 knots", state => state.OnGround && state.GroundSpeedKnots <= 30),
                 Automatic("fo-landing-lights-off", "Landing lights RETRACT", state => state.LeftLandingLightSelectorPosition == 0 && state.RightLandingLightSelectorPosition == 0, "pmdg landing-lights off", requireCommandExecution: true),
                 Automatic("fo-strobes-off", "Position lights STEADY", state => state.StrobeSelectorPosition.HasValue && Math.Abs(state.StrobeSelectorPosition.Value - 1) < 0.1, "pmdg strobes off"),
+                Automatic("fo-taxi-light-on", "Taxi light ON", state => state.NoseLightSelectorPosition.HasValue && state.NoseLightSelectorPosition.Value < 1.5, "pmdg taxi-light on"),
                 Automatic("fo-runway-turnoff-on", "Runway turnoff lights ON for taxi", state => state.RunwayTurnoffLightsOn, "pmdg runway-turnoff on"),
                 Automatic("fo-spoilers-down", "Speedbrake down", state => !state.GroundSpoilersArmed && !state.GroundSpoilersDeployed, "pmdg spoilers down"),
                 Automatic("fo-flaps-up", "Flaps UP", state => state.FlapsHandleIndex <= 0, "pmdg flaps clean"),

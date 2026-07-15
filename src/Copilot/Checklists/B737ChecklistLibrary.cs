@@ -57,6 +57,7 @@ internal static class B737ChecklistLibrary
                 new ChecklistItem("Speedbrake", "ARMED", state => state.GroundSpoilersArmed),
                 Unknown("Landing checklist", "COMPLETE")),
             Checklist("after-landing-taxi", "737 After Landing & Taxi Verification",
+                new ChecklistItem("Taxi light", "ON", state => state.NoseLightSelectorPosition.HasValue ? state.NoseLightSelectorPosition.Value < 1.5 : null),
                 new ChecklistItem("Flaps", "UP", state => state.FlapsHandleIndex <= 0),
                 new ChecklistItem("Speedbrake", "DOWN", state => !state.GroundSpoilersArmed && !state.GroundSpoilersDeployed),
                 new ChecklistItem("APU bleed", "ON", state => state.ApuBleedOn),

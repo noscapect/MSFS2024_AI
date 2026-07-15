@@ -65,6 +65,17 @@ public sealed class ProcedureCatalogTests
     }
 
     [TestMethod]
+    public void Pmdg737AfterLandingTurnsTaxiLightOn()
+    {
+        var step = B737ProcedureLibrary.AfterLandingAndTaxi.Steps
+            .Single(item => item.Id == "fo-taxi-light-on");
+
+        Assert.AreEqual("pmdg taxi-light on", step.Command);
+        Assert.IsFalse(step.IsComplete(new AircraftState { Title = "PMDG 737-800", NoseLightSelectorPosition = 2 }));
+        Assert.IsTrue(step.IsComplete(new AircraftState { Title = "PMDG 737-800", NoseLightSelectorPosition = 1 }));
+    }
+
+    [TestMethod]
     public void Pmdg737PackageTitleUsesBoeingProcedureCatalog()
     {
         var state = new AircraftState { Title = "737-800 PAX BW TC" };

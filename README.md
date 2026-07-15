@@ -42,8 +42,9 @@ Captain actions, and speaks important callouts.
 - Optional Windows offline voice callouts
 - Persistent preflight settings for V1, VR, and transition altitude
 - Optional free SimBrief latest-OFP import by Pilot ID or username, with a
-  local flight-summary cache, mismatch/staleness warnings, and review before
-  imported takeoff values are applied
+  per-flight operational briefing, mismatch/staleness warnings, block-fuel
+  comparison, aircraft-specific flap normalization, PMDG FMC takeoff-data
+  comparison, and planned-cruise detection
 - A distance-aware standard approach schedule that can be overridden for flap,
   gear, and landing-configuration gates
 - Aircraft-specific standard approach profiles selected automatically for the

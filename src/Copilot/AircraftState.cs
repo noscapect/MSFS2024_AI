@@ -101,6 +101,27 @@ internal sealed class AircraftState
     public double IndicatedAirspeedKnots { get; set; }
     public int TakeoffV1SpeedKnots { get; set; }
     public int TakeoffRotateSpeedKnots { get; set; }
+    public int? TakeoffV2SpeedKnots { get; set; }
+    public string SimBriefFlightNumber { get; set; } = "";
+    public string SimBriefOriginIcao { get; set; } = "";
+    public string SimBriefDestinationIcao { get; set; } = "";
+    public string SimBriefAlternateIcao { get; set; } = "";
+    public string SimBriefOriginRunway { get; set; } = "";
+    public string SimBriefDestinationRunway { get; set; } = "";
+    public string SimBriefRoute { get; set; } = "";
+    public int? PlannedCruiseAltitudeFeet { get; set; }
+    public bool CruiseEstablished =>
+        !OnGround
+        && AltitudeAboveGroundFeet >= 10000
+        && Math.Abs(VerticalSpeedFeetPerMinute) < 300
+        && (!PlannedCruiseAltitudeFeet.HasValue
+            || Math.Abs(IndicatedAltitudeFeet - PlannedCruiseAltitudeFeet.Value) <= 1500);
+    public int? PlannedCostIndex { get; set; }
+    public int? PlannedTakeoffFlaps { get; set; }
+    public double? PlannedBlockFuelKilograms { get; set; }
+    public double ActualFuelKilograms { get; set; }
+    public string SimBriefFuelStatus { get; set; } = "No active SimBrief flight";
+    public string SimBriefTakeoffStatus { get; set; } = "No active SimBrief flight";
     public double? ApproachDistanceToTouchdownNm { get; set; }
     public string ApproachDistanceSource { get; set; } = "";
     public int ApproachFlaps1DistanceNm { get; set; } = 15;
@@ -131,6 +152,9 @@ internal sealed class AircraftState
     public double RightSpoilerPositionPercent { get; set; }
     public double FlapsHandleIndex { get; set; }
     public int? BoeingTakeoffFlaps { get; set; }
+    public int? BoeingFmcV1Knots { get; set; }
+    public int? BoeingFmcVrKnots { get; set; }
+    public bool BoeingFmcTakeoffReferenceComplete { get; set; }
     public int? BoeingLandingFlaps { get; set; }
     public int? BoeingLandingVrefKnots { get; set; }
     public double LeftFlapPositionPercent { get; set; }
@@ -184,6 +208,13 @@ internal sealed class AircraftState
     public bool ApuFireTestCompleted { get; set; }
     public bool Engine1FireTestCompleted { get; set; }
     public bool Engine2FireTestCompleted { get; set; }
+    public bool PmdgFireOverheatTestCompleted { get; set; }
+    public bool PmdgExtinguisherTest1Completed { get; set; }
+    public bool PmdgExtinguisherTest2Completed { get; set; }
+    public bool PmdgFireTestsCompleted =>
+        PmdgFireOverheatTestCompleted
+        && PmdgExtinguisherTest1Completed
+        && PmdgExtinguisherTest2Completed;
     public double? SeatbeltSelectorPosition { get; set; }
     public bool SeatbeltSignsOn { get; set; }
     public double? NoSmokingSelectorPosition { get; set; }

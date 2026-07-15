@@ -41,6 +41,10 @@ generic SimVars, but exact PMDG switch readback is not available yet.
   signs, speedbrake, autobrake, gear, transponder and fire-test indicators.
 - PMDG commands use the official `PMDG_NG3_Control` client-data channel where
   PMDG SDK events are known.
+- Flow 1 performs and independently verifies the FIRE/OVHT detection test and
+  both extinguisher tests after electrical power is established. The controls
+  are held momentarily and returned to neutral using the PMDG SDK event/state
+  definitions rather than generic Airbus fire-test logic.
 
 ## First live-test target
 

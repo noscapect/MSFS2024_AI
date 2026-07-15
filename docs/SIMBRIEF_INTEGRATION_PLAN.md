@@ -1,17 +1,28 @@
 # SimBrief Integration Plan
 
-Status: first implementation complete on `feature/simbrief-integration`.
+Status: operational integration implemented on `feature/simbrief-integration`.
 
 Implemented in the first development pass:
 
 - free, read-only latest-OFP import by Pilot ID or username;
 - no API key, password, subscription, or developer-hosted service;
 - normalized local cache containing only the latest flight summary;
-- explicit review before transition altitude, V1, or VR are applied;
+- explicit review before an OFP is activated for the current flight session;
 - stale-OFP and detected-aircraft mismatch warnings;
 - optional import when starting a new flight;
+- operational briefing for takeoff, fuel, cruise, arrival, and route data;
+- aircraft-family normalization of takeoff flap settings and fuel units;
+- advisory PMDG FMC comparison for V1, VR, and takeoff flaps;
+- planned cruise altitude used for cruise/initial-descent phase detection;
+- imported flight metadata recorded with the normal bounded flight telemetry;
 - offline parser and validation tests;
 - complete separation from aircraft adapters and cockpit flow execution.
+
+Imported values are session scoped. **New flight / Reset progress** clears the
+active OFP, so an older cached flight cannot silently drive a later flight.
+The cache remains available only as the most recently downloaded summary.
+SimBrief mismatches and network failures remain advisory and never block a
+cockpit flow.
 
 ## Recommended first release
 

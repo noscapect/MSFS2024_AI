@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Msfs2024Ai.Copilot.Settings;
+using Msfs2024Ai.Copilot.SimBrief;
 
 namespace Msfs2024Ai.Copilot.Tests;
 
@@ -18,7 +19,8 @@ public sealed class ProcedureSessionTests
             {
                 "power-up-initial-setup",
                 "approach-landing"
-            }
+            },
+            ActiveFlightPlan = new ImportedFlightPlan { OriginIcao = "EBBR", DestinationIcao = "EHAM" }
         };
 
         session.ResetProgress(savedUtc);
@@ -26,6 +28,7 @@ public sealed class ProcedureSessionTests
         Assert.IsNull(session.ActiveProcedureId);
         Assert.AreEqual(0, session.ActiveStepIndex);
         Assert.AreEqual(0, session.CompletedProcedureIds.Count);
+        Assert.IsNull(session.ActiveFlightPlan);
         Assert.AreEqual(savedUtc, session.SavedUtc);
     }
 }

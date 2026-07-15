@@ -3,11 +3,15 @@
 Goal: add support for the built-in MSFS 2024 iniBuilds A330 by starting from
 the existing iniBuilds Airbus flow and validating each system live.
 
-Current status (2026-07-13): A330 development is paused after partial live
-validation while the stable aircraft profiles are protected. A330 changes
-must remain in `A330ProcedureLibrary`, `A330ChecklistLibrary`, and explicit
-A330 command/readback branches. They may not modify the frozen A321 control
-profile or relax A321 verification.
+Current status (2026-07-15): A330 support is included in `main` as an explicit
+experimental/work-in-progress profile during the pre-1.0 beta phase. Flows
+1-4 passed live testing. Flow 5 and Flow 6 have partial control validation but
+have not completed end-to-end sign-off. Flows 7-12 remain pending. Users must
+remain ready to intervene manually.
+
+A330 changes must remain in `A330ProcedureLibrary`, `A330ChecklistLibrary`,
+and explicit A330 command/readback branches. They may not modify the frozen
+A321 control profile or relax A321 verification.
 
 Initial branch strategy:
 
@@ -18,15 +22,14 @@ Initial branch strategy:
 - Keep mismatches aircraft-specific instead of weakening the proven A320/A321
   behavior.
 
-Live-test priority:
+Remaining live-test priority:
 
-1. Flow 1: batteries, external power, ADIRS, oxygen, NAV/LOGO, strobes, fire
-   tests.
-2. Flow 2 and 3: signs, flight computer preparation, APU, ATC pilot tasks.
-3. Flow 4 and 5: engine start, after-start/taxi, spoilers, flaps, autobrake,
-   weather radar and exterior lights.
-4. Flow 6 and 7: before takeoff, takeoff/climb, gear, flap retraction,
-   lighting.
+1. Complete Flow 5 end-to-end validation: after-start/taxi, spoilers, flaps,
+   autobrake, weather radar and exterior lights.
+2. Complete Flow 6 validation: before-takeoff lights, TCAS and altitude
+   reporting.
+3. Validate Flow 7: takeoff/climb, gear, flap retraction and lighting.
+4. Validate Flows 8-12 through cruise, approach, landing, taxi-in and shutdown.
 
 Known assumptions to verify:
 

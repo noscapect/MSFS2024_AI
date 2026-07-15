@@ -5,7 +5,7 @@ Simulator 2024:
 
 - **iniBuilds A320neo V2**
 - **iniBuilds A321LR**
-- **iniBuilds A330** *(experimental branch support)*
+- **iniBuilds A330** *(experimental/work in progress)*
 - **FlyByWire A32NX**
 - **PMDG 737-800**
 
@@ -22,6 +22,10 @@ Captain actions, and speaks important callouts.
 > This is an independent community project. It is not affiliated with or
 > endorsed by Microsoft, Asobo Studio, iniBuilds, FlyByWire Simulations,
 > PMDG, Boeing, Airbus, or MobiFlight.
+
+> **Beta notice:** Versions below 1.0 are development releases. Stable aircraft
+> profiles have completed live validation, while profiles explicitly marked
+> experimental may contain incomplete flows and require manual intervention.
 
 ## Current capabilities
 
@@ -62,6 +66,10 @@ Voice callouts include engine-start monitoring, takeoff calls, landing gear up
 and down, minimums, spoilers, reverse green, and deceleration.
 
 The gameplay flow is defined in [docs/checklist.md](docs/checklist.md).
+Planned and deliberately deferred features are tracked in
+[docs/ROADMAP.md](docs/ROADMAP.md). The researched first scope for optional
+SimBrief support is documented in
+[docs/SIMBRIEF_INTEGRATION_PLAN.md](docs/SIMBRIEF_INTEGRATION_PLAN.md).
 
 The iniBuilds A321LR profile has completed live validation of all twelve flows.
 Its procedures, checklists, flap mappings, and sign-selector policy are kept in
@@ -71,11 +79,11 @@ an aircraft-specific profile and protected by regression tests. See
 ## Supported aircraft
 
 The application has moved from a single-aircraft A320 assistant to a
-multi-aircraft virtual first officer. The current public release supports:
+multi-aircraft virtual first officer. Current aircraft profiles are:
 
 - iniBuilds A320neo V2
 - iniBuilds A321LR
-- iniBuilds A330 *(experimental on the A330 branch)*
+- iniBuilds A330 *(experimental/work in progress; Flows 1-4 live validated)*
 - FlyByWire A32NX for MSFS 2024
 - PMDG 737-800
 
@@ -245,7 +253,8 @@ See [docs/RELEASING.md](docs/RELEASING.md).
 
 The iniBuilds A320neo V2 and fully live-validated iniBuilds A321LR flows are
 mature baselines. FlyByWire A32NX and PMDG 737-800 are supported through their
-own procedure paths; iniBuilds A330 remains experimental on this development
-branch. Treat unreleased aircraft work as active development software and
-remain ready to operate the aircraft manually.
+own procedure paths. iniBuilds A330 is included as an experimental beta
+profile: Flows 1-4 passed live testing, Flow 5 and Flow 6 remain partially
+validated, and Flows 7-12 are pending. Remain ready to operate an experimental
+aircraft manually.
 

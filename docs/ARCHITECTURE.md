@@ -47,7 +47,7 @@ Boeing aircraft profiles:
 
 - iniBuilds A320neo V2
 - iniBuilds A321LR
-- iniBuilds A330 *(experimental branch profile)*
+- iniBuilds A330 *(experimental/work-in-progress beta profile)*
 - FlyByWire A32NX for MSFS 2024
 - PMDG 737-800
 
@@ -56,7 +56,7 @@ defined in `docs/NATIVE_CONTROL_STRATEGY.md`. Each supported aircraft has its
 own procedure and checklist library. The live-validated A321LR also owns an
 aircraft-specific control profile for its flap and sign-selector mappings;
 generic flap-surface fallbacks are forbidden for this aircraft. Experimental
-A330 work must use A330-specific branches and may not weaken A321 completion
+A330 work must use A330-specific code paths and may not weaken A321 completion
 conditions or command mappings. FBW-specific mappings use their own adapter
 and procedure libraries through the same normalized state/action model.
 

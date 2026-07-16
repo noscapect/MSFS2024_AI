@@ -3,6 +3,7 @@ using Msfs2024Ai.Copilot.AircraftAdapters;
 using Msfs2024Ai.Copilot.AircraftAdapters.FbwA320;
 using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA320;
 using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA321;
+using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA330;
 using Msfs2024Ai.Copilot.AircraftIdentity;
 using Msfs2024Ai.Copilot.Checklists;
 using Msfs2024Ai.Copilot.Controls;
@@ -3414,21 +3415,21 @@ internal sealed class CopilotService : Form
                 : isPmdg737 && pmdg != null
                     ? pmdg.FastenBeltsSelector
                 : isIniBuildsA330 && A330SignInputEventsReady()
-                    ? _a330SignInputStates[0]
+                    ? A330ControlProfile.NormalizeSignPosition(_a330SignInputStates[0])
                 : _nativeSeatbeltSelector,
             SeatbeltSignsOn = isFlyByWireAirbus
                 ? raw.CabinSeatbeltsAlert != 0
                 : isPmdg737 && pmdg != null
                     ? pmdg.FastenBeltsSelector == 2
                 : isIniBuildsA330 && A330SignInputEventsReady()
-                    ? _a330SignInputStates[0] >= 0.5
+                    ? _a330SignInputStates[0] >= 1.5
                 : _nativeSeatbeltSignsOn.HasValue && _nativeSeatbeltSignsOn.Value != 0,
             NoSmokingSelectorPosition = isFlyByWireAirbus
                 ? _fbwNoSmokingSelector
                 : isPmdg737 && pmdg != null
                     ? pmdg.NoSmokingSelector
                 : isIniBuildsA330 && A330SignInputEventsReady()
-                    ? _a330SignInputStates[1]
+                    ? A330ControlProfile.NormalizeSignPosition(_a330SignInputStates[1])
                 : _nativeNoSmokingSelector,
             NoSmokingSignsOn = isFlyByWireAirbus
                 ? _fbwNoSmokingSelector.HasValue && Math.Abs(_fbwNoSmokingSelector.Value) < 0.1
@@ -3445,7 +3446,7 @@ internal sealed class CopilotService : Form
                         _pmdgCommandedEmergencyExitUtc,
                         pmdg.EmergencyExitLights)
                 : isIniBuildsA330 && A330SignInputEventsReady()
-                    ? _a330SignInputStates[2]
+                    ? A330ControlProfile.NormalizeSignPosition(_a330SignInputStates[2])
                 : _nativeEmergencyExitSelector,
             GroundSpoilersArmed = isFlyByWireAirbus
                 ? ResolveFbwSpoilersArmedState(
@@ -7490,7 +7491,9 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        _simConnect.SetInputEvent(A330SignInputEventHashes[index], (double)desiredPosition);
+        _simConnect.SetInputEvent(
+            A330SignInputEventHashes[index],
+            A330ControlProfile.ToPhysicalSignPosition(desiredPosition));
         BeginNativeAction(
             FormatSignSelectorName(selector),
             Verify,
@@ -8795,13 +8798,9 @@ internal sealed class CopilotService : Form
         }
         else if (_state.IsIniBuildsA330)
         {
-            var stepCount = Math.Max(1, (int)Math.Ceiling(_state.FlapsHandleIndex));
-            var stepCode = string.Join(
-                " ",
-                Enumerable.Repeat(
-                    "16384 (A:FLAPS NUM HANDLE POSITIONS, Number) / (>B:AIRLINER_Flaps_Dec)",
-                    stepCount));
-            SendMobiFlightCommand($"MF.SimVars.Set.{stepCode}");
+            StartA330FlapRetractionSequence(
+                A330ControlProfile.FlapRetractionStepCount(_state.FlapsHandleIndex));
+            return;
         }
         else
         {
@@ -8816,6 +8815,45 @@ internal sealed class CopilotService : Form
             state => state.FlapsAtDetent(0),
             true,
             TimeSpan.FromSeconds(15));
+    }
+
+    private void StartA330FlapRetractionSequence(int remainingSteps)
+    {
+        var timer = new System.Windows.Forms.Timer
+        {
+            Interval = A330ControlProfile.FlapStepIntervalMilliseconds
+        };
+
+        void CompleteSequence()
+        {
+            timer.Stop();
+            _nativePulseTimers.Remove(timer);
+            timer.Dispose();
+            BeginNativeAction(
+                "Flaps CLEAN",
+                state => state.FlapsAtDetent(0),
+                true,
+                TimeSpan.FromSeconds(30));
+        }
+
+        void SendNextStep()
+        {
+            SendMobiFlightCommand(A330ControlProfile.FlapsRetractOneDetentCommand);
+            SendMobiFlightCommand("MF.DummyCmd");
+            remainingSteps--;
+            if (remainingSteps <= 0)
+            {
+                CompleteSequence();
+            }
+        }
+
+        timer.Tick += (_, _) => SendNextStep();
+        _nativePulseTimers.Add(timer);
+        SendNextStep();
+        if (remainingSteps > 0)
+        {
+            timer.Start();
+        }
     }
 
     private void SetAutobrake(int desiredLevel, string label)

@@ -92,22 +92,24 @@ internal static class A330ProcedureLibrary
     private static bool ApproachDistanceReached(
         AircraftState state,
         int maximumDistanceNm) =>
+        ApproachDistanceAvailable(state)
+        && state.ApproachDistanceToTouchdownNm.GetValueOrDefault() <= maximumDistanceNm;
+
+    private static bool ApproachDistanceAvailable(AircraftState state) =>
         state.ApproachDistanceToTouchdownNm.HasValue
-        && state.ApproachDistanceToTouchdownNm.Value > 0
-        && state.ApproachDistanceToTouchdownNm.Value <= maximumDistanceNm;
+        && state.ApproachDistanceToTouchdownNm.Value > 0;
 
     private static bool ApproachGateReached(
         AircraftState state,
         int maximumDistanceNm,
-        bool fallbackReached,
-        int maximumSpeedKnots) =>
+        bool fallbackReached) =>
         ApproachDistanceReached(state, maximumDistanceNm)
-        || fallbackReached;
+        || (!ApproachDistanceAvailable(state) && fallbackReached);
 
     private static bool ApproachGearGateReached(AircraftState state) =>
         state.IndicatedAirspeedKnots <= state.ApproachGearSpeedKnots
         && (ApproachDistanceReached(state, state.ApproachGearDistanceNm)
-            || (!state.ApproachDistanceToTouchdownNm.HasValue
+            || (!ApproachDistanceAvailable(state)
                 && state.AltitudeAboveGroundFeet
                    <= state.ApproachGearAltitudeAglFeet));
 
@@ -529,8 +531,7 @@ internal static class A330ProcedureLibrary
                         state,
                         state.ApproachFlaps1DistanceNm,
                         state.IndicatedAltitudeFeet
-                            <= state.ApproachFlaps1AltitudeFeet,
-                        state.EffectiveApproachFlaps1SpeedKnots),
+                            <= state.ApproachFlaps1AltitudeFeet),
                     CrewRole.FirstOfficer),
                 Observe(
                     "fo-cabin-landing-call",
@@ -555,8 +556,7 @@ internal static class A330ProcedureLibrary
                         state,
                         state.ApproachFlaps2DistanceNm,
                         state.AltitudeAboveGroundFeet
-                            <= state.ApproachFlaps2AltitudeAglFeet,
-                        state.EffectiveApproachFlaps2SpeedKnots),
+                            <= state.ApproachFlaps2AltitudeAglFeet),
                     CrewRole.FirstOfficer),
                 Observe(
                     "flaps-two-speed",
@@ -591,8 +591,7 @@ internal static class A330ProcedureLibrary
                         state,
                         state.ApproachLandingConfigDistanceNm,
                         state.AltitudeAboveGroundFeet
-                            <= state.ApproachLandingConfigAltitudeAglFeet,
-                        state.EffectiveApproachFlaps3SpeedKnots),
+                            <= state.ApproachLandingConfigAltitudeAglFeet),
                     CrewRole.FirstOfficer),
                 Observe(
                     "landing-config-speed",

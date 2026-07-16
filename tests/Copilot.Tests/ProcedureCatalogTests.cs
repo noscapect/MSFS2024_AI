@@ -148,6 +148,38 @@ public sealed class ProcedureCatalogTests
     }
 
     [TestMethod]
+    public void IniBuildsA330ApproachPrefersDistanceOverAltitudeFallback()
+    {
+        var flow = A330ProcedureLibrary.ApproachAndLanding;
+        var flapsOneGate = flow.Steps.Single(step => step.Id == "approach-config-start");
+        var flapsTwoGate = flow.Steps.Single(step => step.Id == "flaps-two-point");
+        var landingConfigGate = flow.Steps.Single(step => step.Id == "landing-config-point");
+        var state = new AircraftState
+        {
+            Title = "A330-300 (GE)",
+            IndicatedAltitudeFeet = 9000,
+            AltitudeAboveGroundFeet = 1700,
+            ApproachDistanceToTouchdownNm = 20,
+            ApproachFlaps1DistanceNm = 16,
+            ApproachFlaps1AltitudeFeet = 10000,
+            ApproachFlaps2DistanceNm = 11,
+            ApproachFlaps2AltitudeAglFeet = 3500,
+            ApproachLandingConfigDistanceNm = 5,
+            ApproachLandingConfigAltitudeAglFeet = 1800
+        };
+
+        Assert.IsFalse(flapsOneGate.IsComplete(state));
+        Assert.IsFalse(flapsTwoGate.IsComplete(state));
+        Assert.IsFalse(landingConfigGate.IsComplete(state));
+
+        state.ApproachDistanceToTouchdownNm = null;
+
+        Assert.IsTrue(flapsOneGate.IsComplete(state));
+        Assert.IsTrue(flapsTwoGate.IsComplete(state));
+        Assert.IsTrue(landingConfigGate.IsComplete(state));
+    }
+
+    [TestMethod]
     public void IniBuildsA321UsesA321ProcedureCatalog()
     {
         var state = new AircraftState { Title = "A321" };

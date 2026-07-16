@@ -11660,17 +11660,25 @@ internal sealed class CopilotService : Form
             "captain-engine-shutdown" =>
                 $"engine masters OFF. Engines {(state.EnginesOff ? "OFF" : "running")}.",
             "approach-config-start" =>
-                $"Flaps 1 gate: distance <= {state.ApproachFlaps1DistanceNm} NM or altitude <= {state.ApproachFlaps1AltitudeFeet:N0} ft.",
+                state.IsIniBuildsA330
+                    ? $"Flaps 1 gate: distance <= {state.ApproachFlaps1DistanceNm} NM; altitude <= {state.ApproachFlaps1AltitudeFeet:N0} ft only without distance data."
+                    : $"Flaps 1 gate: distance <= {state.ApproachFlaps1DistanceNm} NM or altitude <= {state.ApproachFlaps1AltitudeFeet:N0} ft.",
             "flaps-one-speed" =>
                 $"Flaps CONFIG 1 speed safe: IAS {state.IndicatedAirspeedKnots:F0} kt <= {state.EffectiveApproachFlaps1SpeedKnots} kt.",
             "flaps-two-point" =>
-                $"Flaps 2 gate: distance <= {state.ApproachFlaps2DistanceNm} NM or radio altitude <= {state.ApproachFlaps2AltitudeAglFeet:N0} ft.",
+                state.IsIniBuildsA330
+                    ? $"Flaps 2 gate: distance <= {state.ApproachFlaps2DistanceNm} NM; radio altitude <= {state.ApproachFlaps2AltitudeAglFeet:N0} ft only without distance data."
+                    : $"Flaps 2 gate: distance <= {state.ApproachFlaps2DistanceNm} NM or radio altitude <= {state.ApproachFlaps2AltitudeAglFeet:N0} ft.",
             "flaps-two-speed" =>
                 $"Flaps CONFIG 2 speed safe: IAS {state.IndicatedAirspeedKnots:F0} kt <= {state.EffectiveApproachFlaps2SpeedKnots} kt.",
             "gear-down-point" =>
-                $"gear gate: distance <= {state.ApproachGearDistanceNm} NM or radio altitude <= {state.ApproachGearAltitudeAglFeet:N0} ft.",
+                state.IsIniBuildsA330
+                    ? $"gear gate: distance <= {state.ApproachGearDistanceNm} NM; radio altitude <= {state.ApproachGearAltitudeAglFeet:N0} ft only without distance data."
+                    : $"gear gate: distance <= {state.ApproachGearDistanceNm} NM or radio altitude <= {state.ApproachGearAltitudeAglFeet:N0} ft.",
             "landing-config-point" =>
-                $"landing-config gate: distance <= {state.ApproachLandingConfigDistanceNm} NM or radio altitude <= {state.ApproachLandingConfigAltitudeAglFeet:N0} ft.",
+                state.IsIniBuildsA330
+                    ? $"landing-config gate: distance <= {state.ApproachLandingConfigDistanceNm} NM; radio altitude <= {state.ApproachLandingConfigAltitudeAglFeet:N0} ft only without distance data."
+                    : $"landing-config gate: distance <= {state.ApproachLandingConfigDistanceNm} NM or radio altitude <= {state.ApproachLandingConfigAltitudeAglFeet:N0} ft.",
             "landing-config-speed" =>
                 state.IsSupportedBoeing737
                     ? $"landing flaps speed safe: IAS {state.IndicatedAirspeedKnots:F0} kt <= 195 kt; landing target VREF+5 {state.EffectiveBoeingApproachTargetSpeedKnots} kt."
@@ -11738,15 +11746,19 @@ internal sealed class CopilotService : Form
                 return false;
         }
 
-        var distanceReached =
+        var distanceAvailable =
             state.ApproachDistanceToTouchdownNm.HasValue
-            && state.ApproachDistanceToTouchdownNm.Value > 0
-            && state.ApproachDistanceToTouchdownNm.Value <= distanceGate;
+            && state.ApproachDistanceToTouchdownNm.Value > 0;
+        var distanceReached =
+            distanceAvailable
+            && state.ApproachDistanceToTouchdownNm.GetValueOrDefault() <= distanceGate;
+        var effectiveFallbackReached =
+            fallbackReached && (!state.IsIniBuildsA330 || !distanceAvailable);
         var distanceText = state.ApproachDistanceToTouchdownNm.HasValue
             ? $"{state.ApproachDistanceToTouchdownNm.Value:F1} NM {state.ApproachDistanceSource}"
             : "n/a";
         var blockers = new List<string>();
-        if (!distanceReached && !fallbackReached)
+        if (!distanceReached && !effectiveFallbackReached)
         {
             blockers.Add($"distance/fallback not reached ({distanceText}, {fallbackLabel})");
         }
@@ -11757,7 +11769,7 @@ internal sealed class CopilotService : Form
             $"ALT {state.IndicatedAltitudeFeet:F0} ft, " +
             $"AGL {state.AltitudeAboveGroundFeet:F0} ft, " +
             $"DIST {distanceText} <= {distanceGate} NM, " +
-            $"fallback {fallbackLabel} {(fallbackReached ? "met" : "not met")}; " +
+            $"fallback {fallbackLabel} {(effectiveFallbackReached ? "met" : distanceAvailable && state.IsIniBuildsA330 ? "ignored while distance is available" : "not met")}; " +
             (blockers.Count == 0
                 ? "gate ready."
                 : "waiting for " + string.Join(" and ", blockers) + ".");

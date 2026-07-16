@@ -42,6 +42,27 @@ public sealed class AircraftApproachProfilesTests
     }
 
     [TestMethod]
+    public void A330StandardUsesDedicatedHeavyAirbusApproachSchedule()
+    {
+        var schedule = AircraftApproachProfiles.EffectiveSchedule(
+            "A330-300 (GE)",
+            Array.Empty<AircraftApproachOverride>());
+
+        Assert.AreEqual(16, schedule.Flaps1DistanceNm);
+        Assert.AreEqual(230, schedule.Flaps1SpeedKnots);
+        Assert.AreEqual(11, schedule.Flaps2DistanceNm);
+        Assert.AreEqual(3500, schedule.Flaps2AltitudeAglFeet);
+        Assert.AreEqual(195, schedule.Flaps2SpeedKnots);
+        Assert.AreEqual(8, schedule.GearDistanceNm);
+        Assert.AreEqual(2500, schedule.GearAltitudeAglFeet);
+        Assert.AreEqual(210, schedule.GearSpeedKnots);
+        Assert.AreEqual(5, schedule.LandingConfigDistanceNm);
+        Assert.AreEqual(1800, schedule.LandingConfigAltitudeAglFeet);
+        Assert.AreEqual(185, schedule.LandingConfigSpeedKnots);
+        Assert.AreEqual(177, schedule.FlapsFullSpeedKnots);
+    }
+
+    [TestMethod]
     public void OverrideOnlyAppliesToItsAircraftProfile()
     {
         var overrides = new[]

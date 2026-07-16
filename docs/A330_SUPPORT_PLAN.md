@@ -60,5 +60,9 @@ Known assumptions to verify:
 - APU BAT readback is `L:INI_OVHD_ELEC_BAT_3_PB_IS_AUTO_SWITCH`; the
   Behavior Viewer input event is `AIRLINER_ELEC_APU_BAT`. The readback is
   inverted for flow purposes: `0` means ON/AUTO, `1` means OFF.
-- The A330 approach flap schedule may need aircraft-specific gates after live
-  testing, similar to the A321LR.
+- The A330 has a dedicated heavy-Airbus decelerated-approach profile. The
+  standard schedule uses distance-to-touchdown when available (CONF 1 at 16
+  NM, CONF 2 at 11 NM, gear at 8 NM and landing configuration at 5 NM) and
+  only falls back to altitude when distance telemetry is unavailable. The
+  speed gates are 230/195/210/185/177 kt for CONF 1, CONF 2, gear, CONF 3 and
+  FULL respectively. Airline-specific settings remain user-overridable.

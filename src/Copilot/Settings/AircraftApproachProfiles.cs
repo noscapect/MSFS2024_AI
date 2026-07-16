@@ -55,7 +55,7 @@ internal static class AircraftApproachProfiles
         15, 10000, 230, 11, 4000, 215, 7, 2500, 210, 5, 1800, 195, 186);
     private static readonly AircraftApproachProfile IniA330 = Profile(
         "inibuilds-a330", "iniBuilds A330",
-        16, 10000, 230, 11, 4500, 210, 8, 3000, 210, 5, 1800, 185, 185);
+        16, 10000, 230, 11, 3500, 195, 8, 2500, 210, 5, 1800, 185, 177);
     private static readonly AircraftApproachProfile Pmdg737 = Profile(
         "pmdg-737-800", "PMDG 737-800",
         15, 10000, 230, 12, 4000, 190, 7, 2500, 200, 5, 1800, 190, 190);

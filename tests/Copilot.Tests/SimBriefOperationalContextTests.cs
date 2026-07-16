@@ -1,6 +1,7 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Msfs2024Ai.Copilot.AircraftAdapters;
 using Msfs2024Ai.Copilot.SimBrief;
+using Msfs2024Ai.Copilot.Settings;
 
 namespace Copilot.Tests;
 
@@ -47,6 +48,34 @@ public sealed class SimBriefOperationalContextTests
         Assert.AreEqual(
             "No SimBrief block fuel",
             SimBriefOperationalContext.FuelComparison(null, 42000));
+    }
+
+    [TestMethod]
+    public void A330Import_AppliesEditableTakeoffSettingsAndAllowsEqualV1Vr()
+    {
+        var settings = new CopilotSettings
+        {
+            TransitionAltitudeFeet = 4000,
+            TakeoffV1SpeedKnots = 141,
+            TakeoffRotateSpeedKnots = 143
+        };
+        var plan = new ImportedFlightPlan
+        {
+            TransitionAltitudeFeet = 4500,
+            TakeoffV1Knots = 116,
+            TakeoffVrKnots = 116,
+            TakeoffV2Knots = 127
+        };
+
+        Assert.IsTrue(SimBriefOperationalContext.ApplyTakeoffSettings(plan, settings));
+        Assert.AreEqual(4500, settings.TransitionAltitudeFeet);
+        Assert.AreEqual(116, settings.TakeoffV1SpeedKnots);
+        Assert.AreEqual(116, settings.TakeoffRotateSpeedKnots);
+        Assert.AreEqual(127, plan.TakeoffV2Knots);
+
+        settings.TakeoffRotateSpeedKnots = 118;
+        Assert.AreEqual(118, settings.TakeoffRotateSpeedKnots,
+            "A pilot override must remain possible after import.");
     }
 
     [TestMethod]

@@ -983,6 +983,12 @@ internal sealed class CopilotService : Form
         _flightTelemetryStore = new FlightTelemetryStore();
         _procedureSession = ProcedureSessionStore.Load();
         _simBriefFlightPlan = _procedureSession.ActiveFlightPlan;
+        if (SimBriefOperationalContext.ApplyTakeoffSettings(
+                _procedureSession.ActiveFlightPlan,
+                _settings))
+        {
+            SettingsStore.Save(_settings);
+        }
         foreach (var procedureId in _procedureSession.CompletedProcedureIds)
         {
             _completedProcedureIds.Add(procedureId);
@@ -2909,10 +2915,8 @@ internal sealed class CopilotService : Form
         int? cockpitVr = isPmdg737 && pmdg?.Vr > 0 ? pmdg.Vr : null;
         int? cockpitFlaps = isPmdg737 && pmdg?.TakeoffFlaps > 0 ? pmdg.TakeoffFlaps : null;
         var effectiveV1 = cockpitV1
-            ?? (activePlan?.TakeoffV1Knots is >= 80 and <= 219 ? activePlan.TakeoffV1Knots : null)
             ?? _settings.TakeoffV1SpeedKnots;
         var effectiveVr = cockpitVr
-            ?? (activePlan?.TakeoffVrKnots is >= 80 and <= 220 ? activePlan.TakeoffVrKnots : null)
             ?? _settings.TakeoffRotateSpeedKnots;
         effectiveVr = Math.Max(effectiveV1, effectiveVr);
 
@@ -3209,9 +3213,7 @@ internal sealed class CopilotService : Form
             FuelPump6State = isFlyByWireAirbus ? raw.FbwFuelPump6 : isPmdg737 && pmdg != null ? (pmdg.RightCenterFuelPump ? 1 : 0) : isIniBuildsA330 && A330FuelPumpInputEventsReady() ? _a330FuelPumpInputStates[5]!.Value : _nativeFuelPump6 ?? 0,
             AltitudeAboveGroundFeet = raw.AltitudeAboveGround,
             IndicatedAltitudeFeet = raw.IndicatedAltitude,
-            TransitionAltitudeFeet = activePlan?.TransitionAltitudeFeet is >= 1000 and <= 20000
-                ? activePlan.TransitionAltitudeFeet.Value
-                : _settings.TransitionAltitudeFeet,
+            TransitionAltitudeFeet = _settings.TransitionAltitudeFeet,
             CaptainAltimeterStandard = raw.CaptainBaroStandard != 0,
             FirstOfficerAltimeterStandard = raw.FirstOfficerBaroStandard != 0,
             IndicatedAirspeedKnots = raw.IndicatedAirspeed,
@@ -10304,6 +10306,41 @@ internal sealed class CopilotService : Form
         _procedureSession.ActiveFlightPlan = plan;
         _procedureSession.SavedUtc = DateTime.UtcNow;
         ProcedureSessionStore.Save(_procedureSession);
+
+        if (SimBriefOperationalContext.ApplyTakeoffSettings(plan, _settings))
+        {
+            SettingsStore.Save(_settings);
+            SyncTakeoffSettingControls();
+            AppendDashboardLog("Reviewed SimBrief takeoff settings applied.");
+        }
+    }
+
+    private void SyncTakeoffSettingControls()
+    {
+        if (_transitionAltitudeBox != null)
+        {
+            _transitionAltitudeBox.Value = Math.Max(
+                _transitionAltitudeBox.Minimum,
+                Math.Min(_transitionAltitudeBox.Maximum, _settings.TransitionAltitudeFeet));
+        }
+        if (_takeoffV1Box != null)
+        {
+            _takeoffV1Box.Value = Math.Max(
+                _takeoffV1Box.Minimum,
+                Math.Min(_takeoffV1Box.Maximum, _settings.TakeoffV1SpeedKnots));
+        }
+        if (_takeoffRotateBox != null)
+        {
+            _takeoffRotateBox.Value = Math.Max(
+                Math.Max(_takeoffRotateBox.Minimum, _settings.TakeoffV1SpeedKnots),
+                Math.Min(_takeoffRotateBox.Maximum, _settings.TakeoffRotateSpeedKnots));
+        }
+        if (_state != null)
+        {
+            _state.TransitionAltitudeFeet = _settings.TransitionAltitudeFeet;
+            _state.TakeoffV1SpeedKnots = _settings.TakeoffV1SpeedKnots;
+            _state.TakeoffRotateSpeedKnots = _settings.TakeoffRotateSpeedKnots;
+        }
     }
 
     private static string SimBriefSummary(ImportedFlightPlan? plan)

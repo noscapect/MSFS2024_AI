@@ -1,4 +1,5 @@
 using Msfs2024Ai.Copilot.AircraftAdapters;
+using Msfs2024Ai.Copilot.Settings;
 
 namespace Msfs2024Ai.Copilot.SimBrief;
 
@@ -16,6 +17,39 @@ internal static class SimBriefOperationalContext
                 new[] { "A20N" },
             _ => Array.Empty<string>()
         };
+
+    public static bool ApplyTakeoffSettings(
+        ImportedFlightPlan? plan,
+        CopilotSettings settings)
+    {
+        if (plan == null) return false;
+
+        var changed = false;
+        if (plan.TransitionAltitudeFeet is >= 1000 and <= 20000
+            && settings.TransitionAltitudeFeet != plan.TransitionAltitudeFeet.Value)
+        {
+            settings.TransitionAltitudeFeet = plan.TransitionAltitudeFeet.Value;
+            changed = true;
+        }
+        if (plan.TakeoffV1Knots is >= 80 and <= 219
+            && settings.TakeoffV1SpeedKnots != plan.TakeoffV1Knots.Value)
+        {
+            settings.TakeoffV1SpeedKnots = plan.TakeoffV1Knots.Value;
+            changed = true;
+        }
+        if (plan.TakeoffVrKnots is >= 80 and <= 220)
+        {
+            var reviewedVr = Math.Max(
+                settings.TakeoffV1SpeedKnots,
+                plan.TakeoffVrKnots.Value);
+            if (settings.TakeoffRotateSpeedKnots != reviewedVr)
+            {
+                settings.TakeoffRotateSpeedKnots = reviewedVr;
+                changed = true;
+            }
+        }
+        return changed;
+    }
 
     public static double? BlockFuelKilograms(ImportedFlightPlan? plan)
     {

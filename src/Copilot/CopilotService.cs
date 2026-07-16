@@ -2622,10 +2622,6 @@ internal sealed class CopilotService : Form
                                          && _nativeFuelPump5.Value != 0
                                          && _nativeFuelPump6.Value != 0;
         }
-        if (_state.IsIniBuildsA330 && _a330FlapsInputState.HasValue)
-        {
-            _state.FlapsHandleIndex = _a330FlapsInputState.Value;
-        }
         if (_nativeNavLogoSelectorPosition.HasValue)
         {
             _state.NavLogoSelectorPosition = _nativeNavLogoSelectorPosition.Value;
@@ -3298,9 +3294,7 @@ internal sealed class CopilotService : Form
             RightSpoilerPositionPercent = isPmdg737 && pmdg?.SpeedbrakeExtended == true
                 ? 100
                 : raw.RightSpoilerPosition,
-            FlapsHandleIndex = isIniBuildsA330 && _a330FlapsInputState.HasValue
-                ? _a330FlapsInputState.Value
-                : raw.FlapsHandleIndex,
+            FlapsHandleIndex = raw.FlapsHandleIndex,
             BoeingTakeoffFlaps = cockpitFlaps ?? plannedTakeoffFlaps,
             BoeingLandingFlaps = isPmdg737 && pmdg != null && pmdg.LandingFlaps > 0
                 ? pmdg.LandingFlaps

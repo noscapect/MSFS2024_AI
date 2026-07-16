@@ -113,6 +113,9 @@ internal static class A330ProcedureLibrary
                 && state.AltitudeAboveGroundFeet
                    <= state.ApproachGearAltitudeAglFeet));
 
+    private static bool FlapsAtOrBeyondDetent(AircraftState state, int detent) =>
+        state.FlapsHandleIndex >= detent - 0.1;
+
     public static ProcedureDefinition PowerUpAndInitialSetup { get; } =
         new(
             "power-up-initial-setup",
@@ -547,7 +550,7 @@ internal static class A330ProcedureLibrary
                 Automatic(
                     "fo-flaps-one",
                     "Flaps CONFIG 1",
-                    state => state.FlapsAtDetent(1),
+                    state => FlapsAtOrBeyondDetent(state, 1),
                     "flaps config-1"),
                 Observe(
                     "flaps-two-point",
@@ -567,7 +570,7 @@ internal static class A330ProcedureLibrary
                 Automatic(
                     "fo-flaps-two",
                     "Flaps CONFIG 2",
-                    state => state.FlapsAtDetent(2),
+                    state => FlapsAtOrBeyondDetent(state, 2),
                     "flaps config-2"),
                 Observe(
                     "gear-down-point",
@@ -602,7 +605,7 @@ internal static class A330ProcedureLibrary
                 Automatic(
                     "fo-flaps-three",
                     "Flaps CONFIG 3",
-                    state => state.FlapsAtDetent(3),
+                    state => FlapsAtOrBeyondDetent(state, 3),
                     "flaps config-3"),
                 Observe(
                     "flaps-full-speed",
@@ -613,7 +616,7 @@ internal static class A330ProcedureLibrary
                 Automatic(
                     "fo-flaps-full",
                     "Flaps FULL",
-                    state => state.FlapsAtDetent(4),
+                    state => FlapsAtOrBeyondDetent(state, 4),
                     "flaps full"),
                 Observe(
                     "fo-approaching-minimums",

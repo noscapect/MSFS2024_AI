@@ -321,6 +321,9 @@ internal sealed class SimConnectWindow : Form
         public double Battery3Voltage;
         public double ExternalPowerAvailable;
         public double ExternalPowerOn;
+        public double FlapsHandleIndex;
+        public double FlapsEffectiveHandleIndex;
+        public double FlapsHandlePercent;
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -462,6 +465,9 @@ internal sealed class SimConnectWindow : Form
         sender.AddToDataDefinition(Definition.Aircraft, "ELECTRICAL BATTERY VOLTAGE:3", "Volts", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.Aircraft, "EXTERNAL POWER AVAILABLE:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.Aircraft, "EXTERNAL POWER ON:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.Aircraft, "FLAPS HANDLE INDEX", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.Aircraft, "FLAPS EFFECTIVE HANDLE INDEX", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.Aircraft, "FLAPS HANDLE PERCENT", "Percent", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.RegisterDataDefineStruct<AircraftData>(Definition.Aircraft);
         sender.RequestDataOnSimObject(
             Request.Aircraft,
@@ -615,6 +621,7 @@ internal sealed class SimConnectWindow : Form
         Console.WriteLine($"Batteries 1/2/3: {aircraft.Battery1 != 0}/{aircraft.Battery2 != 0}/{aircraft.Battery3 != 0}");
         Console.WriteLine($"Battery volts 1/2/3: {aircraft.Battery1Voltage:F1}/{aircraft.Battery2Voltage:F1}/{aircraft.Battery3Voltage:F1}");
         Console.WriteLine($"External power available/on: {aircraft.ExternalPowerAvailable != 0}/{aircraft.ExternalPowerOn != 0}");
+        Console.WriteLine($"Flaps handle index/effective/percent: {aircraft.FlapsHandleIndex:F2}/{aircraft.FlapsEffectiveHandleIndex:F2}/{aircraft.FlapsHandlePercent:F2}");
         _latestAircraft = aircraft;
         _aircraftSnapshotsReceived++;
         _aircraftReceived = true;

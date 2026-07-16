@@ -180,6 +180,26 @@ public sealed class ProcedureCatalogTests
     }
 
     [TestMethod]
+    public void IniBuildsA330ApproachRecoveryAcceptsLaterFlapConfiguration()
+    {
+        var flow = A330ProcedureLibrary.ApproachAndLanding;
+        var configOne = flow.Steps.Single(step => step.Id == "fo-flaps-one");
+        var configTwo = flow.Steps.Single(step => step.Id == "fo-flaps-two");
+        var configThree = flow.Steps.Single(step => step.Id == "fo-flaps-three");
+        var configFull = flow.Steps.Single(step => step.Id == "fo-flaps-full");
+        var state = new AircraftState
+        {
+            Title = "A330-300 (GE)",
+            FlapsHandleIndex = 3
+        };
+
+        Assert.IsTrue(configOne.IsComplete(state));
+        Assert.IsTrue(configTwo.IsComplete(state));
+        Assert.IsTrue(configThree.IsComplete(state));
+        Assert.IsFalse(configFull.IsComplete(state));
+    }
+
+    [TestMethod]
     public void IniBuildsA321UsesA321ProcedureCatalog()
     {
         var state = new AircraftState { Title = "A321" };

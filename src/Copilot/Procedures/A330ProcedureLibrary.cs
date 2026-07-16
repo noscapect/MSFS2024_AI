@@ -729,6 +729,11 @@ internal static class A330ProcedureLibrary
                 Observe("fo-apu-flap-open", "APU intake flap open", state => state.IsFlyByWireAirbus ? state.ApuMasterSwitchOn : state.ApuFlapPercent >= 0.95),
                 Automatic("fo-apu-start-on", "APU START selected", state => state.ApuStartButtonOn, "apu-start on"),
                 Observe("apu-available", "APU AVAIL", state => state.ApuAvailable),
+                Observe(
+                    "apu-electrical-power",
+                    "APU electrical power established",
+                    state => state.ApuAvailable
+                             && (state.ApuGeneratorActive || state.ApuGeneratorSwitchOn)),
                 Automatic("fo-apu-bleed-on", "APU BLEED ON", state => state.ApuBleedOn, "apu-bleed on")
             });
 
@@ -743,15 +748,19 @@ internal static class A330ProcedureLibrary
                     "Aircraft parked at the gate",
                     state => state.OnGround
                              && state.GroundSpeedKnots <= 0.5
-                             && state.ParkingBrakeSet
-                             && state.EnginesOff,
+                             && state.ParkingBrakeSet,
                     CrewRole.FirstOfficer),
                 Observe(
                     "captain-parking-brake",
                     "Parking brake ON",
                     state => state.ParkingBrakeSet,
                     CrewRole.FirstOfficer),
-                Observe("shutdown-power", "APU available or external power connected", state => state.ApuAvailable || state.ExternalPowerOn),
+                Observe(
+                    "shutdown-power",
+                    "APU or external electrical power established",
+                    state => state.ExternalPowerOn
+                             || (state.ApuAvailable
+                                 && (state.ApuGeneratorActive || state.ApuGeneratorSwitchOn))),
                 Observe(
                     "captain-engine-shutdown",
                     "Engine masters OFF",

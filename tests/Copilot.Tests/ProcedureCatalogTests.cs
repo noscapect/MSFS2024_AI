@@ -400,4 +400,60 @@ public sealed class ProcedureCatalogTests
             ApuGeneratorPowerEstablished = true
         }));
     }
+
+    [TestMethod]
+    public void A330AfterLandingRequiresRealApuElectricalReadiness()
+    {
+        var electricalPower = A330ProcedureLibrary.AfterLandingAndTaxi.Steps
+            .Single(step => step.Id == "apu-electrical-power");
+
+        Assert.IsFalse(electricalPower.IsComplete(new AircraftState
+        {
+            Title = "A330-300 (GE)",
+            ApuAvailable = false,
+            ApuGeneratorSwitchOn = true
+        }));
+        Assert.IsFalse(electricalPower.IsComplete(new AircraftState
+        {
+            Title = "A330-300 (GE)",
+            ApuAvailable = true,
+            ApuGeneratorSwitchOn = false,
+            ApuGeneratorActive = false
+        }));
+        Assert.IsTrue(electricalPower.IsComplete(new AircraftState
+        {
+            Title = "A330-300 (GE)",
+            ApuAvailable = true,
+            ApuGeneratorSwitchOn = true
+        }));
+    }
+
+    [TestMethod]
+    public void A330ParkingChecksPowerBeforeEngineShutdown()
+    {
+        var flow = A330ProcedureLibrary.ParkingAndShutdown;
+        var parked = flow.Steps.Single(step => step.Id == "captain-park");
+        var power = flow.Steps.Single(step => step.Id == "shutdown-power");
+
+        Assert.IsTrue(parked.IsComplete(new AircraftState
+        {
+            Title = "A330-300 (GE)",
+            OnGround = true,
+            GroundSpeedKnots = 0,
+            ParkingBrakeSet = true,
+            Engine1Running = true,
+            Engine2Running = true
+        }));
+        Assert.IsFalse(power.IsComplete(new AircraftState
+        {
+            Title = "A330-300 (GE)",
+            ApuAvailable = true
+        }));
+        Assert.IsTrue(power.IsComplete(new AircraftState
+        {
+            Title = "A330-300 (GE)",
+            ApuAvailable = true,
+            ApuGeneratorActive = true
+        }));
+    }
 }

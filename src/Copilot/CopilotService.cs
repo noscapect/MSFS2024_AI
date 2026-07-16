@@ -2635,10 +2635,6 @@ internal sealed class CopilotService : Form
         {
             _state.ApuAvailable = _nativeApuAvailable.Value != 0;
         }
-        if (_state.IsIniBuildsA330)
-        {
-            _state.ApuAvailable = _state.ApuRpmPercent >= 95;
-        }
         if (_nativeApuMasterSwitch.HasValue)
         {
             _state.ApuMasterSwitchOn = _nativeApuMasterSwitch.Value != 0;
@@ -2657,9 +2653,9 @@ internal sealed class CopilotService : Form
             {
                 _state.ApuMasterSwitchOn = _a330ApuInputStates[0]!.Value >= 0.5;
             }
-            if (_a330ApuInputStates[1].HasValue)
+            if (_nativeApuStartButton.HasValue)
             {
-                _state.ApuStartButtonOn = _a330ApuInputStates[1]!.Value >= 0.5;
+                _state.ApuStartButtonOn = _nativeApuStartButton.Value != 0;
             }
             if (_a330ApuInputStates[2].HasValue)
             {
@@ -3133,14 +3129,16 @@ internal sealed class CopilotService : Form
             ApuAvailable = isFlyByWireAirbus
                 ? _fbwApuStartAvailable == true
                 : isIniBuildsA330
-                    ? raw.ApuRpm >= 95
+                    ? _nativeApuAvailable.HasValue
+                      && _nativeApuAvailable.Value != 0
                 : isPmdg737 && pmdg != null
                     ? pmdgApuAvailable
                 : _nativeApuAvailable.HasValue && _nativeApuAvailable.Value != 0,
             ApuStartButtonOn = isFlyByWireAirbus
                 ? _fbwApuStartButton == true || _fbwApuStartAvailable == true
-                : isIniBuildsA330 && _a330ApuInputStates[1].HasValue
-                    ? _a330ApuInputStates[1]!.Value >= 0.5
+                : isIniBuildsA330
+                    ? _nativeApuStartButton.HasValue
+                      && _nativeApuStartButton.Value != 0
                 : isPmdg737 && pmdg != null
                     ? pmdg.ApuSelector == 2 || raw.ApuStarter > 0
                 : _nativeApuStartButton.HasValue && _nativeApuStartButton.Value != 0,

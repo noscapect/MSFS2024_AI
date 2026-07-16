@@ -319,7 +319,7 @@ internal sealed class CopilotService : Form
         3008453113287741137UL,  // AIRLINER_AUTOBRK_MED
         10376295413381294961UL  // AIRLINER_AUTOBRK_HI
     };
-    private readonly double?[] _a330AutobrakeInputStates = new double?[3];
+    private readonly A330AutobrakeReadback _a330AutobrakeReadback = new();
     private const ulong A330WeatherRadarPwsInputEventHash = 16710120045550625168UL;
     private double? _a330WeatherRadarPwsInputState;
     private const ulong A330NoseLightInputEventHash = 7704909914815877606UL;
@@ -1257,6 +1257,7 @@ internal sealed class CopilotService : Form
 
         _a330InputEventPollingTimer?.Stop();
         _a330InputEventPollingTimer?.Dispose();
+        _a330AutobrakeReadback.Reset();
         _a330InputEventPollingTimer = new System.Windows.Forms.Timer { Interval = 250 };
         _a330InputEventPollingTimer.Tick += (_, _) =>
         {
@@ -1565,8 +1566,8 @@ internal sealed class CopilotService : Form
         if (request is >= Request.A330AutobrakeLowInputEvent and <= Request.A330AutobrakeHighInputEvent)
         {
             var autobrakeIndex = (int)request - (int)Request.A330AutobrakeLowInputEvent;
-            var previous = _a330AutobrakeInputStates[autobrakeIndex];
-            _a330AutobrakeInputStates[autobrakeIndex] = numericValue.Value;
+            var previous = _a330AutobrakeReadback.GetState(autobrakeIndex);
+            _a330AutobrakeReadback.Update(autobrakeIndex, numericValue.Value);
             if (!previous.HasValue || Math.Abs(previous.Value - numericValue.Value) >= 0.1)
             {
                 AppLog.Write($"A330 autobrake InputEvent {autobrakeIndex + 1}={numericValue.Value:0.###}.");
@@ -6675,24 +6676,7 @@ internal sealed class CopilotService : Form
         _a330SignInputStates.All(state => state.HasValue);
 
     private double? ResolveA330AutobrakeLevel()
-    {
-        if (_a330AutobrakeInputStates[2].HasValue
-            && _a330AutobrakeInputStates[2]!.Value >= 0.5)
-        {
-            return 3;
-        }
-        if (_a330AutobrakeInputStates[1].HasValue
-            && _a330AutobrakeInputStates[1]!.Value >= 0.5)
-        {
-            return 2;
-        }
-        if (_a330AutobrakeInputStates[0].HasValue
-            && _a330AutobrakeInputStates[0]!.Value >= 0.5)
-        {
-            return 1;
-        }
-        return _a330AutobrakeInputStates.All(state => state.HasValue) ? 0 : null;
-    }
+        => _a330AutobrakeReadback.Level;
 
     private void ToggleNativeMouserect(
         string name,

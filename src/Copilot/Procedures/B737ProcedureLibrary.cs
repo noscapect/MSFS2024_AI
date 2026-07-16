@@ -161,6 +161,7 @@ internal static class B737ProcedureLibrary
                 Manual("fmc-pos-init", "FMC POS INIT / IRS position set", "Captain: on the FMC POS INIT page, enter or copy the present position to SET IRS POS.", CrewRole.Captain),
                 Manual("fmc-route", "FMC route complete", "Captain: enter route, departure, arrival and performance data.", CrewRole.Captain),
                 Observe("fmc-perf", "FMC TAKEOFF REF complete", state => state.BoeingFmcTakeoffReferenceComplete),
+                Manual("captain-ifr-clearance", "IFR clearance received", "Pilot: after completing the FMC setup, use the MSFS ATC system to request and acknowledge IFR clearance.", CrewRole.Captain, state => state.AtcClearedIfr),
                 Automatic("fo-fuel-pumps", "Fuel pumps ON as required", state => state.FuelPumpsConfigured, "pmdg fuel-pumps on"),
                 Automatic("fo-seatbelts-auto", "Fasten belts AUTO", state => state.SeatbeltSelectorPosition.HasValue && Math.Abs(state.SeatbeltSelectorPosition.Value - 1) < 0.1, "pmdg seatbelts auto"),
                 Automatic("fo-no-smoking-auto", "No smoking AUTO", state => state.NoSmokingSelectorPosition.HasValue && Math.Abs(state.NoSmokingSelectorPosition.Value - 1) < 0.1, "pmdg no-smoking auto"),
@@ -186,7 +187,6 @@ internal static class B737ProcedureLibrary
                 Automatic("fo-packs-auto", "PACK switches AUTO", state => state.PacksAuto, "pmdg packs auto"),
                 Automatic("fo-ground-power-off", "Ground power switch OFF", state => state.ApuGeneratorPowerEstablished && !state.ExternalPowerOn, "pmdg ground-power off", requireCommandExecution: true),
                 Manual("captain-beacon", "Anti-collision light ON", "Captain: turn anti-collision light ON.", CrewRole.Captain, state => state.BeaconOn),
-                Manual("captain-ifr-clearance", "IFR clearance received", "Pilot: use the MSFS ATC system to request and acknowledge IFR clearance.", CrewRole.Captain, state => state.AtcClearedIfr),
                 Manual("captain-pushback-clearance", "Pushback and engine-start clearance received", "Pilot: use the MSFS ATC system to request and acknowledge pushback and engine-start clearance.", CrewRole.Captain),
                 Observe("fo-doors", "Cabin and cargo doors closed", state => state.RequiredDoorsClosed, CrewRole.FirstOfficer)
             });

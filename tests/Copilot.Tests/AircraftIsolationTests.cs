@@ -162,6 +162,39 @@ public sealed class AircraftIsolationTests
         Assert.IsNull(ProcedureCatalog.FindChecklist(state, "power-up-initial-setup"));
     }
 
+    [TestMethod]
+    public void EveryAircraftRequestsIfrClearanceAfterFlightComputerProgramming()
+    {
+        var profiles = new[]
+        {
+            (A320ProcedureLibrary.FlightComputerAndPreFlight, A320ProcedureLibrary.ApuStartAndPushback, "mcdu-perf"),
+            (A321ProcedureLibrary.FlightComputerAndPreFlight, A321ProcedureLibrary.ApuStartAndPushback, "mcdu-perf"),
+            (A330ProcedureLibrary.FlightComputerAndPreFlight, A330ProcedureLibrary.ApuStartAndPushback, "mcdu-perf"),
+            (FbwA320ProcedureLibrary.FlightComputerAndPreFlight, FbwA320ProcedureLibrary.ApuStartAndPushback, "mcdu-perf"),
+            (B737ProcedureLibrary.FlightComputerAndPreFlight, B737ProcedureLibrary.ApuStartAndPushback, "fmc-perf")
+        };
+
+        foreach (var (preflight, apuStart, programmingStepId) in profiles)
+        {
+            var programmingIndex = preflight.Steps
+                .Select((step, index) => (step, index))
+                .Single(item => item.step.Id == programmingStepId)
+                .index;
+            var clearanceIndex = preflight.Steps
+                .Select((step, index) => (step, index))
+                .Single(item => item.step.Id == "captain-ifr-clearance")
+                .index;
+
+            Assert.AreEqual(
+                programmingIndex + 1,
+                clearanceIndex,
+                $"{preflight.Name} must request IFR clearance immediately after programming.");
+            Assert.IsFalse(
+                apuStart.Steps.Any(step => step.Id == "captain-ifr-clearance"),
+                $"{apuStart.Name} must not defer IFR clearance until APU start.");
+        }
+    }
+
     private static void AssertDedicatedLibrary(
         string title,
         IReadOnlyList<ProcedureDefinition> expected)

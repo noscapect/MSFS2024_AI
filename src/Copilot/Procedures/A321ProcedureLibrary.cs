@@ -177,6 +177,12 @@ internal static class A321ProcedureLibrary
                 Manual("mcdu-rad-nav", "MCDU RAD NAV checked", "Captain: verify navigation radios are auto-tuned, then confirm.", CrewRole.Captain),
                 Manual("mcdu-init-b", "MCDU INIT B complete", "Captain: enter zero fuel weight and block fuel, then confirm.", CrewRole.Captain),
                 Manual("mcdu-perf", "MCDU PERF complete", "Captain: enter V1, VR, V2, transition altitude and takeoff flap setting, then confirm.", CrewRole.Captain),
+                Manual(
+                    "captain-ifr-clearance",
+                    "IFR clearance received",
+                    "Pilot: after completing the MCDU setup, use the MSFS ATC system to request and acknowledge IFR clearance.",
+                    CrewRole.Captain,
+                    state => state.AtcClearedIfr),
                 Automatic("fo-fuel-pumps", "All six fuel pumps ON", state => state.FuelPumpsConfigured, "fuel-pumps on"),
                 Automatic("fo-seatbelts-auto", "Seatbelt signs AUTO", state => state.SeatbeltSelectorPosition.HasValue && Math.Abs(state.SeatbeltSelectorPosition.Value - 1) < 0.1, "seatbelts auto"),
                 Automatic("fo-no-smoking-auto", "No smoking signs AUTO", state => state.NoSmokingSelectorPosition.HasValue && Math.Abs(state.NoSmokingSelectorPosition.Value - 1) < 0.1, "no-smoking auto"),
@@ -196,12 +202,6 @@ internal static class A321ProcedureLibrary
                 Manual("captain-apu-bleed", "APU BLEED ON", "Captain: once APU AVAIL is shown, turn APU BLEED ON.", CrewRole.Captain, state => state.ApuBleedOn),
                 Manual("captain-external-power-off", "External power disconnected", "Captain: disconnect external power after APU power is established.", CrewRole.Captain, state => !state.ExternalPowerOn),
                 Manual("captain-beacon", "Beacon ON", "Captain: turn the beacon ON.", CrewRole.Captain, state => state.BeaconOn),
-                Manual(
-                    "captain-ifr-clearance",
-                    "IFR clearance received",
-                    "Pilot: use the MSFS ATC system to request and acknowledge IFR clearance.",
-                    CrewRole.Captain,
-                    state => state.AtcClearedIfr),
                 Manual(
                     "captain-pushback-clearance",
                     "Pushback and engine-start clearance received",

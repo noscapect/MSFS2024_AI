@@ -72,11 +72,16 @@ diagnostics** or **Copy last diagnostic** when reporting a test issue.
    block fuel.
 9. **Captain confirmation:** MCDU PERF complete with V1, VR, V2, transition
    altitude, and takeoff flap setting.
-10. **F/O automatic:** Turn all six fuel pumps ON, pressing them sequentially
+10. **Pilot:** After MCDU programming is complete, request and acknowledge IFR
+    clearance through MSFS ATC. The app monitors IFR-clearance state.
+11. **F/O automatic:** Turn all six fuel pumps ON, pressing them sequentially
     at one-second intervals.
-11. **F/O automatic:** Set seatbelt signs to AUTO.
-12. **F/O automatic:** Set no-smoking signs to AUTO.
-13. **F/O automatic:** Set emergency exit lights to ARM.
+12. **F/O automatic:** Set seatbelt signs to AUTO.
+13. **F/O automatic:** Set no-smoking signs to AUTO.
+14. **F/O automatic:** Set emergency exit lights to ARM.
+
+For the PMDG 737-800, the equivalent IFR-clearance step follows completion of
+the FMC TAKEOFF REF setup in this same flow.
 
 ## 3. APU Start & Pushback
 
@@ -88,12 +93,10 @@ diagnostics** or **Copy last diagnostic** when reporting a test issue.
 5. **Captain:** Turn APU BLEED ON; detected from native state.
 6. **Captain:** Disconnect external power; detected from aircraft state.
 7. **Captain:** Turn beacon ON; detected from aircraft state.
-8. **Pilot:** Request and acknowledge IFR clearance through MSFS ATC. The app
-   monitors IFR-clearance state.
-9. **Pilot confirmation:** Request and acknowledge pushback and engine-start
+8. **Pilot confirmation:** Request and acknowledge pushback and engine-start
    clearance through MSFS ATC, then confirm in the app.
-10. **F/O automatic:** Set transponder mode to AUTO.
-11. **Monitor:** Wait until all configured cabin and cargo doors are closed.
+9. **F/O automatic:** Set transponder mode to AUTO.
+10. **Monitor:** Wait until all configured cabin and cargo doors are closed.
 
 ## 4. Engine Start Sequence
 

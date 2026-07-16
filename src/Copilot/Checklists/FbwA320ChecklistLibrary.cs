@@ -27,6 +27,7 @@ internal static class FbwA320ChecklistLibrary
                 new ChecklistItem("Parking brake", "ON", state => state.ParkingBrakeSet),
                 new ChecklistItem("Fuel pumps", "ON", state => state.FuelPumpsConfigured),
                 Unknown("MCDU setup", "COMPLETE"),
+                Unknown("IFR clearance", "RECEIVED"),
                 new ChecklistItem("Signs", "SEATBELTS ON / NO SMOKING AUTO", state => state.SeatbeltSignsOn && state.NoSmokingSelectorPosition.HasValue && Math.Abs(state.NoSmokingSelectorPosition.Value - 1) < 0.1),
                 new ChecklistItem("Emergency lights", "ARMED", state => state.EmergencyExitSelectorPosition.HasValue && Math.Abs(state.EmergencyExitSelectorPosition.Value - 1) < 0.1)),
             Checklist("apu-start-pushback", "APU Start & Pushback Verification",
@@ -34,7 +35,7 @@ internal static class FbwA320ChecklistLibrary
                 new ChecklistItem("APU bleed", "ON", state => state.ApuBleedOn),
                 new ChecklistItem("External power", "OFF", state => !state.ExternalPowerOn),
                 new ChecklistItem("Beacon", "ON", state => state.BeaconOn),
-                Unknown("Clearance", "RECEIVED"),
+                Unknown("Pushback/start clearance", "RECEIVED"),
                 new ChecklistItem(
                     "Transponder",
                     "AUTO",

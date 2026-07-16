@@ -13,6 +13,24 @@ A330 changes must remain in `A330ProcedureLibrary`, `A330ChecklistLibrary`,
 and explicit A330 command/readback branches. They may not modify the frozen
 A321 control profile or relax A321 verification.
 
+The completion branch adds a hard isolation boundary around the experimental
+A330 profile:
+
+- every automatic A330 procedure action is emitted in the dedicated `a330`
+  command namespace;
+- an `a330` cockpit command is rejected unless the loaded aircraft resolves
+  specifically to `IniBuildsA330`;
+- A330 procedure and step objects may not be shared with another aircraft;
+- the complete twelve-flow structure, roles, commands, and checklist contract
+  have a cryptographic regression fingerprint;
+- the A330 uses its own approach profile and explicit Input Event readbacks.
+
+SimBrief remains optional. A generated A333 OFP is accepted for the built-in
+A330-300 and can provide route, runway, cruise, fuel, and takeoff-flap context.
+An A339 OFP is reported as an aircraft mismatch. With no configured or active
+SimBrief flight, all A330 flows continue using aircraft state and saved/default
+settings; network availability is never a flow precondition.
+
 Initial branch strategy:
 
 - Detect aircraft titles containing `A330`.

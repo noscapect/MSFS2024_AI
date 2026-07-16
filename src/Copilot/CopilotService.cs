@@ -4336,6 +4336,18 @@ internal sealed class CopilotService : Form
     private void ExecuteCommand(string command)
     {
         var normalized = command.Trim().ToLowerInvariant();
+        if (normalized.StartsWith("a330 ", StringComparison.Ordinal))
+        {
+            if (_state?.IsIniBuildsA330 != true)
+            {
+                AppendDashboardLog("Blocked A330 cockpit command: a different aircraft profile is active.");
+                AppLog.Write($"Blocked A330 command outside its aircraft profile: {normalized}.");
+                FinishOneShot(2);
+                return;
+            }
+
+            normalized = normalized.Substring("a330 ".Length);
+        }
         if (_replayActive
             && !normalized.StartsWith("procedure ", StringComparison.Ordinal)
             && normalized is not "status"
@@ -10257,7 +10269,8 @@ internal sealed class CopilotService : Form
     {
         var warnings = SimBriefImportValidator.Validate(
             plan,
-            ExpectedSimBriefAircraftIcaos(),
+            SimBriefOperationalContext.ExpectedAircraftIcaos(
+                _state?.Variant ?? AircraftVariant.Unsupported),
             DateTime.UtcNow);
         var changes = new List<string>();
         if (plan.TransitionAltitudeFeet is >= 1000 and <= 20000)
@@ -10291,16 +10304,6 @@ internal sealed class CopilotService : Form
         _procedureSession.ActiveFlightPlan = plan;
         _procedureSession.SavedUtc = DateTime.UtcNow;
         ProcedureSessionStore.Save(_procedureSession);
-    }
-
-    private IReadOnlyList<string> ExpectedSimBriefAircraftIcaos()
-    {
-        if (_state?.IsPmdg737800 == true) return new[] { "B738" };
-        if (_state?.IsIniBuildsA321Lr == true) return new[] { "A21N", "A321" };
-        if (_state?.IsIniBuildsA330 == true) return new[] { "A333", "A339" };
-        if (_state?.IsA320NeoV2 == true || _state?.IsFlyByWireA320Neo == true)
-            return new[] { "A20N" };
-        return Array.Empty<string>();
     }
 
     private static string SimBriefSummary(ImportedFlightPlan? plan)

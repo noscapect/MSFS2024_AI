@@ -62,6 +62,13 @@ A330 work must use A330-specific code paths and may not weaken A321 completion
 conditions or command mappings. FBW-specific mappings use their own adapter
 and procedure libraries through the same normalized state/action model.
 
+The A330 additionally owns an `a330` procedure-command namespace. Runtime
+dispatch rejects those commands for every other aircraft variant. Automated
+contracts verify dedicated procedure/step instances and freeze the A330 flow,
+role, command, and checklist structure while live completion work continues.
+Its SimBrief input is optional and aircraft neutral; A333 matching and the
+no-active-OFP path are covered independently.
+
 ### Stable-aircraft regression boundary
 
 The iniBuilds A321LR is a frozen, end-to-end validated profile. Changes for

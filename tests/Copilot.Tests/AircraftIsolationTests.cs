@@ -48,6 +48,7 @@ public sealed class AircraftIsolationTests
     {
         AssertDedicatedLibrary("A320neo V2", A320ProcedureLibrary.GateToGate);
         AssertDedicatedLibrary("A321", A321ProcedureLibrary.GateToGate);
+        AssertDedicatedLibrary("A330-300 (GE)", A330ProcedureLibrary.GateToGate);
         AssertDedicatedLibrary("FlyByWire A32NX", FbwA320ProcedureLibrary.GateToGate);
         AssertDedicatedLibrary("PMDG 737-800", B737ProcedureLibrary.GateToGate);
     }
@@ -59,6 +60,7 @@ public sealed class AircraftIsolationTests
         {
             A320ProcedureLibrary.GateToGate,
             A321ProcedureLibrary.GateToGate,
+            A330ProcedureLibrary.GateToGate,
             FbwA320ProcedureLibrary.GateToGate,
             B737ProcedureLibrary.GateToGate
         };
@@ -81,6 +83,39 @@ public sealed class AircraftIsolationTests
                     $"Procedure step objects are shared by released libraries {left} and {right}.");
             }
         }
+    }
+
+    [TestMethod]
+    public void A330AutomaticActionsUseOnlyTheDedicatedA330CommandNamespace()
+    {
+        var commands = A330ProcedureLibrary.GateToGate
+            .SelectMany(procedure => procedure.Steps)
+            .Where(step => step.Kind == ProcedureStepKind.AutomaticAction)
+            .Select(step => step.Command)
+            .Where(command => !string.IsNullOrWhiteSpace(command))
+            .ToArray();
+
+        Assert.IsTrue(commands.Length > 0, "The A330 profile must contain automatic actions.");
+        Assert.IsTrue(
+            commands.All(command => command!.StartsWith("a330 ", StringComparison.Ordinal)),
+            "An A330 automatic action escaped the dedicated 'a330' command namespace.");
+
+        var otherAircraftCommands = new[]
+            {
+                A320ProcedureLibrary.GateToGate,
+                A321ProcedureLibrary.GateToGate,
+                FbwA320ProcedureLibrary.GateToGate,
+                B737ProcedureLibrary.GateToGate
+            }
+            .SelectMany(library => library)
+            .SelectMany(procedure => procedure.Steps)
+            .Select(step => step.Command)
+            .Where(command => !string.IsNullOrWhiteSpace(command))
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.IsFalse(
+            commands.Any(otherAircraftCommands.Contains),
+            "An A330 automatic command is shared with another aircraft profile.");
     }
 
     [TestMethod]

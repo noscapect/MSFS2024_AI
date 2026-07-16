@@ -85,7 +85,7 @@ internal static class A330ProcedureLibrary
             ProcedureStepKind.AutomaticAction,
             complete,
             role,
-            command,
+            "a330 " + command,
             isCompleteWhenRecovering: recoveryComplete,
             requireCommandExecution: requireCommandExecution);
 

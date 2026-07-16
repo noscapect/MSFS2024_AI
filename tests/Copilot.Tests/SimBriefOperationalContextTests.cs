@@ -8,6 +8,15 @@ namespace Copilot.Tests;
 public sealed class SimBriefOperationalContextTests
 {
     [TestMethod]
+    public void ExpectedAircraftIcaos_UsesDedicatedA330Profile()
+    {
+        CollectionAssert.AreEqual(
+            new[] { "A333" },
+            SimBriefOperationalContext.ExpectedAircraftIcaos(
+                AircraftVariant.IniBuildsA330).ToArray());
+    }
+
+    [TestMethod]
     public void BlockFuel_ConvertsPoundsToKilograms()
     {
         var plan = new ImportedFlightPlan { BlockFuel = 22046.2262185, Units = "lbs" };
@@ -21,6 +30,23 @@ public sealed class SimBriefOperationalContextTests
             new ImportedFlightPlan { TakeoffFlaps = "Flaps 5" }, AircraftVariant.Pmdg737800));
         Assert.AreEqual(1, SimBriefOperationalContext.TakeoffFlapSetting(
             new ImportedFlightPlan { TakeoffFlaps = "1+F" }, AircraftVariant.IniBuildsA320NeoV2));
+        Assert.AreEqual(2, SimBriefOperationalContext.TakeoffFlapSetting(
+            new ImportedFlightPlan { TakeoffFlaps = "2" }, AircraftVariant.IniBuildsA330));
+        Assert.IsNull(SimBriefOperationalContext.TakeoffFlapSetting(
+            null, AircraftVariant.IniBuildsA330));
+    }
+
+    [TestMethod]
+    public void A330WithoutSimBrief_KeepsNeutralOperationalContext()
+    {
+        Assert.IsNull(SimBriefOperationalContext.BlockFuelKilograms(null));
+        Assert.AreEqual(
+            "No active SimBrief flight",
+            SimBriefOperationalContext.TakeoffComparison(
+                null, AircraftVariant.IniBuildsA330, null, null, null));
+        Assert.AreEqual(
+            "No SimBrief block fuel",
+            SimBriefOperationalContext.FuelComparison(null, 42000));
     }
 
     [TestMethod]

@@ -6,6 +6,17 @@ internal static class SimBriefOperationalContext
 {
     private const double PoundsPerKilogram = 2.20462262185;
 
+    public static IReadOnlyList<string> ExpectedAircraftIcaos(AircraftVariant variant) =>
+        variant switch
+        {
+            AircraftVariant.Pmdg737800 => new[] { "B738" },
+            AircraftVariant.IniBuildsA321Lr => new[] { "A21N", "A321" },
+            AircraftVariant.IniBuildsA330 => new[] { "A333" },
+            AircraftVariant.IniBuildsA320NeoV2 or AircraftVariant.FlyByWireA320Neo =>
+                new[] { "A20N" },
+            _ => Array.Empty<string>()
+        };
+
     public static double? BlockFuelKilograms(ImportedFlightPlan? plan)
     {
         var blockFuel = plan?.BlockFuel;

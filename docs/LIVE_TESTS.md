@@ -104,9 +104,11 @@ The only items still awaiting live verification are:
   leaves strobes in AUTO; Flow 10 calls cabin crew at the approach
   configuration point, selects flaps CONFIG 2 before gear down, and treats
   "Reverse green" as optional when reverse thrust is not used.
-- Added distance-aware Flow 10 approach gates. The app now prefers MSFS ATC
-  runway distance, falls back to GPS distance, and then uses altitude/speed
-  fallback gates. Standard gates are Flaps 1 at 15 NM/230 kt, Flaps 2 at
+- Added distance-aware Flow 10 approach gates. The app now uses MSFS ATC
+  runway distance or localizer DME, then uses altitude/speed fallback gates
+  when neither runway-specific source is available. Generic GPS target and
+  waypoint distances are rejected because an intermediate fix can reach zero
+  many miles before touchdown. Standard gates are Flaps 1 at 15 NM/230 kt, Flaps 2 at
   10 NM/200 kt, gear down at 7 NM/210 kt, and landing configuration at
   5 NM/185 kt. Live validation pending.
 - Landing test telemetry showed the current reverse-thrust SimVars did not

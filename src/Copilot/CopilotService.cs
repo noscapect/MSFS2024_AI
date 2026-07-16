@@ -30,7 +30,6 @@ internal sealed class CopilotService : Form
     private const bool EnableExperimentalFlyByWireA380X = false;
 
     private const int WmUserSimConnect = 0x0402;
-    private const double MetersPerNauticalMile = 1852.0;
     private const uint PmdgNg3DataId = 0x4E473331;
     private const uint PmdgNg3DataDefinition = 0x4E473332;
     private const uint PmdgNg3ControlId = 0x4E473333;
@@ -832,8 +831,8 @@ internal sealed class CopilotService : Form
         public double RightFlapPosition;
         public double AtcRunwaySelected;
         public double AtcRunwayStartDistanceMeters;
-        public double GpsTargetDistanceMeters;
-        public double GpsWaypointDistanceMeters;
+        public double Nav1DmeNm;
+        public double Nav2DmeNm;
         public double TotalFuelWeightPounds;
     }
 
@@ -1221,8 +1220,8 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "TRAILING EDGE FLAPS RIGHT PERCENT", "Percent", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "ATC RUNWAY SELECTED", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "ATC RUNWAY START DISTANCE", "Meters", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
-        sender.AddToDataDefinition(Definition.AircraftState, "GPS TARGET DISTANCE", "Meters", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
-        sender.AddToDataDefinition(Definition.AircraftState, "GPS WP DISTANCE", "Meters", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "NAV DME:1", "Nautical miles", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "NAV DME:2", "Nautical miles", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "FUEL TOTAL QUANTITY WEIGHT", "Pounds", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.RegisterDataDefineStruct<AircraftData>(Definition.AircraftState);
         sender.MapClientEventToSimEvent(CopilotEvent.SetExternalPower, "SET_EXTERNAL_POWER");
@@ -4168,41 +4167,13 @@ internal sealed class CopilotService : Form
 
     private static (double? DistanceNm, string Source) ResolveApproachDistance(
         AircraftData raw)
-    {
-        if (raw.AtcRunwaySelected != 0)
-        {
-            var runwayDistance = MetersToNauticalMiles(
-                raw.AtcRunwayStartDistanceMeters);
-            if (runwayDistance.HasValue)
-            {
-                return (runwayDistance, "ATC runway");
-            }
-        }
-
-        var targetDistance = MetersToNauticalMiles(raw.GpsTargetDistanceMeters);
-        if (targetDistance.HasValue)
-        {
-            return (targetDistance, "GPS target");
-        }
-
-        var waypointDistance = MetersToNauticalMiles(raw.GpsWaypointDistanceMeters);
-        return waypointDistance.HasValue
-            ? (waypointDistance, "GPS waypoint")
-            : (null, "");
-    }
-
-    private static double? MetersToNauticalMiles(double meters)
-    {
-        if (double.IsNaN(meters)
-            || double.IsInfinity(meters)
-            || meters <= 0
-            || meters > 100 * MetersPerNauticalMile)
-        {
-            return null;
-        }
-
-        return meters / MetersPerNauticalMile;
-    }
+        => ApproachDistanceResolver.Resolve(
+            raw.AtcRunwaySelected != 0,
+            raw.AtcRunwayStartDistanceMeters,
+            raw.Nav1HasLocalizer != 0,
+            raw.Nav1DmeNm,
+            raw.Nav2HasLocalizer != 0,
+            raw.Nav2DmeNm);
 
     private void TryExecuteOneShotCommand()
     {

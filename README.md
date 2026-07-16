@@ -5,7 +5,7 @@ Simulator 2024:
 
 - **iniBuilds A320neo V2**
 - **iniBuilds A321LR**
-- **iniBuilds A330** *(experimental/work in progress)*
+- **iniBuilds A330-300 (GE)**
 - **FlyByWire A32NX**
 - **PMDG 737-800**
 
@@ -40,6 +40,9 @@ Captain actions, and speaks important callouts.
   state/control integration
 - Gate-to-gate live validation of all twelve PMDG 737-800 flows, protected by
   dedicated routing, command-namespace, checklist, and flow-contract tests
+- Gate-to-gate live validation of all twelve iniBuilds A330 flows, protected
+  by dedicated aircraft routing, command namespace, control mappings, and a
+  frozen flow-contract test
 - Verification after every automatic aircraft action
 - Optional Windows offline voice callouts
 - Persistent preflight settings for V1, VR, and transition altitude
@@ -96,7 +99,7 @@ multi-aircraft virtual first officer. Current aircraft profiles are:
 
 - iniBuilds A320neo V2
 - iniBuilds A321LR
-- iniBuilds A330 *(experimental/work in progress; Flows 1-4 live validated)*
+- iniBuilds A330-300 (GE)
 - FlyByWire A32NX for MSFS 2024
 - PMDG 737-800
 
@@ -272,10 +275,9 @@ See [docs/RELEASING.md](docs/RELEASING.md).
 
 ## Development status
 
-The iniBuilds A320neo V2 and fully live-validated iniBuilds A321LR flows are
-mature baselines. FlyByWire A32NX and PMDG 737-800 are supported through their
-own procedure paths. iniBuilds A330 is included as an experimental beta
-profile: Flows 1-4 passed live testing, Flow 5 and Flow 6 remain partially
-validated, and Flows 7-12 are pending. Remain ready to operate an experimental
-aircraft manually.
+The iniBuilds A320neo V2, iniBuilds A321LR, iniBuilds A330-300 (GE), FlyByWire
+A32NX, and PMDG 737-800 are supported through dedicated procedure paths. The
+A330 has completed live gate-to-gate validation of all twelve flows and is
+protected by aircraft-specific routing, command mappings, and regression
+contracts.
 

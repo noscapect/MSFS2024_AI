@@ -19,6 +19,8 @@ public sealed class AircraftIsolationTests
     [DataRow("FlyByWire A380X", (int)AircraftVariant.Unsupported)]
     [DataRow("Fenix A320", (int)AircraftVariant.Unsupported)]
     [DataRow("Boeing 737 MAX 8", (int)AircraftVariant.Unsupported)]
+    [DataRow("Headwind A330-900neo", (int)AircraftVariant.Unsupported)]
+    [DataRow("Generic A330", (int)AircraftVariant.Unsupported)]
     public void ResolverSelectsExactlyOneImplementation(
         string title,
         int expectedValue)

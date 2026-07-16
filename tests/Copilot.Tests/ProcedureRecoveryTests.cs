@@ -121,14 +121,14 @@ public sealed class ProcedureRecoveryTests
             () => AutomationPolicy.AutomaticWhenSupported);
         var state = new AircraftState
         {
-            Title = "A330",
+            Title = "A330-300 (GE)",
             OnGround = true,
             GroundSpeedKnots = 0,
             Engine1Running = false,
             Engine2Running = false
         };
 
-        runner.Start(A320ProcedureLibrary.PowerUpAndInitialSetup, state);
+        runner.Start(A330ProcedureLibrary.PowerUpAndInitialSetup, state);
 
         Assert.AreEqual("captain-batteries", runner.CurrentStep?.Id);
         Assert.IsTrue(state.IsIniBuildsA330);

@@ -100,7 +100,7 @@ public sealed class ProcedureCatalogTests
     [TestMethod]
     public void IniBuildsA330UsesA330ProcedureCatalog()
     {
-        var state = new AircraftState { Title = "A330" };
+        var state = new AircraftState { Title = "A330-300 (GE)" };
 
         var flows = ProcedureCatalog.ForAircraft(state);
         var checklist = ProcedureCatalog.FindChecklist(state, flows[0].Id);

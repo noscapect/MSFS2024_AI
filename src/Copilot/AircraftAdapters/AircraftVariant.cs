@@ -51,8 +51,8 @@ internal static class AircraftVariantResolver
             return AircraftVariant.Pmdg737800;
         }
 
-        if (string.Equals(value, "A330", StringComparison.OrdinalIgnoreCase)
-            || value.IndexOf("A330", StringComparison.OrdinalIgnoreCase) >= 0)
+        if (value.IndexOf("A330-300 (GE)", StringComparison.OrdinalIgnoreCase) >= 0
+            || value.IndexOf("iniBuilds A330", StringComparison.OrdinalIgnoreCase) >= 0)
         {
             return AircraftVariant.IniBuildsA330;
         }

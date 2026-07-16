@@ -47,7 +47,7 @@ Boeing aircraft profiles:
 
 - iniBuilds A320neo V2
 - iniBuilds A321LR
-- iniBuilds A330 *(experimental/work-in-progress beta profile)*
+- iniBuilds A330-300 (GE)
 - FlyByWire A32NX for MSFS 2024
 - PMDG 737-800
 
@@ -57,15 +57,15 @@ own procedure and checklist library. The iniBuilds A320neo V2 owns a dedicated
 fuel-pump control profile that locks its six live-verified commands and native
 readbacks away from the A321, A330 and FBW implementations. The live-validated A321LR also owns an
 aircraft-specific control profile for its flap and sign-selector mappings;
-generic flap-surface fallbacks are forbidden for this aircraft. Experimental
-A330 work must use A330-specific code paths and may not weaken A321 completion
+generic flap-surface fallbacks are forbidden for this aircraft. A330 changes
+must use A330-specific code paths and may not weaken A321 completion
 conditions or command mappings. FBW-specific mappings use their own adapter
 and procedure libraries through the same normalized state/action model.
 
 The A330 additionally owns an `a330` procedure-command namespace. Runtime
 dispatch rejects those commands for every other aircraft variant. Automated
-contracts verify dedicated procedure/step instances and freeze the A330 flow,
-role, command, and checklist structure while live completion work continues.
+contracts verify dedicated procedure/step instances and freeze the validated
+A330 flow, role, command, and checklist structure.
 Its SimBrief input is optional and aircraft neutral; A333 matching and the
 no-active-OFP path are covered independently.
 

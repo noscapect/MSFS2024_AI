@@ -426,12 +426,12 @@ internal static class A330ProcedureLibrary
                     CrewRole.FirstOfficer),
                 Automatic(
                     "fo-landing-lights-off",
-                    "Landing lights RETRACTED",
+                    "Landing light OFF",
                     state => state.LeftLandingLightSelectorPosition.HasValue
                              && state.RightLandingLightSelectorPosition.HasValue
-                             && Math.Abs(state.LeftLandingLightSelectorPosition.Value - 2) < 0.1
-                             && Math.Abs(state.RightLandingLightSelectorPosition.Value - 2) < 0.1,
-                    "landing-lights retract")
+                             && Math.Abs(state.LeftLandingLightSelectorPosition.Value - 1) < 0.1
+                             && Math.Abs(state.RightLandingLightSelectorPosition.Value - 1) < 0.1,
+                    "landing-lights off")
             });
 
     public static ProcedureDefinition Cruise { get; } =
@@ -685,12 +685,12 @@ internal static class A330ProcedureLibrary
                     CrewRole.FirstOfficer),
                 Automatic(
                     "fo-landing-lights-retract",
-                    "Landing lights RETRACTED",
+                    "Landing light OFF",
                     state => state.LeftLandingLightSelectorPosition.HasValue
                              && state.RightLandingLightSelectorPosition.HasValue
-                             && Math.Abs(state.LeftLandingLightSelectorPosition.Value - 2) < 0.1
-                             && Math.Abs(state.RightLandingLightSelectorPosition.Value - 2) < 0.1,
-                    "landing-lights retract"),
+                             && Math.Abs(state.LeftLandingLightSelectorPosition.Value - 1) < 0.1
+                             && Math.Abs(state.RightLandingLightSelectorPosition.Value - 1) < 0.1,
+                    "landing-lights off"),
                 Automatic(
                     "fo-strobes-off",
                     "Strobes OFF",

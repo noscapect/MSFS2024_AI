@@ -115,6 +115,39 @@ public sealed class ProcedureCatalogTests
     }
 
     [TestMethod]
+    public void IniBuildsA330UsesSingleOnOffLandingLightContract()
+    {
+        var beforeTakeoff = A330ProcedureLibrary.BeforeTakeoff.Steps
+            .Single(step => step.Id == "fo-landing-lights-on");
+        var aboveTenThousand = A330ProcedureLibrary.TakeoffAndClimb.Steps
+            .Single(step => step.Id == "fo-landing-lights-off");
+        var afterLanding = A330ProcedureLibrary.AfterLandingAndTaxi.Steps
+            .Single(step => step.Id == "fo-landing-lights-retract");
+        var on = new AircraftState
+        {
+            Title = "A330-300 (GE)",
+            LeftLandingLightSelectorPosition = 0,
+            RightLandingLightSelectorPosition = 0
+        };
+        var off = new AircraftState
+        {
+            Title = "A330-300 (GE)",
+            LeftLandingLightSelectorPosition = 1,
+            RightLandingLightSelectorPosition = 1
+        };
+
+        Assert.AreEqual("a330 landing-lights on", beforeTakeoff.Command);
+        Assert.IsTrue(beforeTakeoff.IsComplete(on));
+        Assert.IsFalse(beforeTakeoff.IsComplete(off));
+        Assert.AreEqual("a330 landing-lights off", aboveTenThousand.Command);
+        Assert.AreEqual("Landing light OFF", aboveTenThousand.Label);
+        Assert.IsTrue(aboveTenThousand.IsComplete(off));
+        Assert.IsFalse(aboveTenThousand.IsComplete(on));
+        Assert.AreEqual("a330 landing-lights off", afterLanding.Command);
+        Assert.IsFalse(afterLanding.Label.Contains("RETRACT", StringComparison.Ordinal));
+    }
+
+    [TestMethod]
     public void IniBuildsA321UsesA321ProcedureCatalog()
     {
         var state = new AircraftState { Title = "A321" };

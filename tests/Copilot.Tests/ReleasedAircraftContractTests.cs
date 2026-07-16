@@ -17,7 +17,7 @@ public sealed class ReleasedAircraftContractTests
     [DataTestMethod]
     [DataRow("A320neo V2", "8ca4d441ed99c53d9b42ecb60107edf4b2171ce49c88f6d1252a917cbb96a2f8")]
     [DataRow("A321", "f8253aa4c4533730444503354a5c0305bc524f7ddbf73ef5c393c3f9d0f41afd")]
-    [DataRow("A330-300 (GE)", "d37907545b3da9c26b9cbd9132b3dfbd0a3e0f34374c080b116581448867861c")]
+    [DataRow("A330-300 (GE)", "49cc0025e8d29c3a83a71d189ed839c5d710b1ecaab5a160508fd4755d0bcb88")]
     [DataRow("FlyByWire A32NX", "0d3992feff81319fc263abc4aa76e724da0072a7d6ecfe8981388a95067d02a0")]
     [DataRow("PMDG 737-800", "d6b49172b1b2ae4155b84abebd2ee476af28c3310fd9326bcd7b43d7a0dc74ab")]
     public void GateToGateStructureRemainsStable(string title, string expectedFingerprint)

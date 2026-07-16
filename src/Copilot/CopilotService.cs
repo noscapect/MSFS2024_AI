@@ -324,6 +324,8 @@ internal sealed class CopilotService : Form
     private double? _a330WeatherRadarPwsInputState;
     private const ulong A330NoseLightInputEventHash = 7704909914815877606UL;
     private double? _a330NoseLightInputState;
+    private const ulong A330LandingLightInputEventHash = 6747014075822747692UL;
+    private double? _a330LandingLightInputState;
     private const ulong A330TcasTrafficInputEventHash = 11751227568307765711UL;
     private double? _a330TcasTrafficInputState;
     private const ulong A330TcasAltitudeInputEventHash = 8240611082898456697UL;
@@ -527,6 +529,7 @@ internal sealed class CopilotService : Form
         A330NoseLightInputEvent = 236,
         A330TcasTrafficInputEvent = 237,
         A330TcasAltitudeInputEvent = 238,
+        A330LandingLightInputEvent = 239,
         PmdgNg3Data = 300,
         PmdgNg3Control = 301
     }
@@ -1293,6 +1296,7 @@ internal sealed class CopilotService : Form
                 }
                 sender.GetInputEvent(Request.A330WeatherRadarPwsInputEvent, A330WeatherRadarPwsInputEventHash);
                 sender.GetInputEvent(Request.A330NoseLightInputEvent, A330NoseLightInputEventHash);
+                sender.GetInputEvent(Request.A330LandingLightInputEvent, A330LandingLightInputEventHash);
                 sender.GetInputEvent(Request.A330TcasTrafficInputEvent, A330TcasTrafficInputEventHash);
                 sender.GetInputEvent(Request.A330TcasAltitudeInputEvent, A330TcasAltitudeInputEventHash);
             }
@@ -1592,6 +1596,19 @@ internal sealed class CopilotService : Form
             if (!previous.HasValue || Math.Abs(previous.Value - numericValue.Value) >= 0.1)
             {
                 AppLog.Write($"A330 nose light InputEvent={numericValue.Value:0.###}.");
+            }
+
+            ApplyNativeAircraftState();
+            return;
+        }
+
+        if (request == Request.A330LandingLightInputEvent)
+        {
+            var previous = _a330LandingLightInputState;
+            _a330LandingLightInputState = numericValue.Value;
+            if (!previous.HasValue || Math.Abs(previous.Value - numericValue.Value) >= 0.1)
+            {
+                AppLog.Write($"A330 landing light InputEvent={numericValue.Value:0.###} ({(numericValue.Value >= 0.5 ? "ON" : "OFF")}).");
             }
 
             ApplyNativeAircraftState();
@@ -2758,6 +2775,13 @@ internal sealed class CopilotService : Form
         }
         _state.LeftLandingLightSelectorPosition = _nativeLeftLandingLightSelector;
         _state.RightLandingLightSelectorPosition = _nativeRightLandingLightSelector;
+        if (_state.IsIniBuildsA330 && _a330LandingLightInputState.HasValue)
+        {
+            var a330LandingLightPosition =
+                _a330LandingLightInputState.Value >= 0.5 ? 0d : 1d;
+            _state.LeftLandingLightSelectorPosition = a330LandingLightPosition;
+            _state.RightLandingLightSelectorPosition = a330LandingLightPosition;
+        }
         _state.TcasAltitudeReportingOn =
             _nativeTcasAltitudeReporting.HasValue
                 ? _state.IsIniBuildsA330
@@ -3477,6 +3501,8 @@ internal sealed class CopilotService : Form
                     _fbwCommandedLandingLightSelector,
                     _fbwCommandedLandingLightSelectorUtc,
                     raw.FbwLeftLandingLightCircuit)
+                : isIniBuildsA330 && _a330LandingLightInputState.HasValue
+                    ? _a330LandingLightInputState.Value >= 0.5 ? 0d : 1d
                 : isPmdg737 && pmdg != null
                     ? ResolvePmdgCommandedSelectorState(
                         _pmdgCommandedLandingLightSelector,
@@ -3488,6 +3514,8 @@ internal sealed class CopilotService : Form
                     _fbwCommandedLandingLightSelector,
                     _fbwCommandedLandingLightSelectorUtc,
                     raw.FbwRightLandingLightCircuit)
+                : isIniBuildsA330 && _a330LandingLightInputState.HasValue
+                    ? _a330LandingLightInputState.Value >= 0.5 ? 0d : 1d
                 : isPmdg737 && pmdg != null
                     ? ResolvePmdgCommandedSelectorState(
                         _pmdgCommandedLandingLightSelector,
@@ -8299,6 +8327,41 @@ internal sealed class CopilotService : Form
                 desiredPosition == 0,
                 TimeSpan.FromSeconds(10),
                 FormatLandingLightPosition(desiredPosition));
+            return;
+        }
+
+        if (_state?.IsIniBuildsA330 == true)
+        {
+            if (_simConnect == null || !_a330LandingLightInputState.HasValue)
+            {
+                AppendDashboardLog("Landing light blocked: A330 switch readback is unavailable.");
+                FinishOneShot(4);
+                return;
+            }
+
+            var desiredOn = desiredPosition == 0;
+            bool VerifyA330(AircraftState state) =>
+                state.LeftLandingLightSelectorPosition.HasValue
+                && Math.Abs(
+                    state.LeftLandingLightSelectorPosition.Value
+                    - (desiredOn ? 0 : 1)) < 0.1;
+            if (VerifyA330(_state))
+            {
+                AppendDashboardLog($"A330 landing light already {(desiredOn ? "ON" : "OFF")}.");
+                FinishOneShot();
+                return;
+            }
+
+            _simConnect.SetInputEvent(
+                A330LandingLightInputEventHash,
+                desiredOn ? 1.0 : 0.0);
+            BeginNativeAction(
+                "A330 landing light",
+                VerifyA330,
+                desiredOn,
+                TimeSpan.FromSeconds(10),
+                desiredOn ? "ON" : "OFF");
+            AppLog.Write($"A330 landing light command sent: {(desiredOn ? "ON" : "OFF")}.");
             return;
         }
 

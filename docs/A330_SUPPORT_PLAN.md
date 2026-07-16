@@ -24,6 +24,9 @@ A330 profile:
 - the complete twelve-flow structure, roles, commands, and checklist contract
   have a cryptographic regression fingerprint;
 - the A330 uses its own approach profile and explicit Input Event readbacks.
+- the A330 landing-light panel is modeled as its actual single ON/OFF switch,
+  using `AIRLINER_LDGLIGHT_TOGGLE`; it never inherits the A320's paired
+  retractable landing-light selectors or RETRACT terminology.
 
 SimBrief remains optional. A generated A333 OFP is accepted for the built-in
 A330-300 and can provide route, runway, cruise, fuel, and takeoff-flap context.

@@ -372,6 +372,7 @@ internal sealed class CopilotService : Form
     private Label? _adapterBadgeLabel;
     private Label? _flowBadgeLabel;
     private Label? _versionBadgeLabel;
+    private Label? _simBriefBadgeLabel;
     private Label? _sayIntentionsBadgeLabel;
     private PictureBox? _aircraftThumbnailBox;
     private Label? _aircraftCardTitleLabel;
@@ -5523,6 +5524,7 @@ internal sealed class CopilotService : Form
         }
         AppendDashboardLog(
             "New flight started: all saved flow progress was reset.");
+        UpdateSimBriefStatus();
         UpdateDashboard();
         if (_settings.SimBriefAutoImportOnNewFlight
             && (!string.IsNullOrWhiteSpace(_settings.SimBriefPilotId)
@@ -9628,15 +9630,18 @@ internal sealed class CopilotService : Form
         _aircraftBadgeLabel = NewStatusBadge("AIRCRAFT WAITING", System.Drawing.Color.DimGray);
         _adapterBadgeLabel = NewStatusBadge("ADAPTER WAITING", System.Drawing.Color.DimGray);
         _flowBadgeLabel = NewStatusBadge("FLOW IDLE", System.Drawing.Color.DimGray);
+        _simBriefBadgeLabel = NewStatusBadge("SIMBRIEF NOT SET", System.Drawing.Color.DimGray);
         _versionBadgeLabel = NewStatusBadge($"v{GetApplicationVersion()}", System.Drawing.Color.FromArgb(40, 68, 106));
         topStatusBar.Controls.Add(_simBadgeLabel);
         topStatusBar.Controls.Add(_aircraftBadgeLabel);
         topStatusBar.Controls.Add(_adapterBadgeLabel);
         topStatusBar.Controls.Add(_flowBadgeLabel);
+        topStatusBar.Controls.Add(_simBriefBadgeLabel);
         _sayIntentionsBadgeLabel = NewStatusBadge("SAYINTENTIONS OFFLINE", System.Drawing.Color.DimGray);
         topStatusBar.Controls.Add(_sayIntentionsBadgeLabel);
         topStatusBar.Controls.Add(_versionBadgeLabel);
         root.Controls.Add(topStatusBar);
+        UpdateSimBriefStatus();
 
         var statusShell = new TableLayoutPanel
         {
@@ -10762,6 +10767,41 @@ internal sealed class CopilotService : Form
         {
             _simBriefStatusLabel.Text = temporaryStatus ?? SimBriefStatusText();
         }
+
+        if (temporaryStatus != null
+            && temporaryStatus.StartsWith("Importing", StringComparison.OrdinalIgnoreCase))
+        {
+            SetStatusBadge(
+                _simBriefBadgeLabel,
+                "SIMBRIEF IMPORTING",
+                System.Drawing.Color.FromArgb(40, 95, 150));
+            return;
+        }
+
+        if (temporaryStatus != null)
+        {
+            SetStatusBadge(
+                _simBriefBadgeLabel,
+                "SIMBRIEF UNAVAILABLE",
+                System.Drawing.Color.FromArgb(150, 48, 48));
+            return;
+        }
+
+        if (_simBriefFlightPlan != null)
+        {
+            SetStatusBadge(
+                _simBriefBadgeLabel,
+                $"SIMBRIEF {_simBriefFlightPlan.RouteLabel.ToUpperInvariant()}",
+                System.Drawing.Color.FromArgb(39, 130, 87));
+            return;
+        }
+
+        SetStatusBadge(
+            _simBriefBadgeLabel,
+            SimBriefConfigured ? "SIMBRIEF READY" : "SIMBRIEF NOT SET",
+            SimBriefConfigured
+                ? System.Drawing.Color.FromArgb(172, 113, 37)
+                : System.Drawing.Color.DimGray);
     }
 
     private void ShowSimBriefDialog()

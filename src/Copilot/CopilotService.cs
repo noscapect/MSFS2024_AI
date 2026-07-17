@@ -9689,8 +9689,9 @@ internal sealed class CopilotService : Form
             "Client not detected - optional integration inactive.");
         var sayIntentionsButton = new Button
         {
-            Text = "Manage SayIntentions",
-            Width = 130,
+            Text = "Manage SayIntentions...",
+            AutoSize = true,
+            MinimumSize = new System.Drawing.Size(150, 25),
             Height = 25,
             Margin = new Padding(4, 0, 0, 2),
             FlatStyle = FlatStyle.Flat,

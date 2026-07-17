@@ -1,4 +1,5 @@
 using Msfs2024Ai.Copilot.Domain;
+using Msfs2024Ai.Copilot.Voice;
 
 namespace Msfs2024Ai.Copilot.Settings;
 
@@ -8,6 +9,7 @@ public sealed class CopilotSettings
     public AutomationPolicy AutomationPolicy { get; set; } = AutomationPolicy.AutomaticWhenSupported;
     public bool RequireManualStepConfirmation { get; set; } = true;
     public bool EnableStandardCallouts { get; set; } = true;
+    public CalloutDetail CalloutDetail { get; set; } = CalloutDetail.Standard;
     public bool AutoAdvanceObservedSteps { get; set; } = true;
     public int TransitionAltitudeFeet { get; set; } = 5000;
     public int TakeoffV1SpeedKnots { get; set; } = 140;
@@ -32,4 +34,5 @@ public sealed class CopilotSettings
     public string SimBriefPilotId { get; set; } = "";
     public string SimBriefUsername { get; set; } = "";
     public bool SimBriefAutoImportOnNewFlight { get; set; }
+    public bool UseSayIntentionsVoiceCallouts { get; set; }
 }

@@ -768,7 +768,7 @@ internal static class A320ProcedureLibrary
                     "beacon off"),
                 Automatic("fo-fuel-pumps-off", "All six fuel pumps OFF", state => state.AllFuelPumpsOff, "fuel-pumps off"),
                 Automatic("fo-seatbelts-auto-shutdown", "Seatbelt selector remains AUTO", state => A320CabinSignProfile.IsAuto(state.SeatbeltSelectorPosition), A320CabinSignProfile.SeatbeltsAutoCommand),
-                Manual("secure-decision", "Cold-and-dark secure requested", "Captain and First Officer: confirm continuation to final cold-and-dark secure.", CrewRole.Either),
+                Manual("secure-decision", "Choose final secure or follow-up flight", "Captain and First Officer: press Confirm now to continue to final cold-and-dark secure. For a follow-up flight, press Cancel to keep the aircraft on APU or external power.", CrewRole.Either),
                 Automatic(
                     "secure-oxygen",
                     "Crew oxygen OFF",

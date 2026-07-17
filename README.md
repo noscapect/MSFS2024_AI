@@ -1,101 +1,14 @@
 # MSFS 2024 Virtual First Officer
 
-A Windows first-officer companion for supported aircraft in Microsoft Flight
-Simulator 2024:
+MSFS 2024 Virtual First Officer is a free Windows companion for Microsoft
+Flight Simulator 2024. It guides a complete gate-to-gate flight, performs
+supported First Officer duties, monitors Captain actions, verifies cockpit
+changes, and provides spoken operational callouts.
 
-- **iniBuilds A320neo V2**
-- **iniBuilds A321LR**
-- **iniBuilds A330-300 (GE)**
-- **FlyByWire A32NX**
-- **PMDG 737-800**
-
-Application icon artwork contributed by the project owner.
-The icon is embedded in the executable and assigned to the running WinForms
-window so it is also used by the Windows taskbar.
-
-The application connects to the simulator through SimConnect, the installed
-MobiFlight WASM module for Airbus aircraft, and the PMDG NG3 SDK client-data
-channel for PMDG 737 support. It guides a complete 12-flow
-gate-to-gate flight, automates verified First Officer actions, monitors
-Captain actions, and speaks important callouts.
-
-> This is an independent community project. It is not affiliated with or
-> endorsed by Microsoft, Asobo Studio, iniBuilds, FlyByWire Simulations,
-> PMDG, Boeing, Airbus, or MobiFlight.
-
-> **Beta notice:** Versions below 1.0 are development releases. Stable aircraft
-> profiles have completed live validation, while profiles explicitly marked
-> experimental may contain incomplete flows and require manual intervention.
-
-## Current capabilities
-
-- Complete flow from cold and dark through shutdown
-- Automatic First Officer switch and lever actions where reliable aircraft
-  commands and independent readback are available
-- Monitoring of Captain actions without requiring app confirmations during
-  takeoff, approach, landing, or taxi
-- Native iniBuilds Airbus-family and FlyByWire A32NX state monitoring through
-  MobiFlight
-- PMDG 737-800 aircraft-family routing, Boeing procedures and PMDG NG3 SDK
-  state/control integration
-- Gate-to-gate live validation of all twelve PMDG 737-800 flows, protected by
-  dedicated routing, command-namespace, checklist, and flow-contract tests
-- Gate-to-gate live validation of all twelve iniBuilds A330 flows, protected
-  by dedicated aircraft routing, command namespace, control mappings, and a
-  frozen flow-contract test
-- Verification after every automatic aircraft action
-- Optional Windows offline voice callouts
-- Persistent preflight settings for V1, VR, and transition altitude
-- Optional free SimBrief latest-OFP import by Pilot ID or username, with a
-  per-flight operational briefing, mismatch/staleness warnings, block-fuel
-  comparison, aircraft-specific flap normalization, PMDG FMC takeoff-data
-  comparison, and planned-cruise detection
-- A distance-aware standard approach schedule that can be overridden for flap,
-  gear, and landing-configuration gates
-- Aircraft-specific standard approach profiles selected automatically for the
-  loaded aircraft, with separately saved airline-SOP overrides per profile
-- Configurable automatic chaining between Flow 6 to 7, Flow 10 to 11, Flow 11
-  to 12, and optional earlier-flow handoffs
-- One-second flight telemetry recording with 10x replay for procedure testing;
-  only the latest three flights are retained
-- Prioritized voice-callout queue that prevents overlapping speech
-- Automatic flow recommendation based on the current flight phase
-- Saved active-procedure sessions that resume after app or simulator restarts
-- A `New flight / Reset progress` control that clears restored flow progress
-  without changing settings or deleting flight recordings
-- Late-start recovery for transient engine-start and takeoff milestones
-- Current-step telemetry with the active altitude, speed, configuration, and
-  trigger thresholds
-- Readback sanity checks comparing flap-handle and flap-surface telemetry
-- Visible application version and GitHub release update status
-- Monitor-only and confirmation-based automation modes
-- Runtime activity log and diagnostic status display
-- Quiet diagnostic capture and export for verification failures without
-  cluttering the normal player-facing activity log
-
-Voice callouts include engine-start monitoring, takeoff calls, landing gear up
-and down, minimums, spoilers, reverse green, and deceleration.
-
-The gameplay flow is defined in [docs/checklist.md](docs/checklist.md).
-Planned and deliberately deferred features are tracked in
-[docs/ROADMAP.md](docs/ROADMAP.md). The design and implemented first scope for
-optional SimBrief support is documented in
-[docs/SIMBRIEF_INTEGRATION_PLAN.md](docs/SIMBRIEF_INTEGRATION_PLAN.md).
-
-The iniBuilds A321LR profile has completed live validation of all twelve flows.
-Its procedures, checklists, flap mappings, and sign-selector policy are kept in
-an aircraft-specific profile and protected by regression tests. See
-[docs/A321_SUPPORT_STATUS.md](docs/A321_SUPPORT_STATUS.md).
-
-The PMDG 737-800 profile has also completed live validation of all twelve
-flows. Boeing procedures and commands remain isolated from every Airbus
-profile and are guarded by released-aircraft regression contracts. See
-[docs/PMDG_737_SUPPORT_PLAN.md](docs/PMDG_737_SUPPORT_PLAN.md).
+> This project is in beta. Keep flying the aircraft and be prepared to take
+> over whenever an action cannot be completed or verified.
 
 ## Supported aircraft
-
-The application has moved from a single-aircraft A320 assistant to a
-multi-aircraft virtual first officer. Current aircraft profiles are:
 
 - iniBuilds A320neo V2
 - iniBuilds A321LR
@@ -103,103 +16,80 @@ multi-aircraft virtual first officer. Current aircraft profiles are:
 - FlyByWire A32NX for MSFS 2024
 - PMDG 737-800
 
-The application deliberately avoids guessed generic events for unsupported
-aircraft controls.
+Unsupported aircraft are detected but not controlled. The app does not send
+guessed generic commands to an unknown cockpit.
+
+## Highlights
+
+- Twelve flows covering cold and dark through parking and shutdown
+- Aircraft-specific Airbus and Boeing procedures
+- Automatic First Officer actions with cockpit-state verification
+- Monitoring of Captain actions without requiring app interaction during
+  takeoff, approach, landing, or taxi
+- Aircraft-specific approach schedules with optional airline-SOP overrides
+- Automatic handoff between the most time-critical consecutive flows
+- Spoken engine-start, takeoff, configuration, minimums, gear, and landing
+  callouts
+- `Minimal`, `Standard`, and `Expanded` voice detail
+- Optional SimBrief and SayIntentions integration
+- Saved flight progress with a clear `New flight / Reset progress` control
+- Quiet diagnostic recording for troubleshooting
+
+Routine switch movements are intentionally not narrated. Standard voice mode
+focuses on verified configuration changes and operational calls.
 
 ## Requirements
 
-To run the application:
-
 - Windows 10 or Windows 11
 - Microsoft Flight Simulator 2024
-- A supported aircraft profile: iniBuilds A320neo V2, iniBuilds A321LR,
-  iniBuilds A330, FlyByWire A32NX for MSFS 2024, or PMDG 737-800
-- MobiFlight WASM module installed in MSFS
+- One of the supported aircraft
 - .NET Framework 4.7.2 or newer
+- MobiFlight WASM module installed in MSFS for supported Airbus aircraft
 
-PMDG 737-800 support also requires PMDG's SDK data broadcast to be enabled in
-the aircraft options file. See
-[docs/PMDG_737_SUPPORT_PLAN.md](docs/PMDG_737_SUPPORT_PLAN.md).
+The release package contains the required SimConnect client libraries. The
+MSFS SDK is not required to run the app.
 
-GitHub release packages include the matching managed and native Microsoft
-SimConnect client libraries. End users do not need the MSFS SDK.
+### PMDG 737-800
 
-To build from source:
+PMDG SDK data broadcast must be enabled in the aircraft options file:
 
-- .NET SDK 10 or newer
-- MSFS 2024 SDK installed at `C:\MSFS 2024 SDK`
-
-The project currently references the SDK's SimConnect libraries from that
-default location.
-
-## Build
-
-```powershell
-dotnet build .\src\Copilot\Copilot.csproj -c Release
+```ini
+[SDK]
+EnableDataBroadcast=1
 ```
 
-The executable is created at:
+The dashboard should show `PMDG SDK OK` after the aircraft is loaded.
 
-```text
-src\Copilot\bin\Release\net472\Copilot.exe
-```
+## Installation
 
-## Run
+1. Download the latest package from
+   [GitHub Releases](https://github.com/noscapect/MSFS2024_AI/releases/latest).
+2. Extract the complete ZIP file to a normal folder. Do not run the executable
+   from inside the ZIP.
+3. Confirm that the MobiFlight WASM module is installed when using an Airbus.
+4. Start MSFS 2024 and load a supported aircraft.
+5. Run `Copilot.exe` from the extracted release folder.
 
-Start MSFS 2024, load a supported aircraft, and then run:
+Keep all DLLs beside `Copilot.exe`. Windows may show a SmartScreen warning for
+an unsigned community application; verify that the download came from this
+repository before allowing it to run.
 
-```powershell
-.\src\Copilot\bin\Release\net472\Copilot.exe
-```
+## First flight
 
-The dashboard lets you select and start each flow, choose the automation
-policy, enable voice callouts, pause or cancel a procedure, and inspect live
-aircraft status. `Approach & chaining settings` opens the configurable
-approach schedule and flow-handoff options. Completed recordings can be
-selected at the bottom of the dashboard and replayed at 10x speed; replay
-never transmits cockpit commands. Use `New flight / Reset progress` before a
-new sector when the previous flight's saved progress is still displayed.
+1. Load the aircraft at the gate, preferably cold and dark.
+2. Start the app and verify that both MSFS and the correct aircraft are shown
+   as connected.
+3. Select `New flight / Reset progress` when beginning a new sector.
+4. Select Flow 1 and press the prominent start button.
+5. Perform Captain tasks when requested. Use `Confirm now` only after the
+   requested action is complete.
+6. Continue through the recommended flows. Enabled flow handoffs will start
+   automatically.
 
-Use **Manage SimBrief** to configure a free SimBrief Pilot ID or username,
-import the latest generated OFP, review its operational briefing, and activate
-it for the current flight. Import is read-only and optional: it needs no API
-key or paid account, never writes to an aircraft FMC/MCDU, and never blocks a
-flow when SimBrief is unavailable. The active OFP provides route/runway,
-cruise, fuel, and takeoff-reference comparisons; PMDG flights additionally
-compare imported V1, VR, and flap data with the 737 FMC when available.
-
-Settings are stored in:
-
-```text
-%LOCALAPPDATA%\MSFS2024_AI\settings.xml
-```
-
-Runtime logs are stored in:
-
-```text
-%LOCALAPPDATA%\MSFS2024_AI\logs\copilot.log
-```
-
-Detailed verification-failure diagnostics are stored quietly in:
-
-```text
-%LOCALAPPDATA%\MSFS2024_AI\diagnostics
-```
-
-Use **Export diagnostics** or **Copy last diagnostic** in the app when
-reporting a test issue. Normal users can ignore these files.
-
-The latest three flight telemetry recordings are stored in:
-
-```text
-%LOCALAPPDATA%\MSFS2024_AI\flights
-```
-
-The resumable flight session is stored in:
-
-```text
-%LOCALAPPDATA%\MSFS2024_AI\session.xml
-```
+The app may restore an interrupted flight after restart. It does not
+immediately resume cockpit actions: review the aircraft state and use Resume
+only when it is safe. Use `New flight / Reset progress` instead when starting
+a different flight.
 
 ## Gate-to-gate flows
 
@@ -216,68 +106,96 @@ The resumable flight session is stored in:
 11. After Landing & Taxi
 12. Parking & Shutdown
 
-ATC communication and flight-computer data entry remain pilot tasks. Automatic
-STD/QNH switching is intentionally excluded because no reliable verified
-aircraft interface was found.
+The exact actions and ownership differ between aircraft. The loaded aircraft
+always determines which procedure profile is used.
 
-## Safety model
+## SimBrief
 
-Sending a command is not considered success. Each automatic action:
+SimBrief support is free and optional. Open **Manage SimBrief**, enter a Pilot
+ID or username, and import the latest generated OFP.
 
-1. Uses a documented or Behavior Viewer-confirmed aircraft interface.
-2. Waits for separate aircraft-state readback.
-3. Completes only after the requested state is verified.
-4. Stops the active flow if verification fails.
+The app uses the OFP as a read-only operational briefing for route, runway,
+cruise, fuel, flap, and takeoff-reference comparisons. It never writes to the
+aircraft FMC or MCDU and will not block a flight if SimBrief is unavailable.
 
-The app does not silently try guessed alternate events. The final cold-and-dark
-section also requires explicit confirmation before electrical power is removed.
+## SayIntentions
 
-## Diagnostic probe
+SayIntentions support is optional and requires its Windows client with an
+active flight. The app discovers the active local SayIntentions session; it
+does not store the account API credential.
 
-`SimConnectProbe` is a read-only development utility for inspecting aircraft
-Input Events and native variables:
+Available features include:
 
-```powershell
-dotnet build .\src\SimConnectProbe\SimConnectProbe.csproj -c Release
-.\src\SimConnectProbe\bin\Release\net472\SimConnectProbe.exe list-lvars
+- SayIntentions First Officer voices with automatic local voice fallback
+- Read-only ATIS, weather, frequency, gate, and communication information
+- Pilot-authorized IFR-clearance and pushback/start requests through the
+  normal flow confirmation button
+- Temporary First Officer control of the COM1 exchange while the app waits for
+  an ATC response
+
+This integration remains in live validation. If SayIntentions is unavailable
+or does not respond, the normal manual confirmation path remains available.
+The app deliberately does not tune radio frequencies automatically.
+
+## Voice callouts
+
+- **Minimal:** essential takeoff, gear, minimums, and landing calls
+- **Standard:** adds verified flap, speedbrake, stable-approach, and takeoff
+  configuration calls; recommended for normal use
+- **Expanded:** also adds selected autobrake/APU status and checklist
+  completion calls
+
+SayIntentions may apply the language configured for its First Officer. The app
+always supplies standard operational callouts in English.
+
+## Important limitations
+
+- This is assistance software, not an autopilot and not a replacement for
+  aircraft knowledge or checklists.
+- ATC communication and FMC/MCDU data entry remain pilot responsibilities,
+  except for the optional, explicitly authorized SayIntentions requests.
+- Automatic QNH/STD switching is excluded because a sufficiently reliable,
+  verified interface was not found for every supported aircraft.
+- Airline procedures vary. The included configuration is a practical standard
+  profile and can be overridden where settings are available.
+- Aircraft or simulator updates can change cockpit interfaces. Stop the flow
+  and take over if the displayed state does not match the cockpit.
+
+## Troubleshooting and issue reports
+
+If an automatic action fails:
+
+1. Pause or cancel the active flow and keep control of the aircraft.
+2. Note the aircraft, flow, step, and approximate time.
+3. Use **Export diagnostics** or **Copy last diagnostic** in the app.
+4. Open a report in
+   [GitHub Issues](https://github.com/noscapect/MSFS2024_AI/issues) and attach
+   the exported information.
+
+Normal diagnostic and flight-recording retention is limited automatically so
+the app does not continuously consume disk space.
+
+User data is stored under:
+
+```text
+%LOCALAPPDATA%\MSFS2024_AI
 ```
 
-See [docs/NATIVE_CONTROL_STRATEGY.md](docs/NATIVE_CONTROL_STRATEGY.md),
-[docs/FBW_A32NX_SUPPORT_PLAN.md](docs/FBW_A32NX_SUPPORT_PLAN.md), and
-[docs/LIVE_TESTS.md](docs/LIVE_TESTS.md) for control evidence and test
-history.
+Deleting this folder resets settings, saved progress, logs, diagnostics, and
+retained flight recordings.
 
-## Automated tests
+## Documentation
 
-Procedure recovery and aircraft-state sanity checks can be run without MSFS:
+- [Detailed gate-to-gate checklist](docs/checklist.md)
+- [Supported-aircraft and live-test status](docs/LIVE_TESTS.md)
+- [SayIntentions integration status](docs/SAYINTENTIONS_INTEGRATION_PLAN.md)
+- [SimBrief integration](docs/SIMBRIEF_INTEGRATION_PLAN.md)
+- [Product roadmap](docs/ROADMAP.md)
+- [Architecture and contributor information](docs/ARCHITECTURE.md)
 
-```powershell
-dotnet test .\tests\Copilot.Tests\Copilot.Tests.csproj -c Release
-```
+## Disclaimer
 
-## Publishing a release
-
-Maintainers can build, test, package, tag, and publish the current version with:
-
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass `
-  -File .\tools\Publish-Release.ps1
-```
-
-See [docs/RELEASING.md](docs/RELEASING.md).
-
-## Project structure
-
-- `src/Copilot` — WinForms application, simulator integration, procedures, and UI
-- `src/SimConnectProbe` — read-only simulator discovery utility
-- `docs` — checklist, architecture, mappings, and live-test evidence
-- `tools` — control-catalog generation scripts
-
-## Development status
-
-The iniBuilds A320neo V2, iniBuilds A321LR, iniBuilds A330-300 (GE), FlyByWire
-A32NX, and PMDG 737-800 are supported through dedicated procedure paths. The
-A330 has completed live gate-to-gate validation of all twelve flows and is
-protected by aircraft-specific routing, command mappings, and regression
-contracts.
-
+This is an independent freeware community project. It is not affiliated with
+or endorsed by Microsoft, Asobo Studio, iniBuilds, FlyByWire Simulations,
+PMDG, Boeing, Airbus, MobiFlight, SimBrief, or SayIntentions.AI. Use it only
+for flight simulation.

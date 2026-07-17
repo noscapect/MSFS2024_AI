@@ -371,6 +371,6 @@ internal static class B737ProcedureLibrary
                 Automatic("fo-beacon-off", "Anti-collision OFF", state => !state.BeaconOn, "pmdg beacon off"),
                 Automatic("fo-runway-turnoff-off", "Runway turnoff lights OFF", state => !state.RunwayTurnoffLightsOn, "pmdg runway-turnoff off"),
                 Automatic("fo-fuel-pumps-off", "Fuel pumps OFF", state => state.AllFuelPumpsOff, "pmdg fuel-pumps off"),
-                Manual("captain-secure", "Aircraft secure as required", "Captain: complete secure checklist as required for turnaround or cold-and-dark.", CrewRole.Captain)
+                Manual("captain-secure", "Choose final secure or follow-up flight", "Captain: complete the cold-and-dark secure checklist and press Confirm now, or press Cancel for a follow-up flight and remain on APU or ground power.", CrewRole.Captain)
             });
 }

@@ -782,7 +782,7 @@ internal static class A321ProcedureLibrary
                 Automatic("fo-fuel-pumps-off", "All six fuel pumps OFF", state => state.AllFuelPumpsOff, "fuel-pumps off"),
                 Automatic("fo-seatbelts-auto", "Seatbelt selector AUTO", state => state.SeatbeltSelectorPosition.HasValue && Math.Abs(state.SeatbeltSelectorPosition.Value - 1) < 0.1, "seatbelts auto"),
                 Automatic("fo-no-smoking-auto", "No-smoking selector AUTO", state => state.NoSmokingSelectorPosition.HasValue && Math.Abs(state.NoSmokingSelectorPosition.Value - 1) < 0.1, "no-smoking auto"),
-                Manual("secure-decision", "Cold-and-dark secure requested", "Captain and First Officer: confirm continuation to final cold-and-dark secure.", CrewRole.Either),
+                Manual("secure-decision", "Choose final secure or follow-up flight", "Captain and First Officer: press Confirm now to continue to final cold-and-dark secure. For a follow-up flight, press Cancel to keep the aircraft on APU or external power.", CrewRole.Either),
                 Automatic("secure-no-smoking-off", "No-smoking selector OFF for final secure", state => state.NoSmokingSelectorPosition.HasValue && Math.Abs(state.NoSmokingSelectorPosition.Value - 2) < 0.1, "no-smoking off", CrewRole.Either),
                 Automatic(
                     "secure-oxygen",

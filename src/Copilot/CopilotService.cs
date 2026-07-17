@@ -3279,6 +3279,7 @@ internal sealed class CopilotService : Form
             BoeingFmcVrKnots = cockpitVr,
             BoeingFmcTakeoffReferenceComplete = isPmdg737 && pmdg?.FmcPerfInputComplete == true,
             SimBriefTakeoffStatus = SimBriefOperationalContext.TakeoffComparison(activePlan, aircraftVariant, cockpitV1, cockpitVr, cockpitFlaps),
+            SayIntentionsAtcActive = _sayIntentionsFlight != null,
             ApproachDistanceToTouchdownNm = approachDistance.DistanceNm,
             ApproachDistanceSource = approachDistance.Source,
             ApproachFlaps1DistanceNm = approachSchedule.Flaps1DistanceNm,

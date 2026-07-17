@@ -15,11 +15,11 @@ namespace Msfs2024Ai.Copilot.Tests;
 public sealed class ReleasedAircraftContractTests
 {
     [DataTestMethod]
-    [DataRow("A320neo V2", "134e5a5c9c9f8b0813892e694ef165cdabb13ce2d6927fbacdef94dfafee5736")]
-    [DataRow("A321", "d94211d7babe7f03f1104a21311512577e7131612f087e3c097e812bfa3424c4")]
-    [DataRow("A330-300 (GE)", "980f6f4c01fc82abf38070b2d247d593514fbadce71ae7fe32cce62c1b0edd27")]
-    [DataRow("FlyByWire A32NX", "31dbbb3af8079553a790ef2efcd2a6939002178c5246bcec9efda6bcb70c366e")]
-    [DataRow("PMDG 737-800", "25ddad88d6af604a320c92c7796ff839bd62fbc1a98199814856d303474373d5")]
+    [DataRow("A320neo V2", "85e4a3cbfe87a7fb356b5fc82a9a21bed4da7748252ff5f874f78ffd180e32e1")]
+    [DataRow("A321", "004eca2cc1e5375b0bb23a11eaf7630dee719b28489f1253fc81ff4ec5df87ee")]
+    [DataRow("A330-300 (GE)", "4f6a4b3086e52ad31169be8c53eee032fbb078ffcafcb742212e9d68325808cd")]
+    [DataRow("FlyByWire A32NX", "38e4be4517985ff77269c22c1d5fdbf3e0150927e7451f5a89043f4c8386f95f")]
+    [DataRow("PMDG 737-800", "a9cd998c7e4ea9fc06b1bd85e1b7cf19354b61a4a0fe3e7ed418784a4fcfc413")]
     public void GateToGateStructureRemainsStable(string title, string expectedFingerprint)
     {
         Assert.AreEqual(expectedFingerprint, Fingerprint(title));

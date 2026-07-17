@@ -122,6 +122,7 @@ internal sealed class AircraftState
     public double ActualFuelKilograms { get; set; }
     public string SimBriefFuelStatus { get; set; } = "No active SimBrief flight";
     public string SimBriefTakeoffStatus { get; set; } = "No active SimBrief flight";
+    public bool SayIntentionsAtcActive { get; set; }
     public double? ApproachDistanceToTouchdownNm { get; set; }
     public string ApproachDistanceSource { get; set; } = "";
     public int ApproachFlaps1DistanceNm { get; set; } = 15;

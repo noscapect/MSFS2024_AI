@@ -128,8 +128,9 @@ Master ON steps complete.
 8. **F/O automatic:** Set nose light to TAXI.
 9. **F/O confirmation:** Check ECAM for remaining memos or system warnings.
 10. **F/O ATC:** Press **Confirm now** to let the First Officer request taxi
-    clearance through SayIntentions. Without an active integration, complete
-    the request through the configured ATC service and confirm it manually.
+    clearance through SayIntentions. Without an active SayIntentions flight,
+    this step is bypassed automatically so MSFS built-in ATC can continue
+    handling taxi and takeoff requests without extra app confirmations.
 11. **Monitor:** Detect Captain commencing taxi when the parking brake is
     released and groundspeed exceeds 0.5 knots.
 

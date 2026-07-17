@@ -68,6 +68,34 @@ internal sealed class SayIntentionsClient : IDisposable
         return response.IsSuccessStatusCode;
     }
 
+    public async Task<bool> SendAtcTransmissionAsync(
+        SayIntentionsFlightContext context,
+        string message,
+        int com = 1,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(message) || message.Length > 255)
+        {
+            throw new ArgumentOutOfRangeException(nameof(message));
+        }
+        if (com is not (1 or 2))
+        {
+            throw new ArgumentOutOfRangeException(nameof(com));
+        }
+
+        var json = await GetSapiJsonAsync(
+                context,
+                "sayAs",
+                new Dictionary<string, string>
+                {
+                    ["channel"] = $"COM{com}",
+                    ["message"] = message
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return !ContainsError(json);
+    }
+
     public async Task<SayIntentionsWeatherResult> GetWeatherAsync(
         SayIntentionsFlightContext context,
         CancellationToken cancellationToken = default)
@@ -150,6 +178,10 @@ internal sealed class SayIntentionsClient : IDisposable
 
         return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
     }
+
+    private static bool ContainsError(string json) =>
+        !string.IsNullOrWhiteSpace(json)
+        && json.IndexOf("\"error\"", StringComparison.OrdinalIgnoreCase) >= 0;
 
     public void Dispose()
     {

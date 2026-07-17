@@ -35,7 +35,7 @@ public sealed class SayIntentionsResponseParserTests
     public void ParseCommunications_ReadsBothDirections()
     {
         const string json = """
-            {"comm_history":[{
+            {"comm_history":[{"id":4721,
               "stamp_zulu":"2026-07-17T12:00:00Z", "station_name":"Ground",
               "channel":"COM1", "outgoing_message":"Request clearance",
               "incoming_message":"Cleared to EHAM"
@@ -45,6 +45,7 @@ public sealed class SayIntentionsResponseParserTests
         var result = SayIntentionsResponseParser.ParseCommunications(json);
 
         Assert.AreEqual(1, result.Count);
+        Assert.AreEqual(4721, result[0].Id);
         Assert.AreEqual("Request clearance", result[0].OutgoingMessage);
         Assert.AreEqual("Cleared to EHAM", result[0].IncomingMessage);
     }

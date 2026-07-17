@@ -24,6 +24,7 @@ internal sealed class SayIntentionsFrequency
 
 internal sealed class SayIntentionsCommunication
 {
+    public long Id { get; set; }
     public string TimestampUtc { get; set; } = "";
     public string Station { get; set; } = "";
     public string Channel { get; set; } = "";
@@ -83,6 +84,7 @@ internal static class SayIntentionsResponseParser
         Objects(ParseRoot(json), "comm_history")
             .Select(item => new SayIntentionsCommunication
             {
+                Id = Long(item, "id") ?? 0,
                 TimestampUtc = Text(item, "stamp_zulu"),
                 Station = Text(item, "station_name", Text(item, "ident")),
                 Channel = Text(item, "channel"),
@@ -159,6 +161,14 @@ internal static class SayIntentionsResponseParser
             Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture),
             System.Globalization.NumberStyles.Float,
             System.Globalization.CultureInfo.InvariantCulture,
+            out var parsed)
+            ? parsed
+            : null;
+
+    private static long? Long(IDictionary<string, object> source, string key) =>
+        source.TryGetValue(key, out var value)
+        && long.TryParse(
+            Convert.ToString(value, System.Globalization.CultureInfo.InvariantCulture),
             out var parsed)
             ? parsed
             : null;

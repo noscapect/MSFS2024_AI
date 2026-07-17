@@ -398,6 +398,7 @@ internal sealed class CopilotService : Form
     private ListBox? _flowList;
     private Button? _startSelectedFlowButton;
     private Button? _confirmCompletedButton;
+    private Button? _sayIntentionsAtcButton;
     private Button? _simBriefImportButton;
     private ImportedFlightPlan? _simBriefFlightPlan;
     private bool _simBriefImportInProgress;
@@ -10065,6 +10066,26 @@ internal sealed class CopilotService : Form
             System.Drawing.Color.FromArgb(34, 148, 96),
             emphasize: true);
         procedureButtons.Controls.Add(_confirmCompletedButton);
+        _sayIntentionsAtcButton = new Button
+        {
+            Text = "Request via SayIntentions",
+            Width = 190,
+            Height = 34,
+            AutoSize = false,
+            Visible = false,
+            Margin = new Padding(4, 3, 4, 3),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = System.Drawing.Color.FromArgb(40, 95, 150),
+            ForeColor = System.Drawing.Color.White,
+            UseVisualStyleBackColor = false
+        };
+        _sayIntentionsAtcButton.FlatAppearance.BorderSize = 0;
+        _sayIntentionsAtcButton.FlatAppearance.MouseDownBackColor =
+            System.Drawing.Color.FromArgb(30, 64, 120);
+        _sayIntentionsAtcButton.FlatAppearance.MouseOverBackColor =
+            System.Drawing.Color.FromArgb(55, 115, 175);
+        _sayIntentionsAtcButton.Click += (_, _) => ShowSayIntentionsAtcDialog();
+        procedureButtons.Controls.Add(_sayIntentionsAtcButton);
         procedureButtons.Controls.Add(NewProcedureButton("Pause", "procedure pause"));
         procedureButtons.Controls.Add(NewProcedureButton("Resume", "procedure resume"));
         procedureButtons.Controls.Add(NewProcedureButton("Cancel", "procedure cancel"));
@@ -10540,6 +10561,250 @@ internal sealed class CopilotService : Form
 
     private static string ValueOrUnknown(string value) =>
         string.IsNullOrWhiteSpace(value) ? "unknown" : value;
+
+    private void ShowSayIntentionsAtcDialog()
+    {
+        var step = _procedureRunner.CurrentStep;
+        var flight = _sayIntentionsFlight;
+        if (step == null || !IsSayIntentionsAtcStep(step.Id) || flight == null)
+        {
+            MessageBox.Show(
+                this,
+                "An active SayIntentions flight and an IFR or pushback-clearance step are required.",
+                "SayIntentions ATC unavailable",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Information);
+            return;
+        }
+
+        using var dialogCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            _sayIntentionsCancellation.Token);
+        using var dialog = new Form
+        {
+            Text = "Review SayIntentions ATC transmission",
+            Width = 680,
+            Height = 430,
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false
+        };
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(16),
+            ColumnCount = 1,
+            RowCount = 6
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.Absolute, 90));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        dialog.Controls.Add(layout);
+
+        layout.Controls.Add(new Label
+        {
+            Text = "Review the message before sending. It will be transmitted as the pilot on COM1. "
+                   + "Verify that COM1 is tuned to the intended SayIntentions station. "
+                   + "The checklist will still require your confirmation after you acknowledge the reply.",
+            AutoSize = true,
+            MaximumSize = new System.Drawing.Size(625, 0),
+            Margin = new Padding(0, 0, 0, 10)
+        }, 0, 0);
+        var messageBox = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            Multiline = true,
+            MaxLength = 255,
+            Text = BuildSayIntentionsAtcMessage(step.Id, flight),
+            Font = new System.Drawing.Font(Font.FontFamily, 10)
+        };
+        layout.Controls.Add(messageBox, 0, 1);
+        var statusLabel = new Label
+        {
+            Text = "Ready to send.",
+            AutoSize = true,
+            ForeColor = System.Drawing.Color.DarkSlateBlue,
+            Margin = new Padding(0, 8, 0, 5)
+        };
+        layout.Controls.Add(statusLabel, 0, 2);
+        var responseBox = new RichTextBox
+        {
+            Dock = DockStyle.Fill,
+            ReadOnly = true,
+            BackColor = System.Drawing.Color.White,
+            Font = new System.Drawing.Font("Consolas", 9),
+            Text = "The SayIntentions response will appear here."
+        };
+        layout.Controls.Add(responseBox, 0, 3);
+        var reminder = new Label
+        {
+            Text = "No flow step is completed automatically. Read back or acknowledge the clearance in SayIntentions, then use Confirm now.",
+            AutoSize = true,
+            MaximumSize = new System.Drawing.Size(625, 0),
+            ForeColor = System.Drawing.Color.DarkGoldenrod,
+            Margin = new Padding(0, 8, 0, 4)
+        };
+        layout.Controls.Add(reminder, 0, 4);
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            FlowDirection = FlowDirection.RightToLeft,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+        var closeButton = new Button { Text = "Close", AutoSize = true };
+        closeButton.Click += (_, _) => dialog.Close();
+        var sendButton = new Button
+        {
+            Text = "Send on COM1",
+            AutoSize = true,
+            BackColor = System.Drawing.Color.FromArgb(40, 95, 150),
+            ForeColor = System.Drawing.Color.White,
+            FlatStyle = FlatStyle.Flat
+        };
+        sendButton.Click += async (_, _) => await SendSayIntentionsAtcAndMonitorAsync(
+            flight,
+            messageBox,
+            responseBox,
+            statusLabel,
+            sendButton,
+            dialogCancellation.Token);
+        buttons.Controls.Add(closeButton);
+        buttons.Controls.Add(sendButton);
+        layout.Controls.Add(buttons, 0, 5);
+        dialog.FormClosed += (_, _) => dialogCancellation.Cancel();
+        dialog.ShowDialog(this);
+    }
+
+    private async Task SendSayIntentionsAtcAndMonitorAsync(
+        SayIntentionsFlightContext flight,
+        TextBox messageBox,
+        RichTextBox responseBox,
+        Label statusLabel,
+        Button sendButton,
+        CancellationToken cancellationToken)
+    {
+        var message = messageBox.Text.Trim();
+        if (string.IsNullOrWhiteSpace(message))
+        {
+            statusLabel.Text = "Enter a transmission first.";
+            statusLabel.ForeColor = System.Drawing.Color.DarkRed;
+            return;
+        }
+
+        sendButton.Enabled = false;
+        messageBox.ReadOnly = true;
+        var transmissionSent = false;
+        try
+        {
+            IReadOnlyList<SayIntentionsCommunication> before;
+            try
+            {
+                before = await _sayIntentionsClient
+                    .GetCommunicationsAsync(flight, cancellationToken);
+            }
+            catch (Exception ex) when (ex is HttpRequestException
+                                       or InvalidOperationException
+                                       or ArgumentException)
+            {
+                before = Array.Empty<SayIntentionsCommunication>();
+            }
+            var previousMaximumId = before.Count == 0 ? 0 : before.Max(item => item.Id);
+            var previousCount = before.Count;
+
+            statusLabel.Text = "Transmitting on COM1...";
+            if (!await _sayIntentionsClient.SendAtcTransmissionAsync(
+                    flight,
+                    message,
+                    1,
+                    cancellationToken))
+            {
+                throw new HttpRequestException("SayIntentions rejected the transmission.");
+            }
+            transmissionSent = true;
+
+            AppendDashboardLog("Pilot transmission sent through SayIntentions COM1; awaiting ATC reply.");
+            statusLabel.Text = "Sent. Waiting for a new SayIntentions ATC reply...";
+            responseBox.Text = "Transmission sent successfully. Waiting for ATC...";
+
+            for (var attempt = 0; attempt < 15; attempt++)
+            {
+                await Task.Delay(TimeSpan.FromSeconds(2), cancellationToken);
+                IReadOnlyList<SayIntentionsCommunication> current;
+                try
+                {
+                    current = await _sayIntentionsClient
+                        .GetCommunicationsAsync(flight, cancellationToken);
+                }
+                catch (Exception ex) when (ex is HttpRequestException
+                                           or InvalidOperationException
+                                           or ArgumentException)
+                {
+                    continue;
+                }
+                var reply = current
+                    .Where(item => !string.IsNullOrWhiteSpace(item.IncomingMessage))
+                    .LastOrDefault(item => item.Id > previousMaximumId)
+                    ?? (current.Count > previousCount
+                        ? current.LastOrDefault(item => !string.IsNullOrWhiteSpace(item.IncomingMessage))
+                        : null);
+                if (reply == null)
+                {
+                    continue;
+                }
+
+                statusLabel.Text = "ATC reply received. Review and acknowledge it before confirming the checklist step.";
+                statusLabel.ForeColor = System.Drawing.Color.DarkGreen;
+                responseBox.Text =
+                    $"{reply.Station} {reply.Channel}\r\n\r\n{reply.IncomingMessage}";
+                AppendDashboardLog("SayIntentions ATC reply received; pilot acknowledgment and confirmation required.");
+                return;
+            }
+
+            statusLabel.Text = "Transmission sent, but no new reply was detected within 30 seconds.";
+            statusLabel.ForeColor = System.Drawing.Color.DarkGoldenrod;
+            responseBox.Text =
+                "Check the SayIntentions interface and COM1 frequency. The normal manual checklist confirmation remains available.";
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Dialog or application closed.
+        }
+        catch (Exception ex) when (ex is HttpRequestException
+                                   or InvalidOperationException
+                                   or ArgumentException)
+        {
+            statusLabel.Text = "SayIntentions could not send or monitor this transmission.";
+            statusLabel.ForeColor = System.Drawing.Color.DarkRed;
+            responseBox.Text =
+                "No checklist state was changed. Continue through SayIntentions directly and use the normal pilot confirmation.";
+        }
+        finally
+        {
+            if (!sendButton.IsDisposed)
+            {
+                sendButton.Enabled = !transmissionSent;
+                messageBox.ReadOnly = transmissionSent;
+            }
+        }
+    }
+
+    private string BuildSayIntentionsAtcMessage(
+        string stepId,
+        SayIntentionsFlightContext flight) =>
+        SayIntentionsAtcMessageBuilder.Build(
+            stepId,
+            flight.Callsign,
+            _simBriefFlightPlan?.FlightNumber ?? "",
+            flight.OriginIcao,
+            flight.DestinationIcao,
+            flight.AssignedGate);
+
+    private static bool IsSayIntentionsAtcStep(string? stepId) =>
+        stepId is "captain-ifr-clearance" or "captain-pushback-clearance";
 
     private bool SimBriefConfigured =>
         !string.IsNullOrWhiteSpace(_settings.SimBriefPilotId)
@@ -12009,6 +12274,19 @@ internal sealed class CopilotService : Form
                 ? "Confirm now"
                 : "Confirm completed";
         }
+
+        if (_sayIntentionsAtcButton != null)
+        {
+            var stepId = _procedureRunner.CurrentStep?.Id;
+            var relevantStep = IsSayIntentionsAtcStep(stepId);
+            _sayIntentionsAtcButton.Visible = relevantStep && _sayIntentionsFlight != null;
+            _sayIntentionsAtcButton.Enabled = relevantStep
+                && _sayIntentionsFlight != null
+                && status == ProcedureStatus.WaitingForManualAction;
+            _sayIntentionsAtcButton.Text = stepId == "captain-ifr-clearance"
+                ? "Request IFR via SayIntentions"
+                : "Request pushback via SayIntentions";
+        }
     }
 
     private static bool IsProcedureActive(ProcedureStatus status) =>
@@ -12039,7 +12317,7 @@ internal sealed class CopilotService : Form
             _ => role.ToString()
         };
 
-    private static string FormatWaitingReason(
+    private string FormatWaitingReason(
         ProcedureStep? step,
         AircraftState state,
         ProcedureStatus status)
@@ -12050,6 +12328,12 @@ internal sealed class CopilotService : Form
         }
         if (status == ProcedureStatus.WaitingForManualAction)
         {
+            if (_sayIntentionsFlight != null && IsSayIntentionsAtcStep(step.Id))
+            {
+                return step.Id == "captain-ifr-clearance"
+                    ? "Waiting for: Pilot request, read back, and acknowledge IFR clearance. Use Request IFR via SayIntentions or your normal ATC service, then confirm."
+                    : "Waiting for: Pilot request and acknowledge pushback/engine-start clearance. Use Request pushback via SayIntentions or your normal ATC service, then confirm.";
+            }
             return step.ManualInstruction != null
                 ? $"Waiting for: {step.ManualInstruction}"
                 : $"Waiting for: pilot confirmation of {step.Label}.";

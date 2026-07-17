@@ -48,6 +48,8 @@ Captain actions, and speaks important callouts.
 - Optional SayIntentions companion detection and First Officer voice callouts,
   plus read-only weather, ATIS, frequencies, parking, and communications,
   with automatic local-voice fallback and no stored API credentials
+- Pilot-reviewed SayIntentions COM1 requests for IFR clearance and
+  pushback/start clearance, with non-blocking ATC-response monitoring
 - Persistent preflight settings for V1, VR, and transition altitude
 - Optional free SimBrief latest-OFP import by Pilot ID or username, with a
   per-flight operational briefing, mismatch/staleness warnings, block-fuel

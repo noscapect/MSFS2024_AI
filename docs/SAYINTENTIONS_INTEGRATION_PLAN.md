@@ -21,6 +21,11 @@ runtime requirement and without coupling it to any aircraft adapter.
 - Show read-only ATIS, METAR, TAF, active-runway, frequency, assigned-parking,
   and recent-communications data in `Manage SayIntentions`.
 - Provide a user-triggered First Officer voice test.
+- During the existing IFR-clearance and pushback/start-clearance pilot steps,
+  show a contextual SayIntentions action when an active session is available.
+- Require the pilot to review and explicitly send the editable COM1 message.
+- Poll for and display a new ATC response for up to 30 seconds without
+  automatically completing or blocking the checklist step.
 
 ## Security and isolation
 
@@ -38,10 +43,11 @@ runtime requirement and without coupling it to any aircraft adapter.
 
 ## Next slices
 
-1. User-approved ATC transmissions such as IFR-clearance and pushback
-   requests.
-2. Conservative clearance recognition after live validation; it must never
-   block a normal flight when SayIntentions is unavailable.
+1. Live-validate IFR-clearance and pushback transmissions across multiple
+   airports, frequencies, and callsigns.
+2. Consider automatic clearance recognition only after that validation. It
+   must remain conservative and must never block a normal flight when
+   SayIntentions is unavailable.
 
-Frequency changes and automatic ATC transmissions remain out of the first
-slice so the app cannot fight SayIntentions or cockpit radio management.
+Frequency changes and automatic/unreviewed ATC transmissions remain out of
+scope so the app cannot fight SayIntentions or cockpit radio management.

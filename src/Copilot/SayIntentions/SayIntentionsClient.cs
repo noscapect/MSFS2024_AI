@@ -14,7 +14,7 @@ internal sealed class SayIntentionsClient : IDisposable
     {
         _localClient = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
         _apiClient = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
-        _apiClient.DefaultRequestHeaders.UserAgent.ParseAdd("MSFS2024-Virtual-First-Officer/0.8.1");
+        _apiClient.DefaultRequestHeaders.UserAgent.ParseAdd("MSFS2024-Virtual-First-Officer/0.9.0");
     }
 
     public async Task<SayIntentionsDiscoveryResult> DiscoverAsync(

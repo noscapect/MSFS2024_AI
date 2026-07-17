@@ -392,6 +392,7 @@ internal sealed class CopilotService : Form
     private NumericUpDown? _transitionAltitudeBox;
     private NumericUpDown? _takeoffV1Box;
     private NumericUpDown? _takeoffRotateBox;
+    private NumericUpDown? _takeoffV2Box;
     private CheckBox? _voiceCalloutsBox;
     private ComboBox? _calloutDetailBox;
     private CheckBox? _sayIntentionsVoiceBox;
@@ -2955,6 +2956,9 @@ internal sealed class CopilotService : Form
         var effectiveVr = cockpitVr
             ?? _settings.TakeoffRotateSpeedKnots;
         effectiveVr = Math.Max(effectiveV1, effectiveVr);
+        var effectiveV2 = Math.Max(
+            effectiveVr,
+            _settings.TakeoffV2SpeedKnots);
 
         _state = new AircraftState
         {
@@ -3257,7 +3261,7 @@ internal sealed class CopilotService : Form
             IndicatedAirspeedKnots = raw.IndicatedAirspeed,
             TakeoffV1SpeedKnots = effectiveV1,
             TakeoffRotateSpeedKnots = effectiveVr,
-            TakeoffV2SpeedKnots = activePlan?.TakeoffV2Knots,
+            TakeoffV2SpeedKnots = effectiveV2,
             SimBriefFlightNumber = activePlan?.FlightNumber ?? "",
             SimBriefOriginIcao = activePlan?.OriginIcao ?? "",
             SimBriefDestinationIcao = activePlan?.DestinationIcao ?? "",
@@ -9931,6 +9935,13 @@ internal sealed class CopilotService : Form
                 return;
             }
             _settings.TakeoffRotateSpeedKnots = (int)_takeoffRotateBox.Value;
+            if (_takeoffV2Box != null
+                && _takeoffV2Box.Value < _takeoffRotateBox.Value)
+            {
+                _takeoffV2Box.Value = Math.Min(
+                    _takeoffV2Box.Maximum,
+                    _takeoffRotateBox.Value);
+            }
             SettingsStore.Save(_settings);
             if (_state != null)
             {
@@ -9939,6 +9950,48 @@ internal sealed class CopilotService : Form
             }
         };
         flightSetupPanel.Controls.Add(_takeoffRotateBox);
+        flightSetupPanel.Controls.Add(new Label
+        {
+            Text = "kt",
+            AutoSize = true,
+            Margin = new Padding(2, 7, 0, 0)
+        });
+
+        flightSetupPanel.Controls.Add(new Label
+        {
+            Text = "V2:",
+            AutoSize = true,
+            Margin = new Padding(10, 7, 4, 0)
+        });
+        _takeoffV2Box = new NumericUpDown
+        {
+            Minimum = 80,
+            Maximum = 220,
+            Increment = 1,
+            Value = Math.Max(
+                _settings.TakeoffRotateSpeedKnots,
+                Math.Min(220, _settings.TakeoffV2SpeedKnots)),
+            Width = 64
+        };
+        _takeoffV2Box.ValueChanged += (_, _) =>
+        {
+            if (_takeoffRotateBox != null
+                && _takeoffV2Box.Value < _takeoffRotateBox.Value)
+            {
+                _takeoffV2Box.Value = Math.Min(
+                    _takeoffV2Box.Maximum,
+                    _takeoffRotateBox.Value);
+                return;
+            }
+            _settings.TakeoffV2SpeedKnots = (int)_takeoffV2Box.Value;
+            SettingsStore.Save(_settings);
+            if (_state != null)
+            {
+                _state.TakeoffV2SpeedKnots =
+                    _settings.TakeoffV2SpeedKnots;
+            }
+        };
+        flightSetupPanel.Controls.Add(_takeoffV2Box);
         flightSetupPanel.Controls.Add(new Label
         {
             Text = "kt",
@@ -11171,6 +11224,8 @@ internal sealed class CopilotService : Form
             changes.Add($"V1: {plan.TakeoffV1Knots} kt");
         if (plan.TakeoffVrKnots is >= 80 and <= 220)
             changes.Add($"VR: {plan.TakeoffVrKnots} kt");
+        if (plan.TakeoffV2Knots is >= 80 and <= 220)
+            changes.Add($"V2: {plan.TakeoffV2Knots} kt");
 
         var message = SimBriefSummary(plan)
             + (warnings.Count > 0 ? "\n\nWarnings:\n- " + string.Join("\n- ", warnings) : "")
@@ -11225,11 +11280,18 @@ internal sealed class CopilotService : Form
                 Math.Max(_takeoffRotateBox.Minimum, _settings.TakeoffV1SpeedKnots),
                 Math.Min(_takeoffRotateBox.Maximum, _settings.TakeoffRotateSpeedKnots));
         }
+        if (_takeoffV2Box != null)
+        {
+            _takeoffV2Box.Value = Math.Max(
+                Math.Max(_takeoffV2Box.Minimum, _settings.TakeoffRotateSpeedKnots),
+                Math.Min(_takeoffV2Box.Maximum, _settings.TakeoffV2SpeedKnots));
+        }
         if (_state != null)
         {
             _state.TransitionAltitudeFeet = _settings.TransitionAltitudeFeet;
             _state.TakeoffV1SpeedKnots = _settings.TakeoffV1SpeedKnots;
             _state.TakeoffRotateSpeedKnots = _settings.TakeoffRotateSpeedKnots;
+            _state.TakeoffV2SpeedKnots = _settings.TakeoffV2SpeedKnots;
         }
     }
 

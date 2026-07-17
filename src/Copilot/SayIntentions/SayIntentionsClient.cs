@@ -135,6 +135,51 @@ internal sealed class SayIntentionsClient : IDisposable
         return SayIntentionsResponseParser.ParseCommunications(json);
     }
 
+    public async Task<IReadOnlyList<SayIntentionsFrequency>> GetCurrentFrequenciesAsync(
+        SayIntentionsFlightContext context,
+        CancellationToken cancellationToken = default)
+    {
+        var json = await GetSapiJsonAsync(
+                context,
+                "getCurrentFrequencies",
+                null,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return SayIntentionsResponseParser.ParseCurrentFrequencies(json);
+    }
+
+    public async Task<bool> SetFrequencyAsync(
+        SayIntentionsFlightContext context,
+        double frequencyMhz,
+        int com = 1,
+        CancellationToken cancellationToken = default)
+    {
+        if (frequencyMhz is < 118 or > 136.975)
+        {
+            throw new ArgumentOutOfRangeException(nameof(frequencyMhz));
+        }
+        if (com is not (1 or 2))
+        {
+            throw new ArgumentOutOfRangeException(nameof(com));
+        }
+
+        var json = await GetSapiJsonAsync(
+                context,
+                "setFreq",
+                new Dictionary<string, string>
+                {
+                    ["freq"] = frequencyMhz.ToString(
+                        "0.000",
+                        System.Globalization.CultureInfo.InvariantCulture),
+                    ["com"] = com.ToString(
+                        System.Globalization.CultureInfo.InvariantCulture),
+                    ["mode"] = "active"
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return !ContainsError(json);
+    }
+
     public async Task<SayIntentionsParking?> GetParkingAsync(
         SayIntentionsFlightContext context,
         CancellationToken cancellationToken = default)

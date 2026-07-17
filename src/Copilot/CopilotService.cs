@@ -10818,6 +10818,51 @@ internal sealed class CopilotService : Form
         var copilotCommsClaimed = false;
         try
         {
+            var discovery = await _sayIntentionsClient
+                .DiscoverAsync(_sayIntentionsCancellation.Token);
+            if (discovery.Context == null)
+            {
+                throw new InvalidOperationException(
+                    "SayIntentions no longer reports an active flight.");
+            }
+            flight = discovery.Context;
+            _sayIntentionsFlight = flight;
+            UpdateSayIntentionsStatus(discovery);
+
+            var frequencies = await _sayIntentionsClient
+                .GetCurrentFrequenciesAsync(
+                    flight,
+                    _sayIntentionsCancellation.Token);
+            var selectedFrequency = SayIntentionsFrequencySelector.SelectForStep(
+                stepId,
+                frequencies);
+            if (selectedFrequency == null
+                || !SayIntentionsFrequencySelector.TryParseFrequency(
+                    selectedFrequency.Frequency,
+                    out var frequencyMhz))
+            {
+                throw new InvalidOperationException(
+                    "SayIntentions did not provide a usable departure ATC frequency.");
+            }
+            if (!await _sayIntentionsClient.SetFrequencyAsync(
+                    flight,
+                    frequencyMhz,
+                    1,
+                    _sayIntentionsCancellation.Token))
+            {
+                throw new HttpRequestException(
+                    "SayIntentions rejected the COM1 frequency change.");
+            }
+            var stationName = string.IsNullOrWhiteSpace(selectedFrequency.Callsign)
+                ? selectedFrequency.Type
+                : selectedFrequency.Callsign;
+            AppendDashboardLog(
+                $"COM1 tuned to {frequencyMhz:0.000} MHz for "
+                + $"{stationName}.");
+            await Task.Delay(
+                TimeSpan.FromMilliseconds(500),
+                _sayIntentionsCancellation.Token);
+
             IReadOnlyList<SayIntentionsCommunication> before;
             try
             {
@@ -10833,12 +10878,20 @@ internal sealed class CopilotService : Form
 
             var previousMaximumId = before.Count == 0 ? 0 : before.Max(item => item.Id);
             var previousCount = before.Count;
+            var messageOrigin = !string.IsNullOrWhiteSpace(
+                _simBriefFlightPlan?.OriginIcao)
+                ? _simBriefFlightPlan!.OriginIcao
+                : flight.OriginIcao;
+            var messageDestination = !string.IsNullOrWhiteSpace(
+                _simBriefFlightPlan?.DestinationIcao)
+                ? _simBriefFlightPlan!.DestinationIcao
+                : flight.DestinationIcao;
             var message = SayIntentionsAtcMessageBuilder.Build(
                 stepId,
                 flight.Callsign,
                 _simBriefFlightPlan?.FlightNumber ?? "",
-                flight.OriginIcao,
-                flight.DestinationIcao,
+                messageOrigin,
+                messageDestination,
                 flight.AssignedGate);
 
             AppendDashboardLog(
@@ -10883,10 +10936,15 @@ internal sealed class CopilotService : Form
                 }
 
                 var reply = current
-                    .Where(item => !string.IsNullOrWhiteSpace(item.IncomingMessage))
+                    .Where(item => SayIntentionsCommunicationMatcher.IsGenuineReply(
+                        item,
+                        message))
                     .LastOrDefault(item => item.Id > previousMaximumId)
                     ?? (current.Count > previousCount
-                        ? current.LastOrDefault(item => !string.IsNullOrWhiteSpace(item.IncomingMessage))
+                        ? current.LastOrDefault(item =>
+                            SayIntentionsCommunicationMatcher.IsGenuineReply(
+                                item,
+                                message))
                         : null);
                 if (reply == null)
                 {
@@ -10915,6 +10973,7 @@ internal sealed class CopilotService : Form
                                    or InvalidOperationException
                                    or ArgumentException)
         {
+            AppLog.Write($"SayIntentions ATC request failed: {ex.Message}");
             _sayIntentionsAtcRequestSentStepId = stepId;
             AppendDashboardLog(
                 "SayIntentions ATC request failed. Use your normal ATC service, then press Confirm ATC completed.");

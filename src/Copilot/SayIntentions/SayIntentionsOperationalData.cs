@@ -48,6 +48,21 @@ internal sealed class SayIntentionsWeatherResult
 
 internal static class SayIntentionsResponseParser
 {
+    public static IReadOnlyList<SayIntentionsFrequency> ParseCurrentFrequencies(string json)
+    {
+        var root = ParseRoot(json);
+        var airport = Text(root, "airport");
+        return Objects(root, "frequencies")
+            .Select(item => new SayIntentionsFrequency
+            {
+                Airport = airport,
+                Type = Text(item, "station"),
+                Frequency = Text(item, "freq"),
+                Callsign = Text(item, "long_station")
+            })
+            .ToList();
+    }
+
     public static SayIntentionsWeatherResult ParseWeather(string json)
     {
         var result = new SayIntentionsWeatherResult();

@@ -7,6 +7,61 @@ namespace Copilot.Tests;
 public sealed class SayIntentionsResponseParserTests
 {
     [TestMethod]
+    public void ParseCurrentFrequencies_ReadsActiveAirportStations()
+    {
+        const string json = """
+            {"airport":"EGSH","frequencies":[
+              {"station":"TWR","freq":"124.255","long_station":"Tower"}
+            ]}
+            """;
+
+        var result = SayIntentionsResponseParser.ParseCurrentFrequencies(json);
+
+        Assert.AreEqual(1, result.Count);
+        Assert.AreEqual("EGSH", result[0].Airport);
+        Assert.AreEqual("TWR", result[0].Type);
+        Assert.AreEqual("124.255", result[0].Frequency);
+    }
+
+    [TestMethod]
+    public void FrequencySelector_UsesClearanceGroundThenTowerFallback()
+    {
+        var frequencies = new[]
+        {
+            new SayIntentionsFrequency { Type = "TWR", Frequency = "124.255" },
+            new SayIntentionsFrequency { Type = "GND", Frequency = "121.900" },
+            new SayIntentionsFrequency { Type = "CLR", Frequency = "121.980" }
+        };
+
+        Assert.AreEqual("CLR", SayIntentionsFrequencySelector.SelectForStep(
+            "captain-ifr-clearance", frequencies)!.Type);
+        Assert.AreEqual("GND", SayIntentionsFrequencySelector.SelectForStep(
+            "captain-pushback-clearance", frequencies)!.Type);
+        Assert.AreEqual("TWR", SayIntentionsFrequencySelector.SelectForStep(
+            "captain-ifr-clearance", frequencies.Take(1))!.Type);
+    }
+
+    [TestMethod]
+    public void CommunicationMatcher_RejectsEchoedOutgoingRequest()
+    {
+        const string request = "KLM1701, request IFR clearance";
+        Assert.IsFalse(SayIntentionsCommunicationMatcher.IsGenuineReply(
+            new SayIntentionsCommunication
+            {
+                OutgoingMessage = request,
+                IncomingMessage = request
+            },
+            request));
+        Assert.IsTrue(SayIntentionsCommunicationMatcher.IsGenuineReply(
+            new SayIntentionsCommunication
+            {
+                OutgoingMessage = request,
+                IncomingMessage = "KLM1701, cleared to EHAM"
+            },
+            request));
+    }
+
+    [TestMethod]
     public void ParseWeather_ReadsOperationalBriefingAndFrequencies()
     {
         const string json = """

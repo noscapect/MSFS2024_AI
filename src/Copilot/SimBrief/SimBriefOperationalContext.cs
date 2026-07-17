@@ -48,6 +48,17 @@ internal static class SimBriefOperationalContext
                 changed = true;
             }
         }
+        if (plan.TakeoffV2Knots is >= 80 and <= 220)
+        {
+            var reviewedV2 = Math.Max(
+                settings.TakeoffRotateSpeedKnots,
+                plan.TakeoffV2Knots.Value);
+            if (settings.TakeoffV2SpeedKnots != reviewedV2)
+            {
+                settings.TakeoffV2SpeedKnots = reviewedV2;
+                changed = true;
+            }
+        }
         return changed;
     }
 

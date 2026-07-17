@@ -127,7 +127,11 @@ Master ON steps complete.
 7. **F/O automatic:** Set WXR/PWS selector to position 1.
 8. **F/O automatic:** Set nose light to TAXI.
 9. **F/O confirmation:** Check ECAM for remaining memos or system warnings.
-10. **Monitor:** Detect Captain commencing taxi when the parking brake is
+10. **F/O ATC:** Press **Confirm now** to let the First Officer request taxi
+    clearance through SayIntentions. Without an active SayIntentions flight,
+    this step is bypassed automatically so MSFS built-in ATC can continue
+    handling taxi and takeoff requests without extra app confirmations.
+11. **Monitor:** Detect Captain commencing taxi when the parking brake is
     released and groundspeed exceeds 0.5 knots.
 
 ## 6. Before Takeoff
@@ -142,6 +146,10 @@ Master ON steps complete.
 7. **F/O automatic:** Set nose light to T.O. Strobes remain in AUTO from
    Flow 1; the aircraft manages takeoff strobe behavior.
 8. **F/O automatic:** Set both landing lights ON.
+9. **F/O ATC:** With an active SayIntentions flight and while holding short,
+   press **Confirm now** to let the First Officer report ready for departure
+   and request takeoff clearance on Tower. Without SayIntentions, this step is
+   bypassed automatically and MSFS built-in ATC continues normally.
 
 By default, completing Flow 6 automatically starts Flow 7. This keeps the
 before-takeoff and takeoff phases hands-off while the aircraft is entering the

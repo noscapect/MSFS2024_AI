@@ -294,6 +294,7 @@ internal static class A321ProcedureLibrary
                              && Math.Abs(state.NoseLightSelectorPosition.Value - 1) < 0.1,
                     "nose-light taxi"),
                 Manual("fo-ecam", "ECAM checked", "First Officer: check for remaining memos or system warnings, then confirm.", CrewRole.FirstOfficer),
+                Manual("fo-taxi-clearance", "Taxi clearance received", "First Officer: press Confirm now to request taxi clearance through SayIntentions.", CrewRole.FirstOfficer, state => !state.SayIntentionsAtcActive),
                 Observe(
                     "captain-taxi",
                     "Captain commenced taxi",
@@ -341,7 +342,8 @@ internal static class A321ProcedureLibrary
                              && state.RightLandingLightSelectorPosition.HasValue
                              && Math.Abs(state.LeftLandingLightSelectorPosition.Value) < 0.1
                              && Math.Abs(state.RightLandingLightSelectorPosition.Value) < 0.1,
-                    "landing-lights on")
+                    "landing-lights on"),
+                Manual("fo-takeoff-clearance", "Takeoff clearance received", "First Officer: while holding short, press Confirm now to report ready for departure and request takeoff clearance through SayIntentions.", CrewRole.FirstOfficer, state => !state.SayIntentionsAtcActive)
             });
 
     public static ProcedureDefinition TakeoffAndClimb { get; } =

@@ -57,7 +57,8 @@ public sealed class SimBriefOperationalContextTests
         {
             TransitionAltitudeFeet = 4000,
             TakeoffV1SpeedKnots = 141,
-            TakeoffRotateSpeedKnots = 143
+            TakeoffRotateSpeedKnots = 143,
+            TakeoffV2SpeedKnots = 145
         };
         var plan = new ImportedFlightPlan
         {
@@ -71,7 +72,7 @@ public sealed class SimBriefOperationalContextTests
         Assert.AreEqual(4500, settings.TransitionAltitudeFeet);
         Assert.AreEqual(116, settings.TakeoffV1SpeedKnots);
         Assert.AreEqual(116, settings.TakeoffRotateSpeedKnots);
-        Assert.AreEqual(127, plan.TakeoffV2Knots);
+        Assert.AreEqual(127, settings.TakeoffV2SpeedKnots);
 
         settings.TakeoffRotateSpeedKnots = 118;
         Assert.AreEqual(118, settings.TakeoffRotateSpeedKnots,

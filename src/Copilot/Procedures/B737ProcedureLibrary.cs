@@ -232,6 +232,7 @@ internal static class B737ProcedureLibrary
                 Automatic("fo-autobrake-rto", "Autobrake RTO", state => state.AutobrakeLevel.HasValue && Math.Abs(state.AutobrakeLevel.Value) < 0.1, "pmdg autobrake rto"),
                 Automatic("fo-taxi-light", "Taxi light ON", state => state.NoseLightSelectorPosition.HasValue && state.NoseLightSelectorPosition.Value < 1.5, "pmdg taxi-light on"),
                 Automatic("fo-runway-turnoff-on", "Runway turnoff lights ON", state => state.RunwayTurnoffLightsOn, "pmdg runway-turnoff on", requireCommandExecution: true),
+                Manual("fo-taxi-clearance", "Taxi clearance received", "First Officer: press Confirm now to request taxi clearance through SayIntentions.", CrewRole.FirstOfficer, state => !state.SayIntentionsAtcActive),
                 Observe("captain-taxi-started", "Captain started taxi", state => state.OnGround && state.GroundSpeedKnots > 1)
             });
 
@@ -251,7 +252,8 @@ internal static class B737ProcedureLibrary
                 Automatic("fo-taxi-light-off", "Taxi light OFF", state => state.NoseLightSelectorPosition.HasValue && state.NoseLightSelectorPosition.Value >= 1.5, "pmdg taxi-light off"),
                 Automatic("fo-strobes", "Position/strobe STROBE & STEADY", state => state.StrobeSelectorPosition.HasValue && Math.Abs(state.StrobeSelectorPosition.Value) < 0.1, "pmdg strobes on"),
                 Automatic("fo-transponder-tara", "Transponder TA/RA", state => state.TcasMode.HasValue && state.TcasMode.Value >= 4, "pmdg transponder tara", requireCommandExecution: true),
-                Observe("cabin-ready", "Cabin crew, prepare for takeoff", _ => true)
+                Observe("cabin-ready", "Cabin crew, prepare for takeoff", _ => true),
+                Manual("fo-takeoff-clearance", "Takeoff clearance received", "First Officer: while holding short, press Confirm now to report ready for departure and request takeoff clearance through SayIntentions.", CrewRole.FirstOfficer, state => !state.SayIntentionsAtcActive)
             });
 
     public static ProcedureDefinition TakeoffAndClimb { get; } =

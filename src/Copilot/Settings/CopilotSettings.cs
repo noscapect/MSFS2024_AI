@@ -14,6 +14,7 @@ public sealed class CopilotSettings
     public int TransitionAltitudeFeet { get; set; } = 5000;
     public int TakeoffV1SpeedKnots { get; set; } = 140;
     public int TakeoffRotateSpeedKnots { get; set; } = 143;
+    public int TakeoffV2SpeedKnots { get; set; } = 145;
     public int ApproachFlaps1DistanceNm { get; set; } = 15;
     public int ApproachFlaps1AltitudeFeet { get; set; } = 10000;
     public int ApproachFlaps1SpeedKnots { get; set; } = 230;

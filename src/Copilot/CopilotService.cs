@@ -372,6 +372,7 @@ internal sealed class CopilotService : Form
     private Label? _adapterBadgeLabel;
     private Label? _flowBadgeLabel;
     private Label? _versionBadgeLabel;
+    private Label? _simBriefBadgeLabel;
     private Label? _sayIntentionsBadgeLabel;
     private PictureBox? _aircraftThumbnailBox;
     private Label? _aircraftCardTitleLabel;
@@ -391,6 +392,7 @@ internal sealed class CopilotService : Form
     private NumericUpDown? _transitionAltitudeBox;
     private NumericUpDown? _takeoffV1Box;
     private NumericUpDown? _takeoffRotateBox;
+    private NumericUpDown? _takeoffV2Box;
     private CheckBox? _voiceCalloutsBox;
     private ComboBox? _calloutDetailBox;
     private CheckBox? _sayIntentionsVoiceBox;
@@ -402,7 +404,6 @@ internal sealed class CopilotService : Form
     private bool _sayIntentionsAtcRequestInProgress;
     private string? _sayIntentionsAtcRequestStepId;
     private string? _sayIntentionsAtcRequestSentStepId;
-    private Button? _simBriefImportButton;
     private ImportedFlightPlan? _simBriefFlightPlan;
     private bool _simBriefImportInProgress;
 
@@ -2955,6 +2956,9 @@ internal sealed class CopilotService : Form
         var effectiveVr = cockpitVr
             ?? _settings.TakeoffRotateSpeedKnots;
         effectiveVr = Math.Max(effectiveV1, effectiveVr);
+        var effectiveV2 = Math.Max(
+            effectiveVr,
+            _settings.TakeoffV2SpeedKnots);
 
         _state = new AircraftState
         {
@@ -3257,7 +3261,7 @@ internal sealed class CopilotService : Form
             IndicatedAirspeedKnots = raw.IndicatedAirspeed,
             TakeoffV1SpeedKnots = effectiveV1,
             TakeoffRotateSpeedKnots = effectiveVr,
-            TakeoffV2SpeedKnots = activePlan?.TakeoffV2Knots,
+            TakeoffV2SpeedKnots = effectiveV2,
             SimBriefFlightNumber = activePlan?.FlightNumber ?? "",
             SimBriefOriginIcao = activePlan?.OriginIcao ?? "",
             SimBriefDestinationIcao = activePlan?.DestinationIcao ?? "",
@@ -3275,6 +3279,7 @@ internal sealed class CopilotService : Form
             BoeingFmcVrKnots = cockpitVr,
             BoeingFmcTakeoffReferenceComplete = isPmdg737 && pmdg?.FmcPerfInputComplete == true,
             SimBriefTakeoffStatus = SimBriefOperationalContext.TakeoffComparison(activePlan, aircraftVariant, cockpitV1, cockpitVr, cockpitFlaps),
+            SayIntentionsAtcActive = _sayIntentionsFlight != null,
             ApproachDistanceToTouchdownNm = approachDistance.DistanceNm,
             ApproachDistanceSource = approachDistance.Source,
             ApproachFlaps1DistanceNm = approachSchedule.Flaps1DistanceNm,
@@ -5523,6 +5528,7 @@ internal sealed class CopilotService : Form
         }
         AppendDashboardLog(
             "New flight started: all saved flow progress was reset.");
+        UpdateSimBriefStatus();
         UpdateDashboard();
         if (_settings.SimBriefAutoImportOnNewFlight
             && (!string.IsNullOrWhiteSpace(_settings.SimBriefPilotId)
@@ -9628,15 +9634,18 @@ internal sealed class CopilotService : Form
         _aircraftBadgeLabel = NewStatusBadge("AIRCRAFT WAITING", System.Drawing.Color.DimGray);
         _adapterBadgeLabel = NewStatusBadge("ADAPTER WAITING", System.Drawing.Color.DimGray);
         _flowBadgeLabel = NewStatusBadge("FLOW IDLE", System.Drawing.Color.DimGray);
+        _simBriefBadgeLabel = NewStatusBadge("SIMBRIEF NOT SET", System.Drawing.Color.DimGray);
         _versionBadgeLabel = NewStatusBadge($"v{GetApplicationVersion()}", System.Drawing.Color.FromArgb(40, 68, 106));
         topStatusBar.Controls.Add(_simBadgeLabel);
         topStatusBar.Controls.Add(_aircraftBadgeLabel);
         topStatusBar.Controls.Add(_adapterBadgeLabel);
         topStatusBar.Controls.Add(_flowBadgeLabel);
+        topStatusBar.Controls.Add(_simBriefBadgeLabel);
         _sayIntentionsBadgeLabel = NewStatusBadge("SAYINTENTIONS OFFLINE", System.Drawing.Color.DimGray);
         topStatusBar.Controls.Add(_sayIntentionsBadgeLabel);
         topStatusBar.Controls.Add(_versionBadgeLabel);
         root.Controls.Add(topStatusBar);
+        UpdateSimBriefStatus();
 
         var statusShell = new TableLayoutPanel
         {
@@ -9671,41 +9680,26 @@ internal sealed class CopilotService : Form
         _telemetryLabel = AddDashboardRow(statusPanel, "Current-step telemetry", "Waiting for state...");
         var simBriefRow = statusPanel.RowCount;
         _simBriefStatusLabel = AddDashboardRow(statusPanel, "SimBrief", SimBriefStatusText());
-        _simBriefImportButton = new Button
-        {
-            Text = "Manage\r\nSimBrief",
-            Width = 112,
-            Height = 38,
-            Margin = new Padding(4, 0, 0, 2),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = System.Drawing.Color.White,
-            ForeColor = System.Drawing.Color.FromArgb(40, 68, 106),
-            UseVisualStyleBackColor = false
-        };
-        _simBriefImportButton.FlatAppearance.BorderColor =
-            System.Drawing.Color.FromArgb(190, 198, 208);
-        _simBriefImportButton.Click += (_, _) => ShowSimBriefDialog();
-        statusPanel.Controls.Add(_simBriefImportButton, 2, simBriefRow);
-        var sayIntentionsRow = statusPanel.RowCount;
         _sayIntentionsStatusLabel = AddDashboardRow(
             statusPanel,
             "SayIntentions",
             "Client not detected - optional integration inactive.");
-        var sayIntentionsButton = new Button
+        var integrationsButton = new Button
         {
-            Text = "Manage\r\nSayIntentions",
+            Text = "Manage\r\nintegrations",
             Width = 112,
-            Height = 38,
+            Height = 58,
             Margin = new Padding(4, 0, 0, 2),
             FlatStyle = FlatStyle.Flat,
             BackColor = System.Drawing.Color.White,
             ForeColor = System.Drawing.Color.FromArgb(40, 68, 106),
             UseVisualStyleBackColor = false
         };
-        sayIntentionsButton.FlatAppearance.BorderColor =
+        integrationsButton.FlatAppearance.BorderColor =
             System.Drawing.Color.FromArgb(190, 198, 208);
-        sayIntentionsButton.Click += (_, _) => ShowSayIntentionsDialog();
-        statusPanel.Controls.Add(sayIntentionsButton, 2, sayIntentionsRow);
+        integrationsButton.Click += (_, _) => ShowIntegrationsDialog();
+        statusPanel.Controls.Add(integrationsButton, 2, simBriefRow);
+        statusPanel.SetRowSpan(integrationsButton, 2);
         _versionLabel = AddDashboardRow(
             statusPanel,
             "Version",
@@ -9942,6 +9936,13 @@ internal sealed class CopilotService : Form
                 return;
             }
             _settings.TakeoffRotateSpeedKnots = (int)_takeoffRotateBox.Value;
+            if (_takeoffV2Box != null
+                && _takeoffV2Box.Value < _takeoffRotateBox.Value)
+            {
+                _takeoffV2Box.Value = Math.Min(
+                    _takeoffV2Box.Maximum,
+                    _takeoffRotateBox.Value);
+            }
             SettingsStore.Save(_settings);
             if (_state != null)
             {
@@ -9950,6 +9951,48 @@ internal sealed class CopilotService : Form
             }
         };
         flightSetupPanel.Controls.Add(_takeoffRotateBox);
+        flightSetupPanel.Controls.Add(new Label
+        {
+            Text = "kt",
+            AutoSize = true,
+            Margin = new Padding(2, 7, 0, 0)
+        });
+
+        flightSetupPanel.Controls.Add(new Label
+        {
+            Text = "V2:",
+            AutoSize = true,
+            Margin = new Padding(10, 7, 4, 0)
+        });
+        _takeoffV2Box = new NumericUpDown
+        {
+            Minimum = 80,
+            Maximum = 220,
+            Increment = 1,
+            Value = Math.Max(
+                _settings.TakeoffRotateSpeedKnots,
+                Math.Min(220, _settings.TakeoffV2SpeedKnots)),
+            Width = 64
+        };
+        _takeoffV2Box.ValueChanged += (_, _) =>
+        {
+            if (_takeoffRotateBox != null
+                && _takeoffV2Box.Value < _takeoffRotateBox.Value)
+            {
+                _takeoffV2Box.Value = Math.Min(
+                    _takeoffV2Box.Maximum,
+                    _takeoffRotateBox.Value);
+                return;
+            }
+            _settings.TakeoffV2SpeedKnots = (int)_takeoffV2Box.Value;
+            SettingsStore.Save(_settings);
+            if (_state != null)
+            {
+                _state.TakeoffV2SpeedKnots =
+                    _settings.TakeoffV2SpeedKnots;
+            }
+        };
+        flightSetupPanel.Controls.Add(_takeoffV2Box);
         flightSetupPanel.Controls.Add(new Label
         {
             Text = "kt",
@@ -10142,6 +10185,7 @@ internal sealed class CopilotService : Form
         {
             Dock = DockStyle.Fill,
             IntegralHeight = false,
+            HorizontalScrollbar = true,
             Font = new System.Drawing.Font("Consolas", 9)
         };
         logGroup.Controls.Add(_eventLog);
@@ -10319,7 +10363,172 @@ internal sealed class CopilotService : Form
         }
     }
 
-    private void ShowSayIntentionsDialog()
+    private void ShowIntegrationsDialog()
+    {
+        using var dialog = new Form
+        {
+            Text = "Manage integrations",
+            Width = 680,
+            Height = 380,
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false
+        };
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(16),
+            ColumnCount = 1,
+            RowCount = 3
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        dialog.Controls.Add(layout);
+
+        var header = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            Margin = new Padding(0, 0, 0, 8)
+        };
+        header.Controls.Add(new Label
+        {
+            Text = "Integrations",
+            AutoSize = true,
+            Font = new System.Drawing.Font(
+                Font.FontFamily,
+                14,
+                System.Drawing.FontStyle.Bold),
+            Margin = new Padding(0, 0, 0, 4)
+        });
+        var intro = new Label
+        {
+            Text = "Configure and review optional services used by the First Officer.",
+            AutoSize = true,
+            ForeColor = System.Drawing.Color.DimGray,
+            Margin = new Padding(0)
+        };
+        header.Controls.Add(intro);
+        layout.Controls.Add(header, 0, 0);
+
+        var cards = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = new Padding(0, 8, 0, 8)
+        };
+        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        layout.Controls.Add(cards, 0, 1);
+
+        var simBriefCard = new GroupBox
+        {
+            Text = "SimBrief",
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12),
+            Margin = new Padding(0, 0, 0, 7)
+        };
+        var simBriefCardLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1
+        };
+        simBriefCardLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        simBriefCardLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        var simBriefStatus = NewDashboardLabel(SimBriefStatusText());
+        simBriefStatus.MaximumSize = new System.Drawing.Size(470, 0);
+        var manageSimBrief = new Button { Text = "Manage SimBrief", AutoSize = true };
+        simBriefCardLayout.Controls.Add(simBriefStatus, 0, 0);
+        simBriefCardLayout.Controls.Add(manageSimBrief, 1, 0);
+        simBriefCard.Controls.Add(simBriefCardLayout);
+        cards.Controls.Add(simBriefCard, 0, 0);
+
+        var sayIntentionsCard = new GroupBox
+        {
+            Text = "SayIntentions",
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12),
+            Margin = new Padding(0, 7, 0, 0)
+        };
+        var sayIntentionsCardLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1
+        };
+        sayIntentionsCardLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        sayIntentionsCardLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        var sayIntentionsStatus = NewDashboardLabel(
+            _sayIntentionsStatusLabel?.Text
+            ?? "Client not detected - optional integration inactive.");
+        sayIntentionsStatus.MaximumSize = new System.Drawing.Size(470, 0);
+        var manageSayIntentions = new Button
+        {
+            Text = "Manage SayIntentions",
+            AutoSize = true
+        };
+        sayIntentionsCardLayout.Controls.Add(sayIntentionsStatus, 0, 0);
+        sayIntentionsCardLayout.Controls.Add(manageSayIntentions, 1, 0);
+        sayIntentionsCard.Controls.Add(sayIntentionsCardLayout);
+        cards.Controls.Add(sayIntentionsCard, 0, 1);
+
+        void RefreshStatuses()
+        {
+            simBriefStatus.Text = SimBriefStatusText();
+            simBriefStatus.ForeColor = _simBriefFlightPlan != null
+                ? System.Drawing.Color.DarkGreen
+                : SimBriefConfigured
+                    ? System.Drawing.Color.DarkGoldenrod
+                    : System.Drawing.Color.DimGray;
+            sayIntentionsStatus.Text = _sayIntentionsStatusLabel?.Text
+                ?? "Client not detected - optional integration inactive.";
+            sayIntentionsStatus.ForeColor = _sayIntentionsStatusLabel?.ForeColor
+                ?? System.Drawing.Color.DimGray;
+        }
+
+        manageSimBrief.Click += (_, _) =>
+        {
+            ShowSimBriefDialog(dialog);
+            RefreshStatuses();
+        };
+        manageSayIntentions.Click += (_, _) =>
+        {
+            ShowSayIntentionsDialog(dialog);
+            RefreshStatuses();
+        };
+
+        var footer = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            FlowDirection = FlowDirection.RightToLeft,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+        var closeButton = new Button { Text = "Close", AutoSize = true };
+        closeButton.Click += (_, _) => dialog.Close();
+        var refreshButton = new Button { Text = "Refresh status", AutoSize = true };
+        refreshButton.Click += async (_, _) =>
+        {
+            refreshButton.Enabled = false;
+            await RefreshSayIntentionsStatusAsync();
+            RefreshStatuses();
+            refreshButton.Enabled = true;
+        };
+        footer.Controls.Add(closeButton);
+        footer.Controls.Add(refreshButton);
+        layout.Controls.Add(footer, 0, 2);
+
+        RefreshStatuses();
+        dialog.ShowDialog(this);
+    }
+
+    private void ShowSayIntentionsDialog(IWin32Window? owner = null)
     {
         using var dialogCancellation = CancellationTokenSource.CreateLinkedTokenSource(
             _sayIntentionsCancellation.Token);
@@ -10395,7 +10604,7 @@ internal sealed class CopilotService : Form
                 details,
                 refreshButton,
                 dialogCancellation.Token);
-        dialog.ShowDialog(this);
+        dialog.ShowDialog(owner ?? this);
     }
 
     private async Task TestSayIntentionsVoiceAsync(
@@ -10611,6 +10820,51 @@ internal sealed class CopilotService : Form
         var copilotCommsClaimed = false;
         try
         {
+            var discovery = await _sayIntentionsClient
+                .DiscoverAsync(_sayIntentionsCancellation.Token);
+            if (discovery.Context == null)
+            {
+                throw new InvalidOperationException(
+                    "SayIntentions no longer reports an active flight.");
+            }
+            flight = discovery.Context;
+            _sayIntentionsFlight = flight;
+            UpdateSayIntentionsStatus(discovery);
+
+            var frequencies = await _sayIntentionsClient
+                .GetCurrentFrequenciesAsync(
+                    flight,
+                    _sayIntentionsCancellation.Token);
+            var selectedFrequency = SayIntentionsFrequencySelector.SelectForStep(
+                stepId,
+                frequencies);
+            if (selectedFrequency == null
+                || !SayIntentionsFrequencySelector.TryParseFrequency(
+                    selectedFrequency.Frequency,
+                    out var frequencyMhz))
+            {
+                throw new InvalidOperationException(
+                    "SayIntentions did not provide a usable departure ATC frequency.");
+            }
+            if (!await _sayIntentionsClient.SetFrequencyAsync(
+                    flight,
+                    frequencyMhz,
+                    1,
+                    _sayIntentionsCancellation.Token))
+            {
+                throw new HttpRequestException(
+                    "SayIntentions rejected the COM1 frequency change.");
+            }
+            var stationName = string.IsNullOrWhiteSpace(selectedFrequency.Callsign)
+                ? selectedFrequency.Type
+                : selectedFrequency.Callsign;
+            AppendDashboardLog(
+                $"COM1 tuned to {frequencyMhz:0.000} MHz for "
+                + $"{stationName}.");
+            await Task.Delay(
+                TimeSpan.FromMilliseconds(500),
+                _sayIntentionsCancellation.Token);
+
             IReadOnlyList<SayIntentionsCommunication> before;
             try
             {
@@ -10626,18 +10880,32 @@ internal sealed class CopilotService : Form
 
             var previousMaximumId = before.Count == 0 ? 0 : before.Max(item => item.Id);
             var previousCount = before.Count;
+            var messageOrigin = !string.IsNullOrWhiteSpace(
+                _simBriefFlightPlan?.OriginIcao)
+                ? _simBriefFlightPlan!.OriginIcao
+                : flight.OriginIcao;
+            var messageDestination = !string.IsNullOrWhiteSpace(
+                _simBriefFlightPlan?.DestinationIcao)
+                ? _simBriefFlightPlan!.DestinationIcao
+                : flight.DestinationIcao;
             var message = SayIntentionsAtcMessageBuilder.Build(
                 stepId,
                 flight.Callsign,
                 _simBriefFlightPlan?.FlightNumber ?? "",
-                flight.OriginIcao,
-                flight.DestinationIcao,
+                messageOrigin,
+                messageDestination,
                 flight.AssignedGate);
 
-            AppendDashboardLog(
-                stepId == "captain-ifr-clearance"
-                    ? "First Officer contacting ATC for IFR clearance through SayIntentions."
-                    : "First Officer contacting ATC for pushback and engine-start clearance through SayIntentions.");
+            AppendDashboardLog(stepId switch
+            {
+                "captain-ifr-clearance" =>
+                    "First Officer contacting ATC for IFR clearance through SayIntentions.",
+                "captain-pushback-clearance" =>
+                    "First Officer contacting ATC for pushback and engine-start clearance through SayIntentions.",
+                "fo-taxi-clearance" =>
+                    "First Officer contacting ATC for taxi clearance through SayIntentions.",
+                _ => "First Officer reporting ready for departure to SayIntentions ATC."
+            });
             copilotCommsClaimed = SetSayIntentionsCopilotComms(true);
             if (copilotCommsClaimed)
             {
@@ -10657,7 +10925,9 @@ internal sealed class CopilotService : Form
             }
 
             _sayIntentionsAtcRequestSentStepId = stepId;
-            AppendDashboardLog("First Officer transmission sent; waiting for SayIntentions ATC.");
+            AppendDashboardLog(
+                $"F/O -> ATC [{stationName} {frequencyMhz:0.000}]: {message}");
+            AppendDashboardLog("Waiting for SayIntentions ATC response.");
             for (var attempt = 0; attempt < 15; attempt++)
             {
                 await Task.Delay(TimeSpan.FromSeconds(2), _sayIntentionsCancellation.Token);
@@ -10676,17 +10946,27 @@ internal sealed class CopilotService : Form
                 }
 
                 var reply = current
-                    .Where(item => !string.IsNullOrWhiteSpace(item.IncomingMessage))
+                    .Where(item => SayIntentionsCommunicationMatcher.IsGenuineReply(
+                        item,
+                        message))
                     .LastOrDefault(item => item.Id > previousMaximumId)
                     ?? (current.Count > previousCount
-                        ? current.LastOrDefault(item => !string.IsNullOrWhiteSpace(item.IncomingMessage))
+                        ? current.LastOrDefault(item =>
+                            SayIntentionsCommunicationMatcher.IsGenuineReply(
+                                item,
+                                message))
                         : null);
                 if (reply == null)
                 {
                     continue;
                 }
 
-                AppendDashboardLog($"SayIntentions ATC: {reply.IncomingMessage}");
+                var replyStation = string.IsNullOrWhiteSpace(reply.Station)
+                    ? stationName
+                    : reply.Station;
+                AppendDashboardLog(
+                    $"ATC -> F/O [{replyStation} {frequencyMhz:0.000}]: "
+                    + reply.IncomingMessage.Trim());
                 if (_procedureRunner.CurrentStep?.Id == stepId
                     && _procedureRunner.Status == ProcedureStatus.WaitingForManualAction)
                 {
@@ -10708,6 +10988,7 @@ internal sealed class CopilotService : Form
                                    or InvalidOperationException
                                    or ArgumentException)
         {
+            AppLog.Write($"SayIntentions ATC request failed: {ex.Message}");
             _sayIntentionsAtcRequestSentStepId = stepId;
             AppendDashboardLog(
                 "SayIntentions ATC request failed. Use your normal ATC service, then press Confirm ATC completed.");
@@ -10744,7 +11025,10 @@ internal sealed class CopilotService : Form
     }
 
     private static bool IsSayIntentionsAtcStep(string? stepId) =>
-        stepId is "captain-ifr-clearance" or "captain-pushback-clearance";
+        stepId is "captain-ifr-clearance"
+            or "captain-pushback-clearance"
+            or "fo-taxi-clearance"
+            or "fo-takeoff-clearance";
 
     private bool SimBriefConfigured =>
         !string.IsNullOrWhiteSpace(_settings.SimBriefPilotId)
@@ -10762,9 +11046,44 @@ internal sealed class CopilotService : Form
         {
             _simBriefStatusLabel.Text = temporaryStatus ?? SimBriefStatusText();
         }
+
+        if (temporaryStatus != null
+            && temporaryStatus.StartsWith("Importing", StringComparison.OrdinalIgnoreCase))
+        {
+            SetStatusBadge(
+                _simBriefBadgeLabel,
+                "SIMBRIEF IMPORTING",
+                System.Drawing.Color.FromArgb(40, 95, 150));
+            return;
+        }
+
+        if (temporaryStatus != null)
+        {
+            SetStatusBadge(
+                _simBriefBadgeLabel,
+                "SIMBRIEF UNAVAILABLE",
+                System.Drawing.Color.FromArgb(150, 48, 48));
+            return;
+        }
+
+        if (_simBriefFlightPlan != null)
+        {
+            SetStatusBadge(
+                _simBriefBadgeLabel,
+                $"SIMBRIEF {_simBriefFlightPlan.RouteLabel.ToUpperInvariant()}",
+                System.Drawing.Color.FromArgb(39, 130, 87));
+            return;
+        }
+
+        SetStatusBadge(
+            _simBriefBadgeLabel,
+            SimBriefConfigured ? "SIMBRIEF READY" : "SIMBRIEF NOT SET",
+            SimBriefConfigured
+                ? System.Drawing.Color.FromArgb(172, 113, 37)
+                : System.Drawing.Color.DimGray);
     }
 
-    private void ShowSimBriefDialog()
+    private void ShowSimBriefDialog(IWin32Window? owner = null)
     {
         using var dialog = new Form
         {
@@ -10879,7 +11198,7 @@ internal sealed class CopilotService : Form
         layout.SetColumnSpan(buttons, 2);
         dialog.AcceptButton = importButton;
         dialog.CancelButton = closeButton;
-        dialog.ShowDialog(this);
+        dialog.ShowDialog(owner ?? this);
     }
 
     private void ShowSimBriefBriefing()
@@ -10982,6 +11301,8 @@ internal sealed class CopilotService : Form
             changes.Add($"V1: {plan.TakeoffV1Knots} kt");
         if (plan.TakeoffVrKnots is >= 80 and <= 220)
             changes.Add($"VR: {plan.TakeoffVrKnots} kt");
+        if (plan.TakeoffV2Knots is >= 80 and <= 220)
+            changes.Add($"V2: {plan.TakeoffV2Knots} kt");
 
         var message = SimBriefSummary(plan)
             + (warnings.Count > 0 ? "\n\nWarnings:\n- " + string.Join("\n- ", warnings) : "")
@@ -11036,11 +11357,18 @@ internal sealed class CopilotService : Form
                 Math.Max(_takeoffRotateBox.Minimum, _settings.TakeoffV1SpeedKnots),
                 Math.Min(_takeoffRotateBox.Maximum, _settings.TakeoffRotateSpeedKnots));
         }
+        if (_takeoffV2Box != null)
+        {
+            _takeoffV2Box.Value = Math.Max(
+                Math.Max(_takeoffV2Box.Minimum, _settings.TakeoffRotateSpeedKnots),
+                Math.Min(_takeoffV2Box.Maximum, _settings.TakeoffV2SpeedKnots));
+        }
         if (_state != null)
         {
             _state.TransitionAltitudeFeet = _settings.TransitionAltitudeFeet;
             _state.TakeoffV1SpeedKnots = _settings.TakeoffV1SpeedKnots;
             _state.TakeoffRotateSpeedKnots = _settings.TakeoffRotateSpeedKnots;
+            _state.TakeoffV2SpeedKnots = _settings.TakeoffV2SpeedKnots;
         }
     }
 
@@ -12274,9 +12602,17 @@ internal sealed class CopilotService : Form
         {
             if (_sayIntentionsFlight != null && IsSayIntentionsAtcStep(step.Id))
             {
-                return step.Id == "captain-ifr-clearance"
-                    ? "Waiting for: IFR clearance. Press Confirm now to authorize the First Officer to contact SayIntentions ATC on COM1."
-                    : "Waiting for: pushback/engine-start clearance. Press Confirm now to authorize the First Officer to contact SayIntentions ATC on COM1.";
+                return step.Id switch
+                {
+                    "captain-ifr-clearance" =>
+                        "Waiting for: IFR clearance. Press Confirm now to authorize the First Officer to contact SayIntentions ATC on COM1.",
+                    "captain-pushback-clearance" =>
+                        "Waiting for: pushback/engine-start clearance. Press Confirm now to authorize the First Officer to contact SayIntentions ATC on COM1.",
+                    "fo-taxi-clearance" =>
+                        "Waiting for: taxi clearance. Press Confirm now to authorize the First Officer to contact SayIntentions ATC on COM1.",
+                    _ =>
+                        "Waiting for: takeoff clearance. While holding short, press Confirm now to authorize the First Officer to report ready for departure to SayIntentions Tower on COM1."
+                };
             }
             return step.ManualInstruction != null
                 ? $"Waiting for: {step.ManualInstruction}"

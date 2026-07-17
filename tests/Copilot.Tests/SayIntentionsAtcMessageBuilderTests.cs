@@ -55,6 +55,22 @@ public sealed class SayIntentionsAtcMessageBuilderTests
     }
 
     [TestMethod]
+    public void BuildTakeoffRequest_UsesStandardReadyForDeparturePhrase()
+    {
+        var message = SayIntentionsAtcMessageBuilder.Build(
+            "fo-takeoff-clearance",
+            "KLM1701",
+            "",
+            "EGSH",
+            "EHAM",
+            "C8");
+
+        Assert.AreEqual(
+            "KLM1701, holding short, ready for departure",
+            message);
+    }
+
+    [TestMethod]
     public void Build_RejectsUnrelatedProcedureStep()
     {
         Assert.ThrowsException<ArgumentOutOfRangeException>(() =>

@@ -146,6 +146,10 @@ Master ON steps complete.
 7. **F/O automatic:** Set nose light to T.O. Strobes remain in AUTO from
    Flow 1; the aircraft manages takeoff strobe behavior.
 8. **F/O automatic:** Set both landing lights ON.
+9. **F/O ATC:** With an active SayIntentions flight and while holding short,
+   press **Confirm now** to let the First Officer report ready for departure
+   and request takeoff clearance on Tower. Without SayIntentions, this step is
+   bypassed automatically and MSFS built-in ATC continues normally.
 
 By default, completing Flow 6 automatically starts Flow 7. This keeps the
 before-takeoff and takeoff phases hands-off while the aircraft is entering the

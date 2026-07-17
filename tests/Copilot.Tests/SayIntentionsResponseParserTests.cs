@@ -40,6 +40,8 @@ public sealed class SayIntentionsResponseParserTests
         Assert.AreEqual("GND", SayIntentionsFrequencySelector.SelectForStep(
             "fo-taxi-clearance", frequencies)!.Type);
         Assert.AreEqual("TWR", SayIntentionsFrequencySelector.SelectForStep(
+            "fo-takeoff-clearance", frequencies)!.Type);
+        Assert.AreEqual("TWR", SayIntentionsFrequencySelector.SelectForStep(
             "captain-ifr-clearance", frequencies.Take(1))!.Type);
     }
 

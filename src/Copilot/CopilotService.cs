@@ -10901,7 +10901,9 @@ internal sealed class CopilotService : Form
                     "First Officer contacting ATC for IFR clearance through SayIntentions.",
                 "captain-pushback-clearance" =>
                     "First Officer contacting ATC for pushback and engine-start clearance through SayIntentions.",
-                _ => "First Officer contacting ATC for taxi clearance through SayIntentions."
+                "fo-taxi-clearance" =>
+                    "First Officer contacting ATC for taxi clearance through SayIntentions.",
+                _ => "First Officer reporting ready for departure to SayIntentions ATC."
             });
             copilotCommsClaimed = SetSayIntentionsCopilotComms(true);
             if (copilotCommsClaimed)
@@ -11017,7 +11019,8 @@ internal sealed class CopilotService : Form
     private static bool IsSayIntentionsAtcStep(string? stepId) =>
         stepId is "captain-ifr-clearance"
             or "captain-pushback-clearance"
-            or "fo-taxi-clearance";
+            or "fo-taxi-clearance"
+            or "fo-takeoff-clearance";
 
     private bool SimBriefConfigured =>
         !string.IsNullOrWhiteSpace(_settings.SimBriefPilotId)
@@ -12597,8 +12600,10 @@ internal sealed class CopilotService : Form
                         "Waiting for: IFR clearance. Press Confirm now to authorize the First Officer to contact SayIntentions ATC on COM1.",
                     "captain-pushback-clearance" =>
                         "Waiting for: pushback/engine-start clearance. Press Confirm now to authorize the First Officer to contact SayIntentions ATC on COM1.",
+                    "fo-taxi-clearance" =>
+                        "Waiting for: taxi clearance. Press Confirm now to authorize the First Officer to contact SayIntentions ATC on COM1.",
                     _ =>
-                        "Waiting for: taxi clearance. Press Confirm now to authorize the First Officer to contact SayIntentions ATC on COM1."
+                        "Waiting for: takeoff clearance. While holding short, press Confirm now to authorize the First Officer to report ready for departure to SayIntentions Tower on COM1."
                 };
             }
             return step.ManualInstruction != null

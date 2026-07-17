@@ -343,7 +343,8 @@ internal static class A320ProcedureLibrary
                              && state.RightLandingLightSelectorPosition.HasValue
                              && Math.Abs(state.LeftLandingLightSelectorPosition.Value) < 0.1
                              && Math.Abs(state.RightLandingLightSelectorPosition.Value) < 0.1,
-                    "landing-lights on")
+                    "landing-lights on"),
+                Manual("fo-takeoff-clearance", "Takeoff clearance received", "First Officer: while holding short, press Confirm now to report ready for departure and request takeoff clearance through SayIntentions.", CrewRole.FirstOfficer, state => !state.SayIntentionsAtcActive)
             });
 
     public static ProcedureDefinition TakeoffAndClimb { get; } =

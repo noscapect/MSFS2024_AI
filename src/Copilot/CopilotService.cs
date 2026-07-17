@@ -10185,6 +10185,7 @@ internal sealed class CopilotService : Form
         {
             Dock = DockStyle.Fill,
             IntegralHeight = false,
+            HorizontalScrollbar = true,
             Font = new System.Drawing.Font("Consolas", 9)
         };
         logGroup.Controls.Add(_eventLog);
@@ -10924,7 +10925,9 @@ internal sealed class CopilotService : Form
             }
 
             _sayIntentionsAtcRequestSentStepId = stepId;
-            AppendDashboardLog("First Officer transmission sent; waiting for SayIntentions ATC.");
+            AppendDashboardLog(
+                $"F/O -> ATC [{stationName} {frequencyMhz:0.000}]: {message}");
+            AppendDashboardLog("Waiting for SayIntentions ATC response.");
             for (var attempt = 0; attempt < 15; attempt++)
             {
                 await Task.Delay(TimeSpan.FromSeconds(2), _sayIntentionsCancellation.Token);
@@ -10958,7 +10961,12 @@ internal sealed class CopilotService : Form
                     continue;
                 }
 
-                AppendDashboardLog($"SayIntentions ATC: {reply.IncomingMessage}");
+                var replyStation = string.IsNullOrWhiteSpace(reply.Station)
+                    ? stationName
+                    : reply.Station;
+                AppendDashboardLog(
+                    $"ATC -> F/O [{replyStation} {frequencyMhz:0.000}]: "
+                    + reply.IncomingMessage.Trim());
                 if (_procedureRunner.CurrentStep?.Id == stepId
                     && _procedureRunner.Status == ProcedureStatus.WaitingForManualAction)
                 {

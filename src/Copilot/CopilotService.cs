@@ -9669,9 +9669,9 @@ internal sealed class CopilotService : Form
         _simBriefStatusLabel = AddDashboardRow(statusPanel, "SimBrief", SimBriefStatusText());
         _simBriefImportButton = new Button
         {
-            Text = "Manage SimBrief",
+            Text = "Manage\r\nSimBrief",
             Width = 112,
-            Height = 25,
+            Height = 38,
             Margin = new Padding(4, 0, 0, 2),
             FlatStyle = FlatStyle.Flat,
             BackColor = System.Drawing.Color.White,
@@ -9689,10 +9689,9 @@ internal sealed class CopilotService : Form
             "Client not detected - optional integration inactive.");
         var sayIntentionsButton = new Button
         {
-            Text = "Manage SayIntentions...",
-            AutoSize = true,
-            MinimumSize = new System.Drawing.Size(150, 25),
-            Height = 25,
+            Text = "Manage\r\nSayIntentions",
+            Width = 112,
+            Height = 38,
             Margin = new Padding(4, 0, 0, 2),
             FlatStyle = FlatStyle.Flat,
             BackColor = System.Drawing.Color.White,

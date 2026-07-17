@@ -68,6 +68,89 @@ internal sealed class SayIntentionsClient : IDisposable
         return response.IsSuccessStatusCode;
     }
 
+    public async Task<SayIntentionsWeatherResult> GetWeatherAsync(
+        SayIntentionsFlightContext context,
+        CancellationToken cancellationToken = default)
+    {
+        var airports = new[] { context.OriginIcao, context.DestinationIcao }
+            .Where(value => !string.IsNullOrWhiteSpace(value))
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+        if (airports.Length == 0)
+        {
+            return new SayIntentionsWeatherResult();
+        }
+
+        var json = await GetSapiJsonAsync(
+                context,
+                "getWX",
+                new Dictionary<string, string>
+                {
+                    ["icao"] = string.Join(",", airports),
+                    ["with_comms"] = "1"
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return SayIntentionsResponseParser.ParseWeather(json);
+    }
+
+    public async Task<IReadOnlyList<SayIntentionsCommunication>> GetCommunicationsAsync(
+        SayIntentionsFlightContext context,
+        CancellationToken cancellationToken = default)
+    {
+        var json = await GetSapiJsonAsync(
+                context,
+                "getCommsHistory",
+                null,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return SayIntentionsResponseParser.ParseCommunications(json);
+    }
+
+    public async Task<SayIntentionsParking?> GetParkingAsync(
+        SayIntentionsFlightContext context,
+        CancellationToken cancellationToken = default)
+    {
+        var json = await GetSapiJsonAsync(
+                context,
+                "getParking",
+                null,
+                cancellationToken)
+            .ConfigureAwait(false);
+        return SayIntentionsResponseParser.ParseParking(json);
+    }
+
+    private async Task<string> GetSapiJsonAsync(
+        SayIntentionsFlightContext context,
+        string endpointName,
+        IReadOnlyDictionary<string, string>? parameters,
+        CancellationToken cancellationToken)
+    {
+        var query = new List<string>
+        {
+            "api_key=" + Uri.EscapeDataString(context.ApiKey)
+        };
+        if (parameters != null)
+        {
+            query.AddRange(parameters.Select(
+                pair => Uri.EscapeDataString(pair.Key)
+                        + "=" + Uri.EscapeDataString(pair.Value)));
+        }
+
+        var uri = new UriBuilder(new Uri(context.ApiHost, "sapi/" + endpointName))
+        {
+            Query = string.Join("&", query)
+        }.Uri;
+        using var response = await _apiClient.GetAsync(uri, cancellationToken).ConfigureAwait(false);
+        if (!response.IsSuccessStatusCode)
+        {
+            throw new HttpRequestException(
+                $"SayIntentions returned HTTP {(int)response.StatusCode}.");
+        }
+
+        return await response.Content.ReadAsStringAsync().ConfigureAwait(false);
+    }
+
     public void Dispose()
     {
         _localClient.Dispose();

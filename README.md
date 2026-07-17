@@ -46,6 +46,7 @@ Captain actions, and speaks important callouts.
 - Verification after every automatic aircraft action
 - Optional Windows offline voice callouts
 - Optional SayIntentions companion detection and First Officer voice callouts,
+  plus read-only weather, ATIS, frequencies, parking, and communications,
   with automatic local-voice fallback and no stored API credentials
 - Persistent preflight settings for V1, VR, and transition altitude
 - Optional free SimBrief latest-OFP import by Pilot ID or username, with a

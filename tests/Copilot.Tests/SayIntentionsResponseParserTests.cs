@@ -1,0 +1,62 @@
+using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Msfs2024Ai.Copilot.SayIntentions;
+
+namespace Copilot.Tests;
+
+[TestClass]
+public sealed class SayIntentionsResponseParserTests
+{
+    [TestMethod]
+    public void ParseWeather_ReadsOperationalBriefingAndFrequencies()
+    {
+        const string json = """
+            {
+              "airports": [{
+                "airport": "EHAM", "atis": "Information Alpha",
+                "metar": "EHAM METAR", "taf": "EHAM TAF",
+                "active_runway": "18R", "wind_direction": 190, "wind_speed": 12
+              }],
+              "comms": [{
+                "type": "GROUND", "freq": "121.900",
+                "callsign": "Schiphol Ground", "airport": "EHAM"
+              }]
+            }
+            """;
+
+        var result = SayIntentionsResponseParser.ParseWeather(json);
+
+        Assert.AreEqual(1, result.Airports.Count);
+        Assert.AreEqual("18R", result.Airports[0].ActiveRunway);
+        Assert.AreEqual(190, result.Airports[0].WindDirection);
+        Assert.AreEqual("121.900", result.Frequencies[0].Frequency);
+    }
+
+    [TestMethod]
+    public void ParseCommunications_ReadsBothDirections()
+    {
+        const string json = """
+            {"comm_history":[{
+              "stamp_zulu":"2026-07-17T12:00:00Z", "station_name":"Ground",
+              "channel":"COM1", "outgoing_message":"Request clearance",
+              "incoming_message":"Cleared to EHAM"
+            }]}
+            """;
+
+        var result = SayIntentionsResponseParser.ParseCommunications(json);
+
+        Assert.AreEqual(1, result.Count);
+        Assert.AreEqual("Request clearance", result[0].OutgoingMessage);
+        Assert.AreEqual("Cleared to EHAM", result[0].IncomingMessage);
+    }
+
+    [TestMethod]
+    public void ParseParking_ReadsAssignedGate()
+    {
+        var result = SayIntentionsResponseParser.ParseParking(
+            "{\"parking\":{\"name\":\"Gate D52\",\"lat\":52.3,\"lon\":4.7,\"heading\":180}}");
+
+        Assert.IsNotNull(result);
+        Assert.AreEqual("Gate D52", result.Name);
+        Assert.AreEqual(180d, result.Heading);
+    }
+}

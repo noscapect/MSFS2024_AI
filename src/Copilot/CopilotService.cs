@@ -9682,10 +9682,26 @@ internal sealed class CopilotService : Form
             System.Drawing.Color.FromArgb(190, 198, 208);
         _simBriefImportButton.Click += (_, _) => ShowSimBriefDialog();
         statusPanel.Controls.Add(_simBriefImportButton, 2, simBriefRow);
+        var sayIntentionsRow = statusPanel.RowCount;
         _sayIntentionsStatusLabel = AddDashboardRow(
             statusPanel,
             "SayIntentions",
             "Client not detected - optional integration inactive.");
+        var sayIntentionsButton = new Button
+        {
+            Text = "Manage SayIntentions",
+            Width = 130,
+            Height = 25,
+            Margin = new Padding(4, 0, 0, 2),
+            FlatStyle = FlatStyle.Flat,
+            BackColor = System.Drawing.Color.White,
+            ForeColor = System.Drawing.Color.FromArgb(40, 68, 106),
+            UseVisualStyleBackColor = false
+        };
+        sayIntentionsButton.FlatAppearance.BorderColor =
+            System.Drawing.Color.FromArgb(190, 198, 208);
+        sayIntentionsButton.Click += (_, _) => ShowSayIntentionsDialog();
+        statusPanel.Controls.Add(sayIntentionsButton, 2, sayIntentionsRow);
         _versionLabel = AddDashboardRow(
             statusPanel,
             "Version",
@@ -10270,6 +10286,260 @@ internal sealed class CopilotService : Form
                 break;
         }
     }
+
+    private void ShowSayIntentionsDialog()
+    {
+        using var dialogCancellation = CancellationTokenSource.CreateLinkedTokenSource(
+            _sayIntentionsCancellation.Token);
+        using var dialog = new Form
+        {
+            Text = "SayIntentions companion",
+            Width = 760,
+            Height = 600,
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.Sizable,
+            MinimizeBox = false
+        };
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(14),
+            ColumnCount = 1,
+            RowCount = 3
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        dialog.Controls.Add(layout);
+
+        layout.Controls.Add(new Label
+        {
+            Text = "Read-only operational data from the active SayIntentions flight. "
+                   + "Credentials are discovered locally and are never saved by this app.",
+            AutoSize = true,
+            MaximumSize = new System.Drawing.Size(700, 0),
+            Margin = new Padding(0, 0, 0, 10)
+        }, 0, 0);
+        var details = new RichTextBox
+        {
+            Dock = DockStyle.Fill,
+            ReadOnly = true,
+            BackColor = System.Drawing.Color.White,
+            Font = new System.Drawing.Font("Consolas", 9),
+            Text = "Checking SayIntentions..."
+        };
+        layout.Controls.Add(details, 0, 1);
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            FlowDirection = FlowDirection.RightToLeft,
+            Margin = new Padding(0, 10, 0, 0)
+        };
+        var closeButton = new Button { Text = "Close", AutoSize = true };
+        closeButton.Click += (_, _) => dialog.Close();
+        var refreshButton = new Button { Text = "Refresh", AutoSize = true };
+        refreshButton.Click += async (_, _) =>
+            await LoadSayIntentionsOperationalDataAsync(
+                details,
+                refreshButton,
+                dialogCancellation.Token);
+        var testVoiceButton = new Button
+        {
+            Text = "Test First Officer voice",
+            AutoSize = true
+        };
+        testVoiceButton.Click += async (_, _) =>
+            await TestSayIntentionsVoiceAsync(
+                testVoiceButton,
+                dialogCancellation.Token);
+        buttons.Controls.Add(closeButton);
+        buttons.Controls.Add(refreshButton);
+        buttons.Controls.Add(testVoiceButton);
+        layout.Controls.Add(buttons, 0, 2);
+        dialog.FormClosed += (_, _) => dialogCancellation.Cancel();
+        dialog.Shown += async (_, _) =>
+            await LoadSayIntentionsOperationalDataAsync(
+                details,
+                refreshButton,
+                dialogCancellation.Token);
+        dialog.ShowDialog(this);
+    }
+
+    private async Task TestSayIntentionsVoiceAsync(
+        Button testButton,
+        CancellationToken cancellationToken)
+    {
+        testButton.Enabled = false;
+        try
+        {
+            var discovery = await _sayIntentionsClient.DiscoverAsync(cancellationToken);
+            if (discovery.Context == null)
+            {
+                MessageBox.Show(
+                    this,
+                    "Start an active SayIntentions flight before testing the First Officer voice.",
+                    "SayIntentions unavailable",
+                    MessageBoxButtons.OK,
+                    MessageBoxIcon.Information);
+                return;
+            }
+
+            var spoken = await _sayIntentionsClient.SayCopilotCalloutAsync(
+                discovery.Context,
+                "Good morning Captain, SayIntentions voice is connected",
+                cancellationToken);
+            if (!spoken)
+            {
+                throw new HttpRequestException("SayIntentions rejected the voice test.");
+            }
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Dialog or application closed.
+        }
+        catch (Exception ex) when (ex is HttpRequestException
+                                   or InvalidOperationException
+                                   or ArgumentOutOfRangeException)
+        {
+            MessageBox.Show(
+                this,
+                "The SayIntentions voice test was not accepted. The app will continue using its local voice fallback.",
+                "Voice test unavailable",
+                MessageBoxButtons.OK,
+                MessageBoxIcon.Warning);
+        }
+        finally
+        {
+            if (!testButton.IsDisposed)
+            {
+                testButton.Enabled = true;
+            }
+        }
+    }
+
+    private async Task LoadSayIntentionsOperationalDataAsync(
+        RichTextBox details,
+        Button refreshButton,
+        CancellationToken cancellationToken)
+    {
+        refreshButton.Enabled = false;
+        details.Text = "Checking SayIntentions...";
+        try
+        {
+            var discovery = await _sayIntentionsClient
+                .DiscoverAsync(cancellationToken);
+            _sayIntentionsFlight = discovery.Context;
+            UpdateSayIntentionsStatus(discovery);
+            if (discovery.Context == null)
+            {
+                details.Text = discovery.State == SayIntentionsConnectionState.NoActiveFlight
+                    ? "SayIntentions is running, but no active flight is available."
+                    : "The SayIntentions Windows client is not currently detected.";
+                return;
+            }
+
+            var flight = discovery.Context;
+            var lines = new List<string>
+            {
+                $"Callsign: {ValueOrUnknown(flight.Callsign)}",
+                $"Route:    {flight.RouteLabel}",
+                $"Airport:  {ValueOrUnknown(flight.CurrentAirport)}",
+                $"Gate:     {ValueOrUnknown(flight.AssignedGate)}",
+                ""
+            };
+
+            try
+            {
+                var weather = await _sayIntentionsClient
+                    .GetWeatherAsync(flight, cancellationToken);
+                lines.Add("WEATHER AND ATIS");
+                foreach (var airport in weather.Airports)
+                {
+                    var wind = airport.WindDirection.HasValue && airport.WindSpeed.HasValue
+                        ? $"{airport.WindDirection:000}/{airport.WindSpeed}"
+                        : "unknown";
+                    lines.Add($"{airport.Airport} | runway {ValueOrUnknown(airport.ActiveRunway)} | wind {wind}");
+                    if (!string.IsNullOrWhiteSpace(airport.Atis)) lines.Add($"ATIS:  {airport.Atis}");
+                    if (!string.IsNullOrWhiteSpace(airport.Metar)) lines.Add($"METAR: {airport.Metar}");
+                    if (!string.IsNullOrWhiteSpace(airport.Taf)) lines.Add($"TAF:   {airport.Taf}");
+                    lines.Add("");
+                }
+
+                if (weather.Frequencies.Count > 0)
+                {
+                    lines.Add("FREQUENCIES");
+                    lines.AddRange(weather.Frequencies.Select(frequency =>
+                        $"{frequency.Airport} {frequency.Type,-10} {frequency.Frequency,-8} {frequency.Callsign}"));
+                    lines.Add("");
+                }
+            }
+            catch (Exception ex) when (ex is HttpRequestException
+                                       or InvalidOperationException
+                                       or ArgumentException)
+            {
+                lines.Add("Weather/ATIS is currently unavailable.");
+                lines.Add("");
+            }
+
+            try
+            {
+                var parking = await _sayIntentionsClient
+                    .GetParkingAsync(flight, cancellationToken);
+                if (parking != null && !string.IsNullOrWhiteSpace(parking.Name))
+                {
+                    lines.Add($"ASSIGNED PARKING: {parking.Name}");
+                    lines.Add("");
+                }
+            }
+            catch (Exception ex) when (ex is HttpRequestException
+                                       or InvalidOperationException
+                                       or ArgumentException)
+            {
+                lines.Add("Assigned parking is currently unavailable.");
+                lines.Add("");
+            }
+
+            try
+            {
+                var communications = await _sayIntentionsClient
+                    .GetCommunicationsAsync(flight, cancellationToken);
+                lines.Add("RECENT COMMUNICATIONS");
+                foreach (var communication in communications
+                             .Skip(Math.Max(0, communications.Count - 10)))
+                {
+                    lines.Add($"[{communication.TimestampUtc}] {communication.Station} {communication.Channel}".Trim());
+                    if (!string.IsNullOrWhiteSpace(communication.OutgoingMessage))
+                        lines.Add($"YOU: {communication.OutgoingMessage}");
+                    if (!string.IsNullOrWhiteSpace(communication.IncomingMessage))
+                        lines.Add($"ATC: {communication.IncomingMessage}");
+                    lines.Add("");
+                }
+            }
+            catch (Exception ex) when (ex is HttpRequestException
+                                       or InvalidOperationException
+                                       or ArgumentException)
+            {
+                lines.Add("Communications history is currently unavailable.");
+            }
+
+            details.Lines = lines.ToArray();
+        }
+        catch (OperationCanceledException) when (cancellationToken.IsCancellationRequested)
+        {
+            // Normal application shutdown.
+        }
+        finally
+        {
+            if (!refreshButton.IsDisposed)
+            {
+                refreshButton.Enabled = true;
+            }
+        }
+    }
+
+    private static string ValueOrUnknown(string value) =>
+        string.IsNullOrWhiteSpace(value) ? "unknown" : value;
 
     private bool SimBriefConfigured =>
         !string.IsNullOrWhiteSpace(_settings.SimBriefPilotId)

@@ -18,6 +18,9 @@ runtime requirement and without coupling it to any aircraft adapter.
 - Send exact callout text through `INTERCOM1_IN` with rephrasing disabled.
 - Fall back to the existing Windows voice if SayIntentions is unavailable or
   rejects a callout.
+- Show read-only ATIS, METAR, TAF, active-runway, frequency, assigned-parking,
+  and recent-communications data in `Manage SayIntentions`.
+- Provide a user-triggered First Officer voice test.
 
 ## Security and isolation
 
@@ -35,11 +38,9 @@ runtime requirement and without coupling it to any aircraft adapter.
 
 ## Next slices
 
-1. Read-only ATIS, METAR, TAF, active-runway, frequency, and parking data.
-2. A compact communications-history view.
-3. User-approved ATC transmissions such as IFR-clearance and pushback
+1. User-approved ATC transmissions such as IFR-clearance and pushback
    requests.
-4. Conservative clearance recognition after live validation; it must never
+2. Conservative clearance recognition after live validation; it must never
    block a normal flight when SayIntentions is unavailable.
 
 Frequency changes and automatic ATC transmissions remain out of the first

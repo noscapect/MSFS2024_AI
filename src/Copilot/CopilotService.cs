@@ -10894,10 +10894,14 @@ internal sealed class CopilotService : Form
                 messageDestination,
                 flight.AssignedGate);
 
-            AppendDashboardLog(
-                stepId == "captain-ifr-clearance"
-                    ? "First Officer contacting ATC for IFR clearance through SayIntentions."
-                    : "First Officer contacting ATC for pushback and engine-start clearance through SayIntentions.");
+            AppendDashboardLog(stepId switch
+            {
+                "captain-ifr-clearance" =>
+                    "First Officer contacting ATC for IFR clearance through SayIntentions.",
+                "captain-pushback-clearance" =>
+                    "First Officer contacting ATC for pushback and engine-start clearance through SayIntentions.",
+                _ => "First Officer contacting ATC for taxi clearance through SayIntentions."
+            });
             copilotCommsClaimed = SetSayIntentionsCopilotComms(true);
             if (copilotCommsClaimed)
             {
@@ -11010,7 +11014,9 @@ internal sealed class CopilotService : Form
     }
 
     private static bool IsSayIntentionsAtcStep(string? stepId) =>
-        stepId is "captain-ifr-clearance" or "captain-pushback-clearance";
+        stepId is "captain-ifr-clearance"
+            or "captain-pushback-clearance"
+            or "fo-taxi-clearance";
 
     private bool SimBriefConfigured =>
         !string.IsNullOrWhiteSpace(_settings.SimBriefPilotId)
@@ -12584,9 +12590,15 @@ internal sealed class CopilotService : Form
         {
             if (_sayIntentionsFlight != null && IsSayIntentionsAtcStep(step.Id))
             {
-                return step.Id == "captain-ifr-clearance"
-                    ? "Waiting for: IFR clearance. Press Confirm now to authorize the First Officer to contact SayIntentions ATC on COM1."
-                    : "Waiting for: pushback/engine-start clearance. Press Confirm now to authorize the First Officer to contact SayIntentions ATC on COM1.";
+                return step.Id switch
+                {
+                    "captain-ifr-clearance" =>
+                        "Waiting for: IFR clearance. Press Confirm now to authorize the First Officer to contact SayIntentions ATC on COM1.",
+                    "captain-pushback-clearance" =>
+                        "Waiting for: pushback/engine-start clearance. Press Confirm now to authorize the First Officer to contact SayIntentions ATC on COM1.",
+                    _ =>
+                        "Waiting for: taxi clearance. Press Confirm now to authorize the First Officer to contact SayIntentions ATC on COM1."
+                };
             }
             return step.ManualInstruction != null
                 ? $"Waiting for: {step.ManualInstruction}"

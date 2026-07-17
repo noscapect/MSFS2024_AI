@@ -34,6 +34,14 @@ internal static class SayIntentionsAtcMessageBuilder
             return $"{effectiveCallsign}, at {gate}, request pushback and engine start";
         }
 
+        if (stepId == "fo-taxi-clearance")
+        {
+            var gate = string.IsNullOrWhiteSpace(assignedGate)
+                ? "the stand"
+                : assignedGate.Trim();
+            return $"{effectiveCallsign}, at {gate}, ready for taxi, request taxi clearance";
+        }
+
         throw new ArgumentOutOfRangeException(nameof(stepId));
     }
 }

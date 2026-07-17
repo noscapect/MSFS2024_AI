@@ -127,7 +127,10 @@ Master ON steps complete.
 7. **F/O automatic:** Set WXR/PWS selector to position 1.
 8. **F/O automatic:** Set nose light to TAXI.
 9. **F/O confirmation:** Check ECAM for remaining memos or system warnings.
-10. **Monitor:** Detect Captain commencing taxi when the parking brake is
+10. **F/O ATC:** Press **Confirm now** to let the First Officer request taxi
+    clearance through SayIntentions. Without an active integration, complete
+    the request through the configured ATC service and confirm it manually.
+11. **Monitor:** Detect Captain commencing taxi when the parking brake is
     released and groundspeed exceeds 0.5 knots.
 
 ## 6. Before Takeoff

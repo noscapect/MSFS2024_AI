@@ -39,6 +39,22 @@ public sealed class SayIntentionsAtcMessageBuilderTests
     }
 
     [TestMethod]
+    public void BuildTaxiRequest_UsesCallsignAndAssignedGate()
+    {
+        var message = SayIntentionsAtcMessageBuilder.Build(
+            "fo-taxi-clearance",
+            "KLM1701",
+            "",
+            "EGSH",
+            "EHAM",
+            "C8");
+
+        Assert.AreEqual(
+            "KLM1701, at C8, ready for taxi, request taxi clearance",
+            message);
+    }
+
+    [TestMethod]
     public void Build_RejectsUnrelatedProcedureStep()
     {
         Assert.ThrowsException<ArgumentOutOfRangeException>(() =>

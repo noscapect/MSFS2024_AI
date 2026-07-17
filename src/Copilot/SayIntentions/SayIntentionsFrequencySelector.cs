@@ -12,6 +12,7 @@ internal static class SayIntentionsFrequencySelector
         {
             "captain-ifr-clearance" => new[] { "CLR", "DEL", "CD", "GND", "TWR", "CTAF" },
             "captain-pushback-clearance" => new[] { "GND", "TWR", "CTAF" },
+            "fo-taxi-clearance" => new[] { "GND", "TWR", "CTAF" },
             _ => Array.Empty<string>()
         };
 

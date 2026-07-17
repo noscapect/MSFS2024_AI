@@ -780,7 +780,7 @@ internal static class A330ProcedureLibrary
                     "beacon off"),
                 Automatic("fo-fuel-pumps-off", "All six fuel pumps OFF", state => state.AllFuelPumpsOff, "fuel-pumps off"),
                 Automatic("fo-seatbelts-off", "Seatbelt signs OFF", state => state.SeatbeltSelectorPosition.HasValue && Math.Abs(state.SeatbeltSelectorPosition.Value - 2) < 0.1, "seatbelts off"),
-                Manual("secure-decision", "Cold-and-dark secure requested", "Captain and First Officer: confirm continuation to final cold-and-dark secure.", CrewRole.Either),
+                Manual("secure-decision", "Choose final secure or follow-up flight", "Captain and First Officer: press Confirm now to continue to final cold-and-dark secure. For a follow-up flight, press Cancel to keep the aircraft on APU or external power.", CrewRole.Either),
                 Automatic(
                     "secure-oxygen",
                     "Crew oxygen OFF",

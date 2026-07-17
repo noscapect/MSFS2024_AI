@@ -310,7 +310,10 @@ and do not block the cockpit shutdown flow.
 
 The app requests one explicit confirmation before removing electrical power.
 
-1. **Captain/F/O confirmation:** Continue to final cold-and-dark secure.
+1. **Captain/F/O decision:** Press **Confirm now** to continue to final
+   cold-and-dark secure. For a follow-up flight, press **Cancel** to stop Flow
+   12 here and keep the aircraft in turnaround configuration on APU or
+   external power.
 2. **A321 F/O automatic:** Set NO SMOKING from AUTO to OFF only now, after
    passenger turnaround and final-secure authorization.
 3. **Automatic:** Turn crew oxygen OFF.

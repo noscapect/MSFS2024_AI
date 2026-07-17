@@ -1,0 +1,46 @@
+# SayIntentions Integration
+
+## Goal
+
+Add optional SayIntentions companion features without making SayIntentions a
+runtime requirement and without coupling it to any aircraft adapter.
+
+## Implemented first slice
+
+- Detect the local SayIntentions Windows client through
+  `http://127.0.0.1:63287/flightJSON`.
+- Read the active callsign, route, airport, and assigned gate.
+- Obtain the active SAPI context from the local payload without asking the
+  user to copy an API key into this application.
+- Show `OFFLINE`, `READY`, or `CONNECTED` state in the dashboard.
+- Offer an opt-in `SayIntentions voices` preference for existing First Officer
+  callouts.
+- Send exact callout text through `INTERCOM1_IN` with rephrasing disabled.
+- Fall back to the existing Windows voice if SayIntentions is unavailable or
+  rejects a callout.
+
+## Security and isolation
+
+- API credentials are held only in memory and are never saved in settings.
+- The app never writes the flight JSON, API key, SAPI request URI, or SAPI
+  exception details to player or diagnostic logs.
+- A hostname supplied by the local payload is accepted only when it is HTTPS
+  and belongs to `sayintentions.ai`; otherwise the official primary API host
+  is used.
+- SayIntentions code lives under `src/Copilot/SayIntentions`. It does not
+  participate in aircraft identification, command routing, state readback,
+  checklists, or procedures.
+- All existing functionality remains available when the SayIntentions client
+  is closed or no active SayIntentions flight exists.
+
+## Next slices
+
+1. Read-only ATIS, METAR, TAF, active-runway, frequency, and parking data.
+2. A compact communications-history view.
+3. User-approved ATC transmissions such as IFR-clearance and pushback
+   requests.
+4. Conservative clearance recognition after live validation; it must never
+   block a normal flight when SayIntentions is unavailable.
+
+Frequency changes and automatic ATC transmissions remain out of the first
+slice so the app cannot fight SayIntentions or cockpit radio management.

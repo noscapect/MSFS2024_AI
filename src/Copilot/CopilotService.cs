@@ -11,6 +11,7 @@ using Msfs2024Ai.Copilot.Diagnostics;
 using Msfs2024Ai.Copilot.Domain;
 using Msfs2024Ai.Copilot.Procedures;
 using Msfs2024Ai.Copilot.Settings;
+using Msfs2024Ai.Copilot.SayIntentions;
 using Msfs2024Ai.Copilot.SimBrief;
 using Msfs2024Ai.Copilot.Telemetry;
 using Msfs2024Ai.Copilot.Voice;
@@ -50,6 +51,12 @@ internal sealed class CopilotService : Form
     private readonly ConcurrentQueue<string> _commands = new();
     private readonly ProcedureRunner _procedureRunner;
     private VoiceCalloutQueue? _voiceCalloutQueue;
+    private readonly SayIntentionsClient _sayIntentionsClient = new();
+    private readonly SemaphoreSlim _sayIntentionsVoiceGate = new(1, 1);
+    private readonly CancellationTokenSource _sayIntentionsCancellation = new();
+    private SayIntentionsFlightContext? _sayIntentionsFlight;
+    private System.Windows.Forms.Timer? _sayIntentionsTimer;
+    private bool _sayIntentionsRefreshInProgress;
     private readonly FlightTelemetryStore _flightTelemetryStore;
     private readonly AircraftIdentityResolver _aircraftIdentityResolver = new();
     private System.Windows.Forms.Timer? _replayTimer;
@@ -359,11 +366,13 @@ internal sealed class CopilotService : Form
     private Label? _versionLabel;
     private Label? _adapterLabel;
     private Label? _simBriefStatusLabel;
+    private Label? _sayIntentionsStatusLabel;
     private Label? _simBadgeLabel;
     private Label? _aircraftBadgeLabel;
     private Label? _adapterBadgeLabel;
     private Label? _flowBadgeLabel;
     private Label? _versionBadgeLabel;
+    private Label? _sayIntentionsBadgeLabel;
     private PictureBox? _aircraftThumbnailBox;
     private Label? _aircraftCardTitleLabel;
     private Label? _aircraftCardVariationLabel;
@@ -383,6 +392,7 @@ internal sealed class CopilotService : Form
     private NumericUpDown? _takeoffV1Box;
     private NumericUpDown? _takeoffRotateBox;
     private CheckBox? _voiceCalloutsBox;
+    private CheckBox? _sayIntentionsVoiceBox;
     private ComboBox? _replayFlightBox;
     private ListBox? _eventLog;
     private ListBox? _flowList;
@@ -1028,7 +1038,12 @@ internal sealed class CopilotService : Form
         if (showUi)
         {
             BuildDashboard();
-            Shown += async (_, _) => await CheckForUpdatesAsync();
+            Shown += async (_, _) =>
+            {
+                StartSayIntentionsMonitoring();
+                await RefreshSayIntentionsStatusAsync();
+                await CheckForUpdatesAsync();
+            };
         }
     }
 
@@ -5740,7 +5755,8 @@ internal sealed class CopilotService : Form
 
     private void SpeakProcedureCallout(ProcedureStep step)
     {
-        if (!_settings.EnableStandardCallouts || _voiceCalloutQueue == null)
+        if (!_settings.EnableStandardCallouts
+            || (_voiceCalloutQueue == null && !_settings.UseSayIntentionsVoiceCallouts))
         {
             return;
         }
@@ -5783,13 +5799,70 @@ internal sealed class CopilotService : Form
 
         try
         {
-            _voiceCalloutQueue.Enqueue(phrase, GetCalloutPriority(step.Id));
+            DispatchVoiceCallout(phrase, GetCalloutPriority(step.Id));
             AppendDashboardLog($"Voice callout: {phrase}");
         }
         catch (InvalidOperationException ex)
         {
             AppLog.Write($"Voice callout failed: {ex.Message}");
         }
+    }
+
+    private void DispatchVoiceCallout(string phrase, int priority)
+    {
+        var sayIntentionsFlight = _sayIntentionsFlight;
+        if (_settings.UseSayIntentionsVoiceCallouts && sayIntentionsFlight != null)
+        {
+            _ = SayWithSayIntentionsOrFallbackAsync(sayIntentionsFlight, phrase, priority);
+            return;
+        }
+
+        _voiceCalloutQueue?.Enqueue(phrase, priority);
+    }
+
+    private async Task SayWithSayIntentionsOrFallbackAsync(
+        SayIntentionsFlightContext flight,
+        string phrase,
+        int priority)
+    {
+        var enteredGate = false;
+        try
+        {
+            await _sayIntentionsVoiceGate
+                .WaitAsync(_sayIntentionsCancellation.Token)
+                .ConfigureAwait(false);
+            enteredGate = true;
+            if (await _sayIntentionsClient
+                    .SayCopilotCalloutAsync(
+                        flight,
+                        phrase,
+                        _sayIntentionsCancellation.Token)
+                    .ConfigureAwait(false))
+            {
+                return;
+            }
+        }
+        catch (OperationCanceledException) when (_sayIntentionsCancellation.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception ex) when (ex is HttpRequestException
+                                   or OperationCanceledException
+                                   or ArgumentOutOfRangeException
+                                   or ObjectDisposedException)
+        {
+            // Never log the exception or request URI: SAPI authenticates in the query string.
+            AppLog.Write("SayIntentions voice unavailable; using local voice fallback.");
+        }
+        finally
+        {
+            if (enteredGate)
+            {
+                _sayIntentionsVoiceGate.Release();
+            }
+        }
+
+        _voiceCalloutQueue?.Enqueue(phrase, priority);
     }
 
     private static int GetCalloutPriority(string stepId) =>
@@ -9556,6 +9629,8 @@ internal sealed class CopilotService : Form
         topStatusBar.Controls.Add(_aircraftBadgeLabel);
         topStatusBar.Controls.Add(_adapterBadgeLabel);
         topStatusBar.Controls.Add(_flowBadgeLabel);
+        _sayIntentionsBadgeLabel = NewStatusBadge("SAYINTENTIONS OFFLINE", System.Drawing.Color.DimGray);
+        topStatusBar.Controls.Add(_sayIntentionsBadgeLabel);
         topStatusBar.Controls.Add(_versionBadgeLabel);
         root.Controls.Add(topStatusBar);
 
@@ -9607,6 +9682,10 @@ internal sealed class CopilotService : Form
             System.Drawing.Color.FromArgb(190, 198, 208);
         _simBriefImportButton.Click += (_, _) => ShowSimBriefDialog();
         statusPanel.Controls.Add(_simBriefImportButton, 2, simBriefRow);
+        _sayIntentionsStatusLabel = AddDashboardRow(
+            statusPanel,
+            "SayIntentions",
+            "Client not detected - optional integration inactive.");
         _versionLabel = AddDashboardRow(
             statusPanel,
             "Version",
@@ -9697,6 +9776,20 @@ internal sealed class CopilotService : Form
             }
         };
         preferencesPanel.Controls.Add(_voiceCalloutsBox);
+
+        _sayIntentionsVoiceBox = new CheckBox
+        {
+            Text = "SayIntentions voices",
+            AutoSize = true,
+            Checked = _settings.UseSayIntentionsVoiceCallouts,
+            Margin = new Padding(12, 5, 0, 0)
+        };
+        _sayIntentionsVoiceBox.CheckedChanged += (_, _) =>
+        {
+            _settings.UseSayIntentionsVoiceCallouts = _sayIntentionsVoiceBox.Checked;
+            SettingsStore.Save(_settings);
+        };
+        preferencesPanel.Controls.Add(_sayIntentionsVoiceBox);
 
         var featureSettingsButton = new Button
         {
@@ -10091,6 +10184,91 @@ internal sealed class CopilotService : Form
         actions.Controls.Add(copyDiagnosticsButton);
         toolsShell.Controls.Add(actions);
         root.Controls.Add(toolsShell);
+    }
+
+    private void StartSayIntentionsMonitoring()
+    {
+        if (_sayIntentionsTimer != null)
+        {
+            return;
+        }
+
+        _sayIntentionsTimer = new System.Windows.Forms.Timer { Interval = 10000 };
+        _sayIntentionsTimer.Tick += async (_, _) => await RefreshSayIntentionsStatusAsync();
+        _sayIntentionsTimer.Start();
+    }
+
+    private async Task RefreshSayIntentionsStatusAsync()
+    {
+        if (_sayIntentionsRefreshInProgress || _sayIntentionsCancellation.IsCancellationRequested)
+        {
+            return;
+        }
+
+        _sayIntentionsRefreshInProgress = true;
+        try
+        {
+            var result = await _sayIntentionsClient
+                .DiscoverAsync(_sayIntentionsCancellation.Token);
+            _sayIntentionsFlight = result.Context;
+            UpdateSayIntentionsStatus(result);
+        }
+        catch (OperationCanceledException) when (_sayIntentionsCancellation.IsCancellationRequested)
+        {
+            // Normal application shutdown.
+        }
+        finally
+        {
+            _sayIntentionsRefreshInProgress = false;
+        }
+    }
+
+    private void UpdateSayIntentionsStatus(SayIntentionsDiscoveryResult result)
+    {
+        if (_sayIntentionsStatusLabel == null)
+        {
+            return;
+        }
+
+        switch (result.State)
+        {
+            case SayIntentionsConnectionState.Connected:
+                var flight = result.Context!;
+                var callsign = string.IsNullOrWhiteSpace(flight.Callsign)
+                    ? "active flight"
+                    : flight.Callsign;
+                var gate = string.IsNullOrWhiteSpace(flight.AssignedGate)
+                    ? ""
+                    : $" | gate {flight.AssignedGate}";
+                _sayIntentionsStatusLabel.Text =
+                    $"Connected - {callsign} | {flight.RouteLabel}{gate}";
+                _sayIntentionsStatusLabel.ForeColor = System.Drawing.Color.DarkGreen;
+                SetStatusBadge(
+                    _sayIntentionsBadgeLabel,
+                    "SAYINTENTIONS CONNECTED",
+                    System.Drawing.Color.SeaGreen);
+                break;
+
+            case SayIntentionsConnectionState.NoActiveFlight:
+                _sayIntentionsStatusLabel.Text =
+                    "Client detected - start a SayIntentions flight to activate integration.";
+                _sayIntentionsStatusLabel.ForeColor = System.Drawing.Color.DarkGoldenrod;
+                SetStatusBadge(
+                    _sayIntentionsBadgeLabel,
+                    "SAYINTENTIONS READY",
+                    System.Drawing.Color.DarkGoldenrod);
+                break;
+
+            default:
+                _sayIntentionsStatusLabel.Text =
+                    "Client not detected - optional integration inactive.";
+                _sayIntentionsStatusLabel.ForeColor = System.Drawing.Color.DimGray;
+                SetStatusBadge(
+                    _sayIntentionsBadgeLabel,
+                    "SAYINTENTIONS OFFLINE",
+                    System.Drawing.Color.DimGray);
+                break;
+        }
     }
 
     private bool SimBriefConfigured =>
@@ -12067,6 +12245,10 @@ internal sealed class CopilotService : Form
                 _pendingFlyByWireFireTest = null;
             }
             _reconnectTimer?.Dispose();
+            _sayIntentionsTimer?.Stop();
+            _sayIntentionsTimer?.Dispose();
+            _sayIntentionsTimer = null;
+            _sayIntentionsCancellation.Cancel();
             foreach (var pulseTimer in _nativePulseTimers.ToArray())
             {
                 pulseTimer.Dispose();
@@ -12080,6 +12262,8 @@ internal sealed class CopilotService : Form
             _flightTelemetryStore.Dispose();
             _voiceCalloutQueue?.Dispose();
             _voiceCalloutQueue = null;
+            _sayIntentionsClient.Dispose();
+            _sayIntentionsCancellation.Dispose();
             _simConnect?.Dispose();
         }
 

@@ -32,4 +32,5 @@ public sealed class CopilotSettings
     public string SimBriefPilotId { get; set; } = "";
     public string SimBriefUsername { get; set; } = "";
     public bool SimBriefAutoImportOnNewFlight { get; set; }
+    public bool UseSayIntentionsVoiceCallouts { get; set; }
 }

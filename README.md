@@ -45,6 +45,8 @@ Captain actions, and speaks important callouts.
   frozen flow-contract test
 - Verification after every automatic aircraft action
 - Optional Windows offline voice callouts
+- Optional SayIntentions companion detection and First Officer voice callouts,
+  with automatic local-voice fallback and no stored API credentials
 - Persistent preflight settings for V1, VR, and transition altitude
 - Optional free SimBrief latest-OFP import by Pilot ID or username, with a
   per-flight operational briefing, mismatch/staleness warnings, block-fuel
@@ -81,6 +83,9 @@ Planned and deliberately deferred features are tracked in
 [docs/ROADMAP.md](docs/ROADMAP.md). The design and implemented first scope for
 optional SimBrief support is documented in
 [docs/SIMBRIEF_INTEGRATION_PLAN.md](docs/SIMBRIEF_INTEGRATION_PLAN.md).
+The isolated, optional SayIntentions integration and its security boundaries
+are documented in
+[docs/SAYINTENTIONS_INTEGRATION_PLAN.md](docs/SAYINTENTIONS_INTEGRATION_PLAN.md).
 
 The iniBuilds A321LR profile has completed live validation of all twelve flows.
 Its procedures, checklists, flap mappings, and sign-selector policy are kept in

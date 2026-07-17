@@ -22,10 +22,13 @@ runtime requirement and without coupling it to any aircraft adapter.
   and recent-communications data in `Manage SayIntentions`.
 - Provide a user-triggered First Officer voice test.
 - During the existing IFR-clearance and pushback/start-clearance pilot steps,
-  show a contextual SayIntentions action when an active session is available.
-- Require the pilot to review and explicitly send the editable COM1 message.
-- Poll for and display a new ATC response for up to 30 seconds without
-  automatically completing or blocking the checklist step.
+  reuse the normal `Confirm now` button as the pilot's authorization for the
+  First Officer to contact SayIntentions ATC on COM1.
+- Build and send the request directly from the active callsign, route, and
+  gate context without opening a second dialog.
+- Keep the flow waiting while monitoring for a new ATC response. Complete the
+  clearance step only after a reply is detected; after a timeout, retain a
+  normal manual-confirm fallback without blocking the flight.
 
 ## Security and isolation
 
@@ -49,5 +52,6 @@ runtime requirement and without coupling it to any aircraft adapter.
    must remain conservative and must never block a normal flight when
    SayIntentions is unavailable.
 
-Frequency changes and automatic/unreviewed ATC transmissions remain out of
-scope so the app cannot fight SayIntentions or cockpit radio management.
+Frequency changes remain out of scope so the app cannot fight SayIntentions
+or cockpit radio management. The normal flow confirmation is the explicit
+authorization for each automated transmission.

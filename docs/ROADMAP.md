@@ -6,14 +6,16 @@ profiles remain protected by their aircraft-specific regression tests.
 
 ## Current development
 
-1. SimBrief latest-OFP integration is released as an optional read-only
+1. Complete and live-validate the optional SayIntentions integration.
+2. SimBrief latest-OFP integration is released as an optional read-only
    operational briefing. Future work may add more advisory comparisons after
    live validation, without allowing network data to control cockpit systems.
 
 ## Later enhancements
 
-1. Interactive checklist and crew-audio improvements.
-2. Ground-service and cabin-crew integration.
+1. GSX Pro ground-service integration using the official bidirectional Remote
+   Control SDK. See `GSX_INTEGRATION_FEASIBILITY.md`.
+2. Interactive checklist and crew-audio improvements.
 
 ## Final planned major feature
 

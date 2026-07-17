@@ -403,7 +403,6 @@ internal sealed class CopilotService : Form
     private bool _sayIntentionsAtcRequestInProgress;
     private string? _sayIntentionsAtcRequestStepId;
     private string? _sayIntentionsAtcRequestSentStepId;
-    private Button? _simBriefImportButton;
     private ImportedFlightPlan? _simBriefFlightPlan;
     private bool _simBriefImportInProgress;
 
@@ -9676,41 +9675,26 @@ internal sealed class CopilotService : Form
         _telemetryLabel = AddDashboardRow(statusPanel, "Current-step telemetry", "Waiting for state...");
         var simBriefRow = statusPanel.RowCount;
         _simBriefStatusLabel = AddDashboardRow(statusPanel, "SimBrief", SimBriefStatusText());
-        _simBriefImportButton = new Button
-        {
-            Text = "Manage\r\nSimBrief",
-            Width = 112,
-            Height = 38,
-            Margin = new Padding(4, 0, 0, 2),
-            FlatStyle = FlatStyle.Flat,
-            BackColor = System.Drawing.Color.White,
-            ForeColor = System.Drawing.Color.FromArgb(40, 68, 106),
-            UseVisualStyleBackColor = false
-        };
-        _simBriefImportButton.FlatAppearance.BorderColor =
-            System.Drawing.Color.FromArgb(190, 198, 208);
-        _simBriefImportButton.Click += (_, _) => ShowSimBriefDialog();
-        statusPanel.Controls.Add(_simBriefImportButton, 2, simBriefRow);
-        var sayIntentionsRow = statusPanel.RowCount;
         _sayIntentionsStatusLabel = AddDashboardRow(
             statusPanel,
             "SayIntentions",
             "Client not detected - optional integration inactive.");
-        var sayIntentionsButton = new Button
+        var integrationsButton = new Button
         {
-            Text = "Manage\r\nSayIntentions",
+            Text = "Manage\r\nintegrations",
             Width = 112,
-            Height = 38,
+            Height = 58,
             Margin = new Padding(4, 0, 0, 2),
             FlatStyle = FlatStyle.Flat,
             BackColor = System.Drawing.Color.White,
             ForeColor = System.Drawing.Color.FromArgb(40, 68, 106),
             UseVisualStyleBackColor = false
         };
-        sayIntentionsButton.FlatAppearance.BorderColor =
+        integrationsButton.FlatAppearance.BorderColor =
             System.Drawing.Color.FromArgb(190, 198, 208);
-        sayIntentionsButton.Click += (_, _) => ShowSayIntentionsDialog();
-        statusPanel.Controls.Add(sayIntentionsButton, 2, sayIntentionsRow);
+        integrationsButton.Click += (_, _) => ShowIntegrationsDialog();
+        statusPanel.Controls.Add(integrationsButton, 2, simBriefRow);
+        statusPanel.SetRowSpan(integrationsButton, 2);
         _versionLabel = AddDashboardRow(
             statusPanel,
             "Version",
@@ -10324,7 +10308,172 @@ internal sealed class CopilotService : Form
         }
     }
 
-    private void ShowSayIntentionsDialog()
+    private void ShowIntegrationsDialog()
+    {
+        using var dialog = new Form
+        {
+            Text = "Manage integrations",
+            Width = 680,
+            Height = 380,
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false
+        };
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(16),
+            ColumnCount = 1,
+            RowCount = 3
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        dialog.Controls.Add(layout);
+
+        var header = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            Margin = new Padding(0, 0, 0, 8)
+        };
+        header.Controls.Add(new Label
+        {
+            Text = "Integrations",
+            AutoSize = true,
+            Font = new System.Drawing.Font(
+                Font.FontFamily,
+                14,
+                System.Drawing.FontStyle.Bold),
+            Margin = new Padding(0, 0, 0, 4)
+        });
+        var intro = new Label
+        {
+            Text = "Configure and review optional services used by the First Officer.",
+            AutoSize = true,
+            ForeColor = System.Drawing.Color.DimGray,
+            Margin = new Padding(0)
+        };
+        header.Controls.Add(intro);
+        layout.Controls.Add(header, 0, 0);
+
+        var cards = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 2,
+            Margin = new Padding(0, 8, 0, 8)
+        };
+        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        layout.Controls.Add(cards, 0, 1);
+
+        var simBriefCard = new GroupBox
+        {
+            Text = "SimBrief",
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12),
+            Margin = new Padding(0, 0, 0, 7)
+        };
+        var simBriefCardLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1
+        };
+        simBriefCardLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        simBriefCardLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        var simBriefStatus = NewDashboardLabel(SimBriefStatusText());
+        simBriefStatus.MaximumSize = new System.Drawing.Size(470, 0);
+        var manageSimBrief = new Button { Text = "Manage SimBrief", AutoSize = true };
+        simBriefCardLayout.Controls.Add(simBriefStatus, 0, 0);
+        simBriefCardLayout.Controls.Add(manageSimBrief, 1, 0);
+        simBriefCard.Controls.Add(simBriefCardLayout);
+        cards.Controls.Add(simBriefCard, 0, 0);
+
+        var sayIntentionsCard = new GroupBox
+        {
+            Text = "SayIntentions",
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12),
+            Margin = new Padding(0, 7, 0, 0)
+        };
+        var sayIntentionsCardLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1
+        };
+        sayIntentionsCardLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        sayIntentionsCardLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        var sayIntentionsStatus = NewDashboardLabel(
+            _sayIntentionsStatusLabel?.Text
+            ?? "Client not detected - optional integration inactive.");
+        sayIntentionsStatus.MaximumSize = new System.Drawing.Size(470, 0);
+        var manageSayIntentions = new Button
+        {
+            Text = "Manage SayIntentions",
+            AutoSize = true
+        };
+        sayIntentionsCardLayout.Controls.Add(sayIntentionsStatus, 0, 0);
+        sayIntentionsCardLayout.Controls.Add(manageSayIntentions, 1, 0);
+        sayIntentionsCard.Controls.Add(sayIntentionsCardLayout);
+        cards.Controls.Add(sayIntentionsCard, 0, 1);
+
+        void RefreshStatuses()
+        {
+            simBriefStatus.Text = SimBriefStatusText();
+            simBriefStatus.ForeColor = _simBriefFlightPlan != null
+                ? System.Drawing.Color.DarkGreen
+                : SimBriefConfigured
+                    ? System.Drawing.Color.DarkGoldenrod
+                    : System.Drawing.Color.DimGray;
+            sayIntentionsStatus.Text = _sayIntentionsStatusLabel?.Text
+                ?? "Client not detected - optional integration inactive.";
+            sayIntentionsStatus.ForeColor = _sayIntentionsStatusLabel?.ForeColor
+                ?? System.Drawing.Color.DimGray;
+        }
+
+        manageSimBrief.Click += (_, _) =>
+        {
+            ShowSimBriefDialog(dialog);
+            RefreshStatuses();
+        };
+        manageSayIntentions.Click += (_, _) =>
+        {
+            ShowSayIntentionsDialog(dialog);
+            RefreshStatuses();
+        };
+
+        var footer = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            FlowDirection = FlowDirection.RightToLeft,
+            Margin = new Padding(0, 8, 0, 0)
+        };
+        var closeButton = new Button { Text = "Close", AutoSize = true };
+        closeButton.Click += (_, _) => dialog.Close();
+        var refreshButton = new Button { Text = "Refresh status", AutoSize = true };
+        refreshButton.Click += async (_, _) =>
+        {
+            refreshButton.Enabled = false;
+            await RefreshSayIntentionsStatusAsync();
+            RefreshStatuses();
+            refreshButton.Enabled = true;
+        };
+        footer.Controls.Add(closeButton);
+        footer.Controls.Add(refreshButton);
+        layout.Controls.Add(footer, 0, 2);
+
+        RefreshStatuses();
+        dialog.ShowDialog(this);
+    }
+
+    private void ShowSayIntentionsDialog(IWin32Window? owner = null)
     {
         using var dialogCancellation = CancellationTokenSource.CreateLinkedTokenSource(
             _sayIntentionsCancellation.Token);
@@ -10400,7 +10549,7 @@ internal sealed class CopilotService : Form
                 details,
                 refreshButton,
                 dialogCancellation.Token);
-        dialog.ShowDialog(this);
+        dialog.ShowDialog(owner ?? this);
     }
 
     private async Task TestSayIntentionsVoiceAsync(
@@ -10804,7 +10953,7 @@ internal sealed class CopilotService : Form
                 : System.Drawing.Color.DimGray);
     }
 
-    private void ShowSimBriefDialog()
+    private void ShowSimBriefDialog(IWin32Window? owner = null)
     {
         using var dialog = new Form
         {
@@ -10919,7 +11068,7 @@ internal sealed class CopilotService : Form
         layout.SetColumnSpan(buttons, 2);
         dialog.AcceptButton = importButton;
         dialog.CancelButton = closeButton;
-        dialog.ShowDialog(this);
+        dialog.ShowDialog(owner ?? this);
     }
 
     private void ShowSimBriefBriefing()

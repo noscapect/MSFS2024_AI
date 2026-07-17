@@ -392,6 +392,7 @@ internal sealed class CopilotService : Form
     private NumericUpDown? _takeoffV1Box;
     private NumericUpDown? _takeoffRotateBox;
     private CheckBox? _voiceCalloutsBox;
+    private ComboBox? _calloutDetailBox;
     private CheckBox? _sayIntentionsVoiceBox;
     private ComboBox? _replayFlightBox;
     private ListBox? _eventLog;
@@ -5692,10 +5693,12 @@ internal sealed class CopilotService : Form
         var completedDefinition = _procedureRunner.Status == ProcedureStatus.Completed
             ? _procedureRunner.Definition
             : null;
-        if (_procedureRunner.Status == ProcedureStatus.Completed
-            && completedDefinition != null)
+        var newlyCompleted = _procedureRunner.Status == ProcedureStatus.Completed
+            && completedDefinition != null
+            && _completedProcedureIds.Add(completedDefinition.Id);
+        if (newlyCompleted)
         {
-            _completedProcedureIds.Add(completedDefinition.Id);
+            SpeakProcedureCompletion(completedDefinition!);
         }
         SaveProcedureSession();
         PrintProcedureUpdate();
@@ -5769,32 +5772,10 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        var phrase = step.Id switch
-        {
-            "captain-engine-two" => "Engine two on",
-            "fo-engine-two-starter" => "Engine two starter valve open",
-            "fo-engine-two-fuel" => "Engine two fuel flow",
-            "fo-engine-two-stable" => "Engine two stabilized",
-            "captain-engine-one" => "Engine one on",
-            "fo-engine-one-starter" => "Engine one starter valve open",
-            "fo-engine-one-fuel" => "Engine one fuel flow",
-            "fo-engine-one-stable" => "Engine one stabilized",
-            "fo-cabin-call" => "Cabin crew, prepare for takeoff",
-            "fo-cabin-landing-call" => "Cabin crew, prepare for landing",
-            "captain-takeoff" => "Thrust set",
-            "fo-100-knots" => "One hundred knots",
-            "fo-v1" => "V one",
-            "fo-rotate" => "Rotate",
-            "positive-climb" => "Positive climb",
-            "fo-gear-up" => "Landing gear up",
-            "fo-gear-down" => "Landing gear down",
-            "fo-approaching-minimums" => "Approaching minimums",
-            "fo-minimums" => "Minimums",
-            "fo-spoilers-callout" => "Spoilers",
-            "fo-reverse-callout" => "Reverse green",
-            "fo-decel-callout" => "Decel",
-            _ => null
-        };
+        var phrase = ProcedureCalloutCatalog.ForStep(
+            step.Id,
+            _state,
+            _settings.CalloutDetail);
         if (phrase == null)
         {
             return;
@@ -5809,6 +5790,26 @@ internal sealed class CopilotService : Form
         {
             AppLog.Write($"Voice callout failed: {ex.Message}");
         }
+    }
+
+    private void SpeakProcedureCompletion(ProcedureDefinition definition)
+    {
+        if (!_settings.EnableStandardCallouts
+            || (_voiceCalloutQueue == null && !_settings.UseSayIntentionsVoiceCallouts))
+        {
+            return;
+        }
+
+        var phrase = ProcedureCalloutCatalog.ForCompletedProcedure(
+            definition.Id,
+            _settings.CalloutDetail);
+        if (phrase == null)
+        {
+            return;
+        }
+
+        DispatchVoiceCallout(phrase, 60);
+        AppendDashboardLog($"Voice callout: {phrase}");
     }
 
     private void DispatchVoiceCallout(string phrase, int priority)
@@ -9793,8 +9794,34 @@ internal sealed class CopilotService : Form
             {
                 _voiceCalloutQueue?.Clear();
             }
+            if (_calloutDetailBox != null)
+            {
+                _calloutDetailBox.Enabled = _voiceCalloutsBox.Checked;
+            }
         };
         preferencesPanel.Controls.Add(_voiceCalloutsBox);
+
+        preferencesPanel.Controls.Add(new Label
+        {
+            Text = "Detail:",
+            AutoSize = true,
+            Margin = new Padding(12, 7, 4, 0)
+        });
+        _calloutDetailBox = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Width = 92,
+            Enabled = _settings.EnableStandardCallouts
+        };
+        _calloutDetailBox.Items.AddRange(
+            Enum.GetValues(typeof(CalloutDetail)).Cast<object>().ToArray());
+        _calloutDetailBox.SelectedItem = _settings.CalloutDetail;
+        _calloutDetailBox.SelectedIndexChanged += (_, _) =>
+        {
+            _settings.CalloutDetail = (CalloutDetail)_calloutDetailBox.SelectedItem;
+            SettingsStore.Save(_settings);
+        };
+        preferencesPanel.Controls.Add(_calloutDetailBox);
 
         _sayIntentionsVoiceBox = new CheckBox
         {
@@ -10581,6 +10608,7 @@ internal sealed class CopilotService : Form
         _sayIntentionsAtcRequestInProgress = true;
         _sayIntentionsAtcRequestStepId = stepId;
         UpdateProcedureActionButtons();
+        var copilotCommsClaimed = false;
         try
         {
             IReadOnlyList<SayIntentionsCommunication> before;
@@ -10610,6 +10638,15 @@ internal sealed class CopilotService : Form
                 stepId == "captain-ifr-clearance"
                     ? "First Officer contacting ATC for IFR clearance through SayIntentions."
                     : "First Officer contacting ATC for pushback and engine-start clearance through SayIntentions.");
+            copilotCommsClaimed = SetSayIntentionsCopilotComms(true);
+            if (copilotCommsClaimed)
+            {
+                // Give the simulator bridge time to expose the handoff before
+                // SayIntentions generates the outgoing COM1 transmission.
+                await Task.Delay(
+                    TimeSpan.FromMilliseconds(350),
+                    _sayIntentionsCancellation.Token);
+            }
             if (!await _sayIntentionsClient.SendAtcTransmissionAsync(
                     flight,
                     message,
@@ -10679,8 +10716,31 @@ internal sealed class CopilotService : Form
         {
             _sayIntentionsAtcRequestInProgress = false;
             _sayIntentionsAtcRequestStepId = null;
+            if (copilotCommsClaimed)
+            {
+                SetSayIntentionsCopilotComms(false);
+            }
             UpdateProcedureActionButtons();
         }
+    }
+
+    private bool SetSayIntentionsCopilotComms(bool enabled)
+    {
+        if (!_mobiFlightReady)
+        {
+            return false;
+        }
+
+        var value = enabled ? 1 : 0;
+        SendMobiFlightCommand(
+            $"MF.SimVars.Set.{value} (>L:SIAI_COPILOT) " +
+            $"{value} (>L:SIAI_COPILOT, Bool)");
+        SendMobiFlightCommand("MF.DummyCmd");
+        AppLog.Write(
+            enabled
+                ? "SayIntentions First Officer COM1 handoff enabled."
+                : "SayIntentions First Officer COM1 handoff released.");
+        return true;
     }
 
     private static bool IsSayIntentionsAtcStep(string? stepId) =>

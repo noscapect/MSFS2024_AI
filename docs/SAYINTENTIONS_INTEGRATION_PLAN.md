@@ -15,6 +15,9 @@ runtime requirement and without coupling it to any aircraft adapter.
 - Show `OFFLINE`, `READY`, or `CONNECTED` state in the dashboard.
 - Offer an opt-in `SayIntentions voices` preference for existing First Officer
   callouts.
+- Offer `Minimal`, `Standard`, and `Expanded` callout detail. Standard adds
+  verified configuration acknowledgements while routine switch movements stay
+  silent; Expanded adds selected system-status and checklist-completion calls.
 - Send exact callout text through `INTERCOM1_IN` with rephrasing disabled.
 - Fall back to the existing Windows voice if SayIntentions is unavailable or
   rejects a callout.
@@ -26,6 +29,10 @@ runtime requirement and without coupling it to any aircraft adapter.
   First Officer to contact SayIntentions ATC on COM1.
 - Build and send the request directly from the active callsign, route, and
   gate context without opening a second dialog.
+- Set SayIntentions' documented `SIAI_COPILOT` communications state for the
+  duration of the authorized COM1 exchange so the transmission is attributed
+  to and voiced as the First Officer, then release it after the reply or
+  timeout.
 - Keep the flow waiting while monitoring for a new ATC response. Complete the
   clearance step only after a reply is detected; after a timeout, retain a
   normal manual-confirm fallback without blocking the flight.

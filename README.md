@@ -48,9 +48,14 @@ Captain actions, and speaks important callouts.
 - Optional SayIntentions companion detection and First Officer voice callouts,
   plus read-only weather, ATIS, frequencies, parking, and communications,
   with automatic local-voice fallback and no stored API credentials
+- Selectable `Minimal`, `Standard`, and `Expanded` callout detail. The standard
+  profile adds verified configuration calls without narrating routine switch
+  movements; expanded mode also adds selected status and checklist-completion
+  calls
 - Seamless, pilot-authorized SayIntentions COM1 requests from the normal flow
-  confirmation button for IFR and pushback/start clearance, with non-blocking
-  ATC-response monitoring
+  confirmation button for IFR and pushback/start clearance, including a
+  temporary First Officer radio handoff and non-blocking ATC-response
+  monitoring
 - Persistent preflight settings for V1, VR, and transition altitude
 - Optional free SimBrief latest-OFP import by Pilot ID or username, with a
   per-flight operational briefing, mismatch/staleness warnings, block-fuel
@@ -79,8 +84,9 @@ Captain actions, and speaks important callouts.
 - Quiet diagnostic capture and export for verification failures without
   cluttering the normal player-facing activity log
 
-Voice callouts include engine-start monitoring, takeoff calls, landing gear up
-and down, minimums, spoilers, reverse green, and deceleration.
+Voice callouts include engine-start monitoring, takeoff calls, verified flap
+and speedbrake configuration, landing gear up and down, minimums, spoilers,
+reverse green, and deceleration. Routine cockpit-flow switches remain silent.
 
 The gameplay flow is defined in [docs/checklist.md](docs/checklist.md).
 Planned and deliberately deferred features are tracked in

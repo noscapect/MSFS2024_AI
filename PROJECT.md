@@ -1,7 +1,7 @@
 # MSFS 2024 Virtual First Officer - Project Status and Handoff
 
 This file is the primary technical handoff for continuing development. It
-describes the state of the project at public release **v0.9.2** on July 17,
+describes the state of the project at public release **v0.9.3** on July 19,
 2026. The flows implemented in the application are authoritative; supporting
 documents must follow the application when they differ.
 
@@ -26,9 +26,9 @@ software, not an autopilot, and the pilot must always be able to take over.
 
 ## Current release
 
-- Public version: **0.9.2**
+- Public version: **0.9.3**
 - Repository: <https://github.com/noscapect/MSFS2024_AI>
-- Latest release: <https://github.com/noscapect/MSFS2024_AI/releases/tag/v0.9.2>
+- Latest release: <https://github.com/noscapect/MSFS2024_AI/releases/tag/v0.9.3>
 - Main project: `src/Copilot/Copilot.csproj`
 - UI/runtime: WinForms, .NET Framework 4.7.2, x64
 - Release executable: `src/Copilot/bin/Release/net472/Copilot.exe`
@@ -42,8 +42,8 @@ dotnet build .\src\Copilot\Copilot.csproj -c Release --no-restore
 dotnet test .\tests\Copilot.Tests\Copilot.Tests.csproj -c Release --no-restore
 ```
 
-The v0.9.2 release was built with no warnings or errors and passed the full
-151-test release suite.
+The v0.9.3 release was built with no warnings or errors and passed the full
+159-test release suite.
 
 ## Supported aircraft
 
@@ -167,10 +167,10 @@ When SayIntentions is disabled or unavailable, its steps bypass cleanly and
 the simulator's built-in ATC or the pilot handles communication. No supported
 aircraft procedure may depend on SayIntentions being installed.
 
-The post-v0.9.2 integration is being completed on the dedicated SayIntentions
-branch. SayIntentions owns its complete ATC workflow; the app provides the
-Copilot handoff, private checkpoint instruction, voice-callout routing,
-passive communication readouts, and non-SayIntentions fallback.
+The SayIntentions integration was completed and live validated gate-to-gate for
+v0.9.3. SayIntentions owns its complete ATC workflow; the app provides the
+Copilot handoff, native workflow triggers, voice-callout routing, passive
+communication readouts, response verification, and non-SayIntentions fallback.
 
 ### SayIntentions implementation lessons
 
@@ -290,7 +290,7 @@ the Release build and the UI does not identify Debug versus Release.
 
 ## Deferred and remaining work
 
-- Continue real-flight validation of SayIntentions exchanges and the A330
+- Continue regression validation of SayIntentions exchanges and the A330
   profile after simulator or aircraft updates
 - Add GSX Pro ground-service integration using its official bidirectional
   Remote Control SDK; feasibility research is in

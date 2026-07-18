@@ -6,12 +6,15 @@ profiles remain protected by their aircraft-specific regression tests.
 
 ## Current development
 
-1. Complete the final live-acceptance matrix for persistent SayIntentions
-   Copilot communications and its four departure ATC conversations. Frequency
-   tuning belongs exclusively to SayIntentions.
+1. Begin GSX Pro integration on a dedicated development branch, preserving all
+   completed aircraft and SayIntentions behavior behind regression tests.
 2. SimBrief latest-OFP integration is released as an optional read-only
    operational briefing. Future work may add more advisory comparisons after
    live validation, without allowing network data to control cockpit systems.
+
+SayIntentions Copilot communication and departure ATC workflow acceptance was
+completed gate-to-gate for v0.9.3. Frequency tuning remains exclusively owned
+by SayIntentions.
 
 ## Later enhancements
 

@@ -1,5 +1,28 @@
 # Live test evidence
 
+## 2026-07-19 - SayIntentions gate-to-gate acceptance complete
+
+The SayIntentions completion branch passed a full iniBuilds A321LR flight from
+gate to gate. SayIntentions owned radio tuning, audible First Officer requests,
+ATC responses, and readbacks. The VFO mirrored both sides of each exchange and
+advanced only after matching the required authorization.
+
+Live verification covered IFR clearance, pushback/start, taxi, and takeoff.
+IFR and pushback/start use the exact native SayIntentions Copilot callback
+actions captured from its own UI. The integration preserves pending requests
+through temporary SAPI failures, recognizes responses added to an existing
+history record, and provides a bounded retry instead of waiting forever.
+
+At Brussels, SayIntentions automatically reported ready for departure and
+received takeoff clearance before Flow 6 reached its ATC checkpoint. The VFO
+now consumes a recent matching clearance from the active SayIntentions flight
+and suppresses a duplicate request. No application-owned frequency selection
+or tuning is used.
+
+Automated result: **159 tests passed in Release with no failures.** Live result:
+**all twelve flows completed gate to gate with SayIntentions communications
+active.**
+
 ## 2026-07-15 - PMDG 737-800 end-to-end validation complete
 
 The PMDG 737-800 has completed live testing of all twelve Boeing-specific

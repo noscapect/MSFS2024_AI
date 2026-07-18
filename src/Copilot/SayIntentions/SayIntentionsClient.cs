@@ -11,9 +11,16 @@ internal sealed class SayIntentionsClient : IDisposable
     private readonly HttpClient _apiClient;
 
     public SayIntentionsClient()
+        : this(new HttpClientHandler(), new HttpClientHandler())
     {
-        _localClient = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-        _apiClient = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
+    }
+
+    internal SayIntentionsClient(
+        HttpMessageHandler localHandler,
+        HttpMessageHandler apiHandler)
+    {
+        _localClient = new HttpClient(localHandler) { Timeout = TimeSpan.FromSeconds(2) };
+        _apiClient = new HttpClient(apiHandler) { Timeout = TimeSpan.FromSeconds(6) };
         _apiClient.DefaultRequestHeaders.UserAgent.ParseAdd("MSFS2024-Virtual-First-Officer/0.9.2");
     }
 
@@ -50,49 +57,82 @@ internal sealed class SayIntentionsClient : IDisposable
         string phrase,
         CancellationToken cancellationToken = default)
     {
+        return await SendIntercomMessageAsync(
+                context,
+                "INTERCOM1_IN",
+                phrase,
+                exactPhrase: true,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<bool> AskCopilotAsync(
+        SayIntentionsFlightContext context,
+        string instruction,
+        CancellationToken cancellationToken = default)
+    {
+        // This is a private pilot-to-copilot instruction. SayIntentions owns
+        // the resulting radio phrase, copilot audio, tuning, readbacks, and
+        // ATC exchange; the VFO never injects a COM transmission itself.
+        return await SendIntercomMessageAsync(
+                context,
+                "INTERCOM1",
+                instruction,
+                exactPhrase: false,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    public async Task<bool> TriggerCopilotActionAsync(
+        SayIntentionsFlightContext context,
+        string actionName,
+        CancellationToken cancellationToken = default)
+    {
+        if (string.IsNullOrWhiteSpace(actionName) || actionName.Length > 128)
+        {
+            throw new ArgumentOutOfRangeException(nameof(actionName));
+        }
+
+        var json = await GetSapiJsonAsync(
+                context,
+                "sendCallback",
+                new Dictionary<string, string>
+                {
+                    ["event"] = "copilot_request",
+                    ["action_name"] = actionName
+                },
+                cancellationToken)
+            .ConfigureAwait(false);
+        return !ContainsError(json);
+    }
+
+    private async Task<bool> SendIntercomMessageAsync(
+        SayIntentionsFlightContext context,
+        string channel,
+        string phrase,
+        bool exactPhrase,
+        CancellationToken cancellationToken)
+    {
         if (string.IsNullOrWhiteSpace(phrase) || phrase.Length > 255)
         {
             throw new ArgumentOutOfRangeException(nameof(phrase));
         }
 
         var endpoint = new Uri(context.ApiHost, "sapi/sayAs");
-        var uri = new UriBuilder(endpoint)
+        var query = "api_key=" + Uri.EscapeDataString(context.ApiKey)
+                    + "&channel=" + channel
+                    + "&message=" + Uri.EscapeDataString(phrase);
+        if (exactPhrase)
         {
-            Query = "api_key=" + Uri.EscapeDataString(context.ApiKey)
-                    + "&channel=INTERCOM1_IN"
-                    + "&message=" + Uri.EscapeDataString(phrase)
-                    + "&rephrase=0"
-        }.Uri;
+            // SayIntentions supports rephrase only on inbound (_IN) channels.
+            query += "&rephrase=0";
+        }
+
+        var uri = new UriBuilder(endpoint) { Query = query }.Uri;
 
         using var response = await _apiClient.GetAsync(uri, cancellationToken).ConfigureAwait(false);
-        return response.IsSuccessStatusCode;
-    }
-
-    public async Task<bool> SendAtcTransmissionAsync(
-        SayIntentionsFlightContext context,
-        string message,
-        int com = 1,
-        CancellationToken cancellationToken = default)
-    {
-        if (string.IsNullOrWhiteSpace(message) || message.Length > 255)
-        {
-            throw new ArgumentOutOfRangeException(nameof(message));
-        }
-        if (com is not (1 or 2))
-        {
-            throw new ArgumentOutOfRangeException(nameof(com));
-        }
-
-        var json = await GetSapiJsonAsync(
-                context,
-                "sayAs",
-                new Dictionary<string, string>
-                {
-                    ["channel"] = $"COM{com}",
-                    ["message"] = message
-                },
-                cancellationToken)
-            .ConfigureAwait(false);
+        response.EnsureSuccessStatusCode();
+        var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         return !ContainsError(json);
     }
 
@@ -135,45 +175,19 @@ internal sealed class SayIntentionsClient : IDisposable
         return SayIntentionsResponseParser.ParseCommunications(json);
     }
 
-    public async Task<IReadOnlyList<SayIntentionsFrequency>> GetCurrentFrequenciesAsync(
+    public async Task<bool> SetCopilotCommunicationsAsync(
         SayIntentionsFlightContext context,
+        bool enabled,
         CancellationToken cancellationToken = default)
     {
         var json = await GetSapiJsonAsync(
                 context,
-                "getCurrentFrequencies",
-                null,
-                cancellationToken)
-            .ConfigureAwait(false);
-        return SayIntentionsResponseParser.ParseCurrentFrequencies(json);
-    }
-
-    public async Task<bool> SetFrequencyAsync(
-        SayIntentionsFlightContext context,
-        double frequencyMhz,
-        int com = 1,
-        CancellationToken cancellationToken = default)
-    {
-        if (frequencyMhz is < 118 or > 136.975)
-        {
-            throw new ArgumentOutOfRangeException(nameof(frequencyMhz));
-        }
-        if (com is not (1 or 2))
-        {
-            throw new ArgumentOutOfRangeException(nameof(com));
-        }
-
-        var json = await GetSapiJsonAsync(
-                context,
-                "setFreq",
+                "setVar",
                 new Dictionary<string, string>
                 {
-                    ["freq"] = frequencyMhz.ToString(
-                        "0.000",
-                        System.Globalization.CultureInfo.InvariantCulture),
-                    ["com"] = com.ToString(
-                        System.Globalization.CultureInfo.InvariantCulture),
-                    ["mode"] = "active"
+                    ["var"] = "SIAI_COPILOT",
+                    ["value"] = enabled ? "1" : "0",
+                    ["category"] = "L"
                 },
                 cancellationToken)
             .ConfigureAwait(false);

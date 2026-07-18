@@ -53,10 +53,16 @@ internal sealed class CopilotService : Form
     private VoiceCalloutQueue? _voiceCalloutQueue;
     private readonly SayIntentionsClient _sayIntentionsClient = new();
     private readonly SemaphoreSlim _sayIntentionsVoiceGate = new(1, 1);
+    private readonly SemaphoreSlim _sayIntentionsCommsModeGate = new(1, 1);
     private readonly CancellationTokenSource _sayIntentionsCancellation = new();
     private SayIntentionsFlightContext? _sayIntentionsFlight;
     private System.Windows.Forms.Timer? _sayIntentionsTimer;
     private bool _sayIntentionsRefreshInProgress;
+    private bool _sayIntentionsCopilotModeApplied;
+    private string? _sayIntentionsCopilotModeSessionKey;
+    private string? _pendingSayIntentionsAtcStepId;
+    private long _pendingSayIntentionsAtcBaselineId;
+    private DateTime? _pendingSayIntentionsAtcStartedUtc;
     private readonly FlightTelemetryStore _flightTelemetryStore;
     private readonly AircraftIdentityResolver _aircraftIdentityResolver = new();
     private System.Windows.Forms.Timer? _replayTimer;
@@ -401,9 +407,11 @@ internal sealed class CopilotService : Form
     private ListBox? _flowList;
     private Button? _startSelectedFlowButton;
     private Button? _confirmCompletedButton;
-    private bool _sayIntentionsAtcRequestInProgress;
-    private string? _sayIntentionsAtcRequestStepId;
-    private string? _sayIntentionsAtcRequestSentStepId;
+    private bool _sayIntentionsHandoffInProgress;
+    private string? _sayIntentionsCommunicationSessionKey;
+    private long _sayIntentionsLastCommunicationId;
+    private readonly SayIntentionsCommunicationTracker
+        _sayIntentionsCommunicationTracker = new();
     private ImportedFlightPlan? _simBriefFlightPlan;
     private bool _simBriefImportInProgress;
 
@@ -3279,7 +3287,8 @@ internal sealed class CopilotService : Form
             BoeingFmcVrKnots = cockpitVr,
             BoeingFmcTakeoffReferenceComplete = isPmdg737 && pmdg?.FmcPerfInputComplete == true,
             SimBriefTakeoffStatus = SimBriefOperationalContext.TakeoffComparison(activePlan, aircraftVariant, cockpitV1, cockpitVr, cockpitFlaps),
-            SayIntentionsAtcActive = _sayIntentionsFlight != null,
+            SayIntentionsAtcActive = _sayIntentionsFlight != null
+                                  && _settings.UseSayIntentionsCopilotCommunications,
             ApproachDistanceToTouchdownNm = approachDistance.DistanceNm,
             ApproachDistanceSource = approachDistance.Source,
             ApproachFlaps1DistanceNm = approachSchedule.Flaps1DistanceNm,
@@ -4421,6 +4430,7 @@ internal sealed class CopilotService : Form
                 break;
             case "procedure cancel":
                 CancelFuelPumpSequence();
+                CancelPendingSayIntentionsAtcRequest();
                 _procedureRunner.Cancel();
                 FinishOneShot();
                 break;
@@ -5513,6 +5523,7 @@ internal sealed class CopilotService : Form
     private void ResetFlightProgress()
     {
         CancelFuelPumpSequence();
+        CancelPendingSayIntentionsAtcRequest();
         _procedureRunner.Cancel();
         ClearCommandedAircraftState();
         _completedProcedureIds.Clear();
@@ -9641,7 +9652,7 @@ internal sealed class CopilotService : Form
         topStatusBar.Controls.Add(_adapterBadgeLabel);
         topStatusBar.Controls.Add(_flowBadgeLabel);
         topStatusBar.Controls.Add(_simBriefBadgeLabel);
-        _sayIntentionsBadgeLabel = NewStatusBadge("SAYINTENTIONS OFFLINE", System.Drawing.Color.DimGray);
+        _sayIntentionsBadgeLabel = NewStatusBadge("SAYINTENTIONS CHECKING", System.Drawing.Color.DarkGoldenrod);
         topStatusBar.Controls.Add(_sayIntentionsBadgeLabel);
         topStatusBar.Controls.Add(_versionBadgeLabel);
         root.Controls.Add(topStatusBar);
@@ -10285,7 +10296,7 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        _sayIntentionsTimer = new System.Windows.Forms.Timer { Interval = 10000 };
+        _sayIntentionsTimer = new System.Windows.Forms.Timer { Interval = 5000 };
         _sayIntentionsTimer.Tick += async (_, _) => await RefreshSayIntentionsStatusAsync();
         _sayIntentionsTimer.Start();
     }
@@ -10303,7 +10314,46 @@ internal sealed class CopilotService : Form
             var result = await _sayIntentionsClient
                 .DiscoverAsync(_sayIntentionsCancellation.Token);
             _sayIntentionsFlight = result.Context;
+            if (_pendingSayIntentionsAtcStepId != null
+                && _pendingSayIntentionsAtcStartedUtc.HasValue
+                && DateTime.UtcNow - _pendingSayIntentionsAtcStartedUtc.Value
+                > TimeSpan.FromMinutes(3))
+            {
+                AppendDashboardLog(
+                    "SayIntentions did not create a verifiable ATC exchange within 3 minutes. Check its active flight, then press Confirm to retry.");
+                CancelPendingSayIntentionsAtcRequest();
+            }
+            // Discovery controls the badge. Update it before optional mode and
+            // history calls so a slow or temporarily failing SAPI endpoint
+            // cannot leave an online client displayed as offline.
             UpdateSayIntentionsStatus(result);
+            if (result.Context != null)
+            {
+                if (_settings.UseSayIntentionsCopilotCommunications)
+                {
+                    // Establish the configured communications owner as soon as
+                    // the SayIntentions session is discovered. Native callback
+                    // actions can otherwise race the desktop client while it is
+                    // still applying SIAI_COPILOT.
+                    await EnsureSayIntentionsCopilotModeAsync(
+                        result.Context,
+                        _sayIntentionsCancellation.Token);
+                }
+                await MirrorSayIntentionsCommunicationsAsync(
+                    result.Context,
+                    _sayIntentionsCancellation.Token);
+            }
+            else
+            {
+                _sayIntentionsCopilotModeApplied = false;
+                _sayIntentionsCopilotModeSessionKey = null;
+                _sayIntentionsCommunicationSessionKey = null;
+                _sayIntentionsLastCommunicationId = 0;
+                _sayIntentionsCommunicationTracker.Reset();
+                // A short local-client or SAPI outage must not detach a valid
+                // ATC checkpoint from its procedure. Explicit cancel/reset and
+                // procedure transitions own pending-request cancellation.
+            }
         }
         catch (OperationCanceledException) when (_sayIntentionsCancellation.IsCancellationRequested)
         {
@@ -10325,6 +10375,11 @@ internal sealed class CopilotService : Form
         switch (result.State)
         {
             case SayIntentionsConnectionState.Connected:
+                if (_sayIntentionsTimer != null
+                    && _pendingSayIntentionsAtcStepId == null)
+                {
+                    _sayIntentionsTimer.Interval = 10000;
+                }
                 var flight = result.Context!;
                 var callsign = string.IsNullOrWhiteSpace(flight.Callsign)
                     ? "active flight"
@@ -10332,8 +10387,13 @@ internal sealed class CopilotService : Form
                 var gate = string.IsNullOrWhiteSpace(flight.AssignedGate)
                     ? ""
                     : $" | gate {flight.AssignedGate}";
+                var comms = _settings.UseSayIntentionsCopilotCommunications
+                    ? _pendingSayIntentionsAtcStepId != null
+                        ? " | ATC response pending"
+                        : " | checkpoint control ready"
+                    : " | comms Pilot";
                 _sayIntentionsStatusLabel.Text =
-                    $"Connected - {callsign} | {flight.RouteLabel}{gate}";
+                    $"Connected - {callsign} | {flight.RouteLabel}{gate}{comms}";
                 _sayIntentionsStatusLabel.ForeColor = System.Drawing.Color.DarkGreen;
                 SetStatusBadge(
                     _sayIntentionsBadgeLabel,
@@ -10342,6 +10402,10 @@ internal sealed class CopilotService : Form
                 break;
 
             case SayIntentionsConnectionState.NoActiveFlight:
+                if (_sayIntentionsTimer != null)
+                {
+                    _sayIntentionsTimer.Interval = 5000;
+                }
                 _sayIntentionsStatusLabel.Text =
                     "Client detected - start a SayIntentions flight to activate integration.";
                 _sayIntentionsStatusLabel.ForeColor = System.Drawing.Color.DarkGoldenrod;
@@ -10352,6 +10416,10 @@ internal sealed class CopilotService : Form
                 break;
 
             default:
+                if (_sayIntentionsTimer != null)
+                {
+                    _sayIntentionsTimer.Interval = 5000;
+                }
                 _sayIntentionsStatusLabel.Text =
                     "Client not detected - optional integration inactive.";
                 _sayIntentionsStatusLabel.ForeColor = System.Drawing.Color.DimGray;
@@ -10361,6 +10429,258 @@ internal sealed class CopilotService : Form
                     System.Drawing.Color.DimGray);
                 break;
         }
+    }
+
+    private async Task<bool> EnsureSayIntentionsCopilotModeAsync(
+        SayIntentionsFlightContext flight,
+        CancellationToken cancellationToken,
+        bool force = false,
+        bool? desiredOverride = null)
+    {
+        var desired = desiredOverride
+                      ?? _settings.UseSayIntentionsCopilotCommunications;
+        if (!force
+            && string.Equals(
+                _sayIntentionsCopilotModeSessionKey,
+                flight.SessionKey,
+                StringComparison.Ordinal)
+            && _sayIntentionsCopilotModeApplied == desired)
+        {
+            return true;
+        }
+
+        await _sayIntentionsCommsModeGate.WaitAsync(cancellationToken);
+        try
+        {
+            if (!force
+                && string.Equals(
+                    _sayIntentionsCopilotModeSessionKey,
+                    flight.SessionKey,
+                    StringComparison.Ordinal)
+                && _sayIntentionsCopilotModeApplied == desired)
+            {
+                return true;
+            }
+
+            var accepted = await _sayIntentionsClient
+                .SetCopilotCommunicationsAsync(
+                    flight,
+                    desired,
+                    cancellationToken);
+            if (!accepted)
+            {
+                AppLog.Write(
+                    "SayIntentions rejected the requested communications-mode change.");
+                return false;
+            }
+
+            _sayIntentionsCopilotModeApplied = desired;
+            _sayIntentionsCopilotModeSessionKey = flight.SessionKey;
+            AppLog.Write(
+                desired
+                    ? "SayIntentions communications assigned to its First Officer."
+                    : "SayIntentions communications returned to the pilot.");
+            return true;
+        }
+        catch (Exception ex) when (ex is HttpRequestException
+                                   or InvalidOperationException
+                                   or ArgumentException)
+        {
+            AppLog.Write(
+                $"SayIntentions communications-mode update failed: {ex.Message}");
+            return false;
+        }
+        finally
+        {
+            _sayIntentionsCommsModeGate.Release();
+        }
+    }
+
+    private async Task MirrorSayIntentionsCommunicationsAsync(
+        SayIntentionsFlightContext flight,
+        CancellationToken cancellationToken)
+    {
+        try
+        {
+            var communications = await _sayIntentionsClient
+                .GetCommunicationsAsync(flight, cancellationToken);
+            if (!string.Equals(
+                    _sayIntentionsCommunicationSessionKey,
+                    flight.SessionKey,
+                    StringComparison.Ordinal))
+            {
+                _sayIntentionsCommunicationSessionKey = flight.SessionKey;
+                _sayIntentionsLastCommunicationId = communications.Count == 0
+                    ? 0
+                    : communications.Max(item => item.Id);
+                _sayIntentionsCommunicationTracker.Reset();
+                _sayIntentionsCommunicationTracker.Prime(communications);
+                await TryCompleteCurrentSayIntentionsAtcStepFromHistoryAsync(
+                    flight,
+                    communications,
+                    cancellationToken);
+                return;
+            }
+
+            foreach (var communication in communications
+                         .OrderBy(item => item.Id))
+            {
+                _sayIntentionsLastCommunicationId = Math.Max(
+                    _sayIntentionsLastCommunicationId,
+                    communication.Id);
+                var change = _sayIntentionsCommunicationTracker.Observe(
+                    communication);
+                if (!change.HasChanges)
+                {
+                    continue;
+                }
+                if (!communication.Channel.StartsWith(
+                        "COM",
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+
+                var station = string.IsNullOrWhiteSpace(communication.Station)
+                    ? "SayIntentions ATC"
+                    : communication.Station;
+                var frequency = string.IsNullOrWhiteSpace(communication.Frequency)
+                    ? ""
+                    : $" {communication.Frequency}";
+                // SayIntentions names these fields from the ATC station's
+                // perspective: outgoing_message is ATC -> aircraft, while
+                // incoming_message is aircraft -> ATC.
+                if (change.IncomingChanged)
+                {
+                    var speaker = communication.IsCopilot ? "F/O" : "Pilot";
+                    AppendDashboardLog(
+                        $"{speaker} -> ATC [{station}{frequency}]: "
+                        + communication.IncomingMessage.Trim());
+                }
+                if (change.OutgoingChanged)
+                {
+                    AppendDashboardLog(
+                        $"ATC -> F/O [{station}{frequency}]: "
+                        + communication.OutgoingMessage.Trim());
+                }
+
+                if (change.OutgoingChanged)
+                {
+                    await TryCompletePendingSayIntentionsAtcStepAsync(
+                        flight,
+                        communication,
+                        cancellationToken);
+                }
+            }
+
+            await TryCompleteCurrentSayIntentionsAtcStepFromHistoryAsync(
+                flight,
+                communications,
+                cancellationToken);
+        }
+        catch (Exception ex) when (ex is HttpRequestException
+                                   or InvalidOperationException
+                                   or ArgumentException)
+        {
+            AppLog.Write(
+                $"SayIntentions communication-history refresh failed: {ex.Message}");
+        }
+    }
+
+    private async Task<bool> TryCompleteCurrentSayIntentionsAtcStepFromHistoryAsync(
+        SayIntentionsFlightContext flight,
+        IReadOnlyList<SayIntentionsCommunication> communications,
+        CancellationToken cancellationToken)
+    {
+        var currentStepId = _procedureRunner.CurrentStep?.Id;
+        if (!IsSayIntentionsAtcStep(currentStepId)
+            || _procedureRunner.Status != ProcedureStatus.WaitingForManualAction)
+        {
+            return false;
+        }
+
+        var baseline = _pendingSayIntentionsAtcStepId == currentStepId
+            ? _pendingSayIntentionsAtcBaselineId
+            : 0;
+        var clearance = SayIntentionsAtcResponseClassifier.FindRecentClearance(
+            currentStepId!,
+            communications,
+            baseline,
+            DateTimeOffset.UtcNow,
+            TimeSpan.FromMinutes(10));
+        if (clearance == null)
+        {
+            return false;
+        }
+
+        if (_pendingSayIntentionsAtcStepId == null)
+        {
+            _pendingSayIntentionsAtcStepId = currentStepId;
+            _pendingSayIntentionsAtcBaselineId = 0;
+            _pendingSayIntentionsAtcStartedUtc = DateTime.UtcNow;
+            AppendDashboardLog(
+                "SayIntentions already obtained the required ATC clearance; no duplicate request will be sent.");
+        }
+
+        await TryCompletePendingSayIntentionsAtcStepAsync(
+            flight,
+            clearance,
+            cancellationToken);
+        return true;
+    }
+
+    private async Task TryCompletePendingSayIntentionsAtcStepAsync(
+        SayIntentionsFlightContext flight,
+        SayIntentionsCommunication communication,
+        CancellationToken cancellationToken)
+    {
+        var pendingStepId = _pendingSayIntentionsAtcStepId;
+        if (pendingStepId == null
+            || communication.Id <= _pendingSayIntentionsAtcBaselineId
+            || !SayIntentionsAtcResponseClassifier.IsClearanceResponse(
+                pendingStepId,
+                communication.OutgoingMessage))
+        {
+            return;
+        }
+
+        if (_procedureRunner.CurrentStep?.Id != pendingStepId
+            || _procedureRunner.Status != ProcedureStatus.WaitingForManualAction)
+        {
+            _pendingSayIntentionsAtcStepId = null;
+            _pendingSayIntentionsAtcBaselineId = 0;
+            _pendingSayIntentionsAtcStartedUtc = null;
+            return;
+        }
+
+        AppendDashboardLog(
+            SayIntentionsAtcResponseClassifier.VerificationMessage(pendingStepId));
+        _pendingSayIntentionsAtcStepId = null;
+        _pendingSayIntentionsAtcBaselineId = 0;
+        _pendingSayIntentionsAtcStartedUtc = null;
+        if (_sayIntentionsTimer != null)
+        {
+            _sayIntentionsTimer.Interval = 10000;
+        }
+
+        _commands.Enqueue("procedure confirm");
+    }
+
+    private void CancelPendingSayIntentionsAtcRequest()
+    {
+        if (_pendingSayIntentionsAtcStepId == null)
+        {
+            return;
+        }
+
+        _pendingSayIntentionsAtcStepId = null;
+        _pendingSayIntentionsAtcBaselineId = 0;
+        _pendingSayIntentionsAtcStartedUtc = null;
+        if (_sayIntentionsTimer != null)
+        {
+            _sayIntentionsTimer.Interval = 10000;
+        }
+
     }
 
     private void ShowIntegrationsDialog()
@@ -10380,8 +10700,9 @@ internal sealed class CopilotService : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(16),
             ColumnCount = 1,
-            RowCount = 3
+            RowCount = 4
         };
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -10555,12 +10876,35 @@ internal sealed class CopilotService : Form
 
         layout.Controls.Add(new Label
         {
-            Text = "Read-only operational data from the active SayIntentions flight. "
+            Text = "SayIntentions owns radio tuning and the ongoing ATC workflow. "
                    + "Credentials are discovered locally and are never saved by this app.",
             AutoSize = true,
             MaximumSize = new System.Drawing.Size(700, 0),
             Margin = new Padding(0, 0, 0, 10)
         }, 0, 0);
+        var copilotCommsBox = new CheckBox
+        {
+            Text = "Let the SayIntentions First Officer manage ATC communications and radio tuning",
+            Checked = _settings.UseSayIntentionsCopilotCommunications,
+            AutoSize = true,
+            Margin = new Padding(0, 0, 0, 10)
+        };
+        copilotCommsBox.CheckedChanged += async (_, _) =>
+        {
+            _settings.UseSayIntentionsCopilotCommunications = copilotCommsBox.Checked;
+            SettingsStore.Save(_settings);
+            if (_sayIntentionsFlight != null && !copilotCommsBox.Checked)
+            {
+                await EnsureSayIntentionsCopilotModeAsync(
+                    _sayIntentionsFlight,
+                    dialogCancellation.Token,
+                    force: true,
+                    desiredOverride: false);
+                UpdateSayIntentionsStatus(
+                    SayIntentionsDiscoveryResult.Connected(_sayIntentionsFlight));
+            }
+        };
+        layout.Controls.Add(copilotCommsBox, 0, 1);
         var details = new RichTextBox
         {
             Dock = DockStyle.Fill,
@@ -10569,7 +10913,7 @@ internal sealed class CopilotService : Form
             Font = new System.Drawing.Font("Consolas", 9),
             Text = "Checking SayIntentions..."
         };
-        layout.Controls.Add(details, 0, 1);
+        layout.Controls.Add(details, 0, 2);
         var buttons = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -10597,7 +10941,7 @@ internal sealed class CopilotService : Form
         buttons.Controls.Add(closeButton);
         buttons.Controls.Add(refreshButton);
         buttons.Controls.Add(testVoiceButton);
-        layout.Controls.Add(buttons, 0, 2);
+        layout.Controls.Add(buttons, 0, 3);
         dialog.FormClosed += (_, _) => dialogCancellation.Cancel();
         dialog.Shown += async (_, _) =>
             await LoadSayIntentionsOperationalDataAsync(
@@ -10671,9 +11015,9 @@ internal sealed class CopilotService : Form
             var discovery = await _sayIntentionsClient
                 .DiscoverAsync(cancellationToken);
             _sayIntentionsFlight = discovery.Context;
-            UpdateSayIntentionsStatus(discovery);
             if (discovery.Context == null)
             {
+                UpdateSayIntentionsStatus(discovery);
                 details.Text = discovery.State == SayIntentionsConnectionState.NoActiveFlight
                     ? "SayIntentions is running, but no active flight is available."
                     : "The SayIntentions Windows client is not currently detected.";
@@ -10681,12 +11025,14 @@ internal sealed class CopilotService : Form
             }
 
             var flight = discovery.Context;
+            UpdateSayIntentionsStatus(discovery);
             var lines = new List<string>
             {
                 $"Callsign: {ValueOrUnknown(flight.Callsign)}",
                 $"Route:    {flight.RouteLabel}",
                 $"Airport:  {ValueOrUnknown(flight.CurrentAirport)}",
                 $"Gate:     {ValueOrUnknown(flight.AssignedGate)}",
+                $"Comms:    {(_pendingSayIntentionsAtcStepId != null ? "Copilot - awaiting ATC" : "checkpoint control ready")}",
                 ""
             };
 
@@ -10789,239 +11135,125 @@ internal sealed class CopilotService : Form
         if (step == null
             || !IsSayIntentionsAtcStep(step.Id)
             || flight == null
+            || !_settings.UseSayIntentionsCopilotCommunications
             || _procedureRunner.Status != ProcedureStatus.WaitingForManualAction)
         {
             _commands.Enqueue("procedure confirm");
             return;
         }
 
-        if (_sayIntentionsAtcRequestInProgress)
+        if (_sayIntentionsHandoffInProgress)
         {
             return;
         }
 
-        if (_sayIntentionsAtcRequestSentStepId == step.Id)
+        if (_pendingSayIntentionsAtcStepId != null)
         {
-            _sayIntentionsAtcRequestSentStepId = null;
-            _commands.Enqueue("procedure confirm");
+            AppendDashboardLog("Still waiting for the SayIntentions ATC response.");
             return;
         }
 
-        await StartSeamlessSayIntentionsAtcConversationAsync(step.Id, flight);
-    }
-
-    private async Task StartSeamlessSayIntentionsAtcConversationAsync(
-        string stepId,
-        SayIntentionsFlightContext flight)
-    {
-        _sayIntentionsAtcRequestInProgress = true;
-        _sayIntentionsAtcRequestStepId = stepId;
+        _sayIntentionsHandoffInProgress = true;
         UpdateProcedureActionButtons();
-        var copilotCommsClaimed = false;
         try
         {
-            var discovery = await _sayIntentionsClient
-                .DiscoverAsync(_sayIntentionsCancellation.Token);
-            if (discovery.Context == null)
-            {
-                throw new InvalidOperationException(
-                    "SayIntentions no longer reports an active flight.");
-            }
-            flight = discovery.Context;
-            _sayIntentionsFlight = flight;
-            UpdateSayIntentionsStatus(discovery);
-
-            var frequencies = await _sayIntentionsClient
-                .GetCurrentFrequenciesAsync(
-                    flight,
-                    _sayIntentionsCancellation.Token);
-            var selectedFrequency = SayIntentionsFrequencySelector.SelectForStep(
-                stepId,
-                frequencies);
-            if (selectedFrequency == null
-                || !SayIntentionsFrequencySelector.TryParseFrequency(
-                    selectedFrequency.Frequency,
-                    out var frequencyMhz))
-            {
-                throw new InvalidOperationException(
-                    "SayIntentions did not provide a usable departure ATC frequency.");
-            }
-            if (!await _sayIntentionsClient.SetFrequencyAsync(
-                    flight,
-                    frequencyMhz,
-                    1,
-                    _sayIntentionsCancellation.Token))
-            {
-                throw new HttpRequestException(
-                    "SayIntentions rejected the COM1 frequency change.");
-            }
-            var stationName = string.IsNullOrWhiteSpace(selectedFrequency.Callsign)
-                ? selectedFrequency.Type
-                : selectedFrequency.Callsign;
-            AppendDashboardLog(
-                $"COM1 tuned to {frequencyMhz:0.000} MHz for "
-                + $"{stationName}.");
-            await Task.Delay(
-                TimeSpan.FromMilliseconds(500),
+            var communications = await _sayIntentionsClient.GetCommunicationsAsync(
+                flight,
                 _sayIntentionsCancellation.Token);
-
-            IReadOnlyList<SayIntentionsCommunication> before;
-            try
-            {
-                before = await _sayIntentionsClient
-                    .GetCommunicationsAsync(flight, _sayIntentionsCancellation.Token);
-            }
-            catch (Exception ex) when (ex is HttpRequestException
-                                       or InvalidOperationException
-                                       or ArgumentException)
-            {
-                before = Array.Empty<SayIntentionsCommunication>();
-            }
-
-            var previousMaximumId = before.Count == 0 ? 0 : before.Max(item => item.Id);
-            var previousCount = before.Count;
-            var messageOrigin = !string.IsNullOrWhiteSpace(
-                _simBriefFlightPlan?.OriginIcao)
-                ? _simBriefFlightPlan!.OriginIcao
-                : flight.OriginIcao;
-            var messageDestination = !string.IsNullOrWhiteSpace(
-                _simBriefFlightPlan?.DestinationIcao)
-                ? _simBriefFlightPlan!.DestinationIcao
-                : flight.DestinationIcao;
-            var message = SayIntentionsAtcMessageBuilder.Build(
-                stepId,
-                flight.Callsign,
-                _simBriefFlightPlan?.FlightNumber ?? "",
-                messageOrigin,
-                messageDestination,
-                flight.AssignedGate);
-
-            AppendDashboardLog(stepId switch
-            {
-                "captain-ifr-clearance" =>
-                    "First Officer contacting ATC for IFR clearance through SayIntentions.",
-                "captain-pushback-clearance" =>
-                    "First Officer contacting ATC for pushback and engine-start clearance through SayIntentions.",
-                "fo-taxi-clearance" =>
-                    "First Officer contacting ATC for taxi clearance through SayIntentions.",
-                _ => "First Officer reporting ready for departure to SayIntentions ATC."
-            });
-            copilotCommsClaimed = SetSayIntentionsCopilotComms(true);
-            if (copilotCommsClaimed)
-            {
-                // Give the simulator bridge time to expose the handoff before
-                // SayIntentions generates the outgoing COM1 transmission.
-                await Task.Delay(
-                    TimeSpan.FromMilliseconds(350),
-                    _sayIntentionsCancellation.Token);
-            }
-            if (!await _sayIntentionsClient.SendAtcTransmissionAsync(
+            if (await TryCompleteCurrentSayIntentionsAtcStepFromHistoryAsync(
                     flight,
-                    message,
-                    1,
+                    communications,
                     _sayIntentionsCancellation.Token))
             {
-                throw new HttpRequestException("SayIntentions rejected the transmission.");
+                return;
+            }
+            _sayIntentionsCommunicationSessionKey = flight.SessionKey;
+            _sayIntentionsLastCommunicationId = communications.Count == 0
+                ? 0
+                : communications.Max(item => item.Id);
+            _sayIntentionsCommunicationTracker.Prime(communications);
+            _pendingSayIntentionsAtcBaselineId = _sayIntentionsLastCommunicationId;
+
+            var copilotModeWasReady = string.Equals(
+                                          _sayIntentionsCopilotModeSessionKey,
+                                          flight.SessionKey,
+                                          StringComparison.Ordinal)
+                                      && _sayIntentionsCopilotModeApplied;
+            var accepted = await EnsureSayIntentionsCopilotModeAsync(
+                flight,
+                _sayIntentionsCancellation.Token,
+                desiredOverride: true);
+            if (!accepted)
+            {
+                AppendDashboardLog(
+                    "SayIntentions did not accept the Copilot communications handoff. Check the integration, then press Confirm again.");
+                return;
             }
 
-            _sayIntentionsAtcRequestSentStepId = stepId;
-            AppendDashboardLog(
-                $"F/O -> ATC [{stationName} {frequencyMhz:0.000}]: {message}");
-            AppendDashboardLog("Waiting for SayIntentions ATC response.");
-            for (var attempt = 0; attempt < 15; attempt++)
+            if (!copilotModeWasReady)
             {
-                await Task.Delay(TimeSpan.FromSeconds(2), _sayIntentionsCancellation.Token);
-                IReadOnlyList<SayIntentionsCommunication> current;
-                try
-                {
-                    current = await _sayIntentionsClient.GetCommunicationsAsync(
+                // setVar confirms API acceptance, but SayIntentions exposes no
+                // readable acknowledgement that its desktop client has applied
+                // the mode. Allow one bounded client synchronization interval
+                // only when this checkpoint actually changed communications.
+                await Task.Delay(
+                    TimeSpan.FromSeconds(2),
+                    _sayIntentionsCancellation.Token);
+            }
+
+            _pendingSayIntentionsAtcStepId = step.Id;
+            _pendingSayIntentionsAtcStartedUtc = DateTime.UtcNow;
+            var instructionAccepted =
+                SayIntentionsCopilotActionMap.TryGetActionName(
+                    step.Id,
+                    out var actionName)
+                    ? await _sayIntentionsClient.TriggerCopilotActionAsync(
                         flight,
+                        actionName,
+                        _sayIntentionsCancellation.Token)
+                    : await _sayIntentionsClient.AskCopilotAsync(
+                        flight,
+                        step.Id == "fo-taxi-clearance"
+                            ? "Request our taxi clearance."
+                            : "Report ready for departure and request takeoff clearance.",
                         _sayIntentionsCancellation.Token);
-                }
-                catch (Exception ex) when (ex is HttpRequestException
-                                           or InvalidOperationException
-                                           or ArgumentException)
-                {
-                    continue;
-                }
-
-                var reply = current
-                    .Where(item => SayIntentionsCommunicationMatcher.IsGenuineReply(
-                        item,
-                        message))
-                    .LastOrDefault(item => item.Id > previousMaximumId)
-                    ?? (current.Count > previousCount
-                        ? current.LastOrDefault(item =>
-                            SayIntentionsCommunicationMatcher.IsGenuineReply(
-                                item,
-                                message))
-                        : null);
-                if (reply == null)
-                {
-                    continue;
-                }
-
-                var replyStation = string.IsNullOrWhiteSpace(reply.Station)
-                    ? stationName
-                    : reply.Station;
+            if (!instructionAccepted)
+            {
+                _pendingSayIntentionsAtcStepId = null;
+                _pendingSayIntentionsAtcBaselineId = 0;
+                _pendingSayIntentionsAtcStartedUtc = null;
                 AppendDashboardLog(
-                    $"ATC -> F/O [{replyStation} {frequencyMhz:0.000}]: "
-                    + reply.IncomingMessage.Trim());
-                if (_procedureRunner.CurrentStep?.Id == stepId
-                    && _procedureRunner.Status == ProcedureStatus.WaitingForManualAction)
-                {
-                    _sayIntentionsAtcRequestSentStepId = null;
-                    _commands.Enqueue("procedure confirm");
-                    AppendDashboardLog("ATC response received; clearance step completed from the pilot's confirmation.");
-                }
+                    "SayIntentions did not accept the First Officer instruction. Check the integration, then press Confirm again.");
                 return;
             }
 
             AppendDashboardLog(
-                "No SayIntentions ATC reply detected within 30 seconds. Complete the conversation normally, then press Confirm now again.");
-        }
-        catch (OperationCanceledException) when (_sayIntentionsCancellation.IsCancellationRequested)
-        {
-            // Normal application shutdown.
+                "SayIntentions First Officer is handling the ATC request. Waiting for the matching clearance before completing this step.");
+            if (_sayIntentionsTimer != null)
+            {
+                _sayIntentionsTimer.Interval = 2000;
+            }
         }
         catch (Exception ex) when (ex is HttpRequestException
                                    or InvalidOperationException
                                    or ArgumentException)
         {
-            AppLog.Write($"SayIntentions ATC request failed: {ex.Message}");
-            _sayIntentionsAtcRequestSentStepId = stepId;
+            AppLog.Write($"SayIntentions Copilot instruction failed: {ex.Message}");
+            _pendingSayIntentionsAtcStepId = null;
+            _pendingSayIntentionsAtcBaselineId = 0;
+            _pendingSayIntentionsAtcStartedUtc = null;
             AppendDashboardLog(
-                "SayIntentions ATC request failed. Use your normal ATC service, then press Confirm ATC completed.");
+                "SayIntentions could not start the First Officer communication. Check the integration, then press Confirm again.");
+        }
+        catch (OperationCanceledException) when (_sayIntentionsCancellation.IsCancellationRequested)
+        {
+            // Normal application shutdown.
         }
         finally
         {
-            _sayIntentionsAtcRequestInProgress = false;
-            _sayIntentionsAtcRequestStepId = null;
-            if (copilotCommsClaimed)
-            {
-                SetSayIntentionsCopilotComms(false);
-            }
+            _sayIntentionsHandoffInProgress = false;
             UpdateProcedureActionButtons();
         }
-    }
-
-    private bool SetSayIntentionsCopilotComms(bool enabled)
-    {
-        if (!_mobiFlightReady)
-        {
-            return false;
-        }
-
-        var value = enabled ? 1 : 0;
-        SendMobiFlightCommand(
-            $"MF.SimVars.Set.{value} (>L:SIAI_COPILOT) " +
-            $"{value} (>L:SIAI_COPILOT, Bool)");
-        SendMobiFlightCommand("MF.DummyCmd");
-        AppLog.Write(
-            enabled
-                ? "SayIntentions First Officer COM1 handoff enabled."
-                : "SayIntentions First Officer COM1 handoff released.");
-        return true;
     }
 
     private static bool IsSayIntentionsAtcStep(string? stepId) =>
@@ -12533,13 +12765,7 @@ internal sealed class CopilotService : Form
         if (_confirmCompletedButton != null)
         {
             var waitingForPilot = status == ProcedureStatus.WaitingForManualAction;
-            var stepId = _procedureRunner.CurrentStep?.Id;
-            if (!_sayIntentionsAtcRequestInProgress
-                && _sayIntentionsAtcRequestSentStepId != null
-                && _sayIntentionsAtcRequestSentStepId != stepId)
-            {
-                _sayIntentionsAtcRequestSentStepId = null;
-            }
+            var waitingForAtc = _pendingSayIntentionsAtcStepId != null;
             _confirmCompletedButton.BackColor = waitingForPilot
                 ? System.Drawing.Color.FromArgb(194, 65, 12)
                 : System.Drawing.Color.FromArgb(39, 130, 87);
@@ -12549,15 +12775,15 @@ internal sealed class CopilotService : Form
             _confirmCompletedButton.FlatAppearance.MouseOverBackColor = waitingForPilot
                 ? System.Drawing.Color.FromArgb(245, 158, 11)
                 : System.Drawing.Color.FromArgb(34, 148, 96);
-            _confirmCompletedButton.Enabled = !_sayIntentionsAtcRequestInProgress;
-            _confirmCompletedButton.Text = _sayIntentionsAtcRequestInProgress
-                && _sayIntentionsAtcRequestStepId == stepId
-                    ? "Contacting ATC..."
-                    : _sayIntentionsAtcRequestSentStepId == stepId
-                        ? "Confirm ATC completed"
-                        : waitingForPilot
-                            ? "Confirm now"
-                            : "Confirm completed";
+            _confirmCompletedButton.Enabled = !_sayIntentionsHandoffInProgress
+                                              && !waitingForAtc;
+            _confirmCompletedButton.Text = _sayIntentionsHandoffInProgress
+                ? "Handing ATC to F/O..."
+                : waitingForAtc
+                    ? "Waiting for ATC..."
+                : waitingForPilot
+                    ? "Confirm now"
+                    : "Confirm completed";
         }
     }
 
@@ -12605,13 +12831,13 @@ internal sealed class CopilotService : Form
                 return step.Id switch
                 {
                     "captain-ifr-clearance" =>
-                        "Waiting for: IFR clearance. Press Confirm now to authorize the First Officer to contact SayIntentions ATC on COM1.",
+                        "Waiting for: IFR clearance. Press Confirm to instruct the SayIntentions First Officer to request clearance.",
                     "captain-pushback-clearance" =>
-                        "Waiting for: pushback/engine-start clearance. Press Confirm now to authorize the First Officer to contact SayIntentions ATC on COM1.",
+                        "Waiting for: pushback/engine-start clearance. Press Confirm to instruct the SayIntentions First Officer to make the request.",
                     "fo-taxi-clearance" =>
-                        "Waiting for: taxi clearance. Press Confirm now to authorize the First Officer to contact SayIntentions ATC on COM1.",
+                        "Waiting for: taxi clearance. Press Confirm to instruct the SayIntentions First Officer to make the request.",
                     _ =>
-                        "Waiting for: takeoff clearance. While holding short, press Confirm now to authorize the First Officer to report ready for departure to SayIntentions Tower on COM1."
+                        "Waiting for: takeoff clearance. While holding short, press Confirm to instruct the SayIntentions First Officer to report ready for departure."
                 };
             }
             return step.ManualInstruction != null
@@ -13082,6 +13308,30 @@ internal sealed class CopilotService : Form
             _sayIntentionsTimer?.Stop();
             _sayIntentionsTimer?.Dispose();
             _sayIntentionsTimer = null;
+            if (_sayIntentionsCopilotModeApplied && _sayIntentionsFlight != null)
+            {
+                try
+                {
+                    using var restoreTimeout = new CancellationTokenSource(
+                        TimeSpan.FromSeconds(2));
+                    _sayIntentionsClient
+                        .SetCopilotCommunicationsAsync(
+                            _sayIntentionsFlight,
+                            false,
+                            restoreTimeout.Token)
+                        .GetAwaiter()
+                        .GetResult();
+                    AppLog.Write(
+                        "SayIntentions communications returned to the pilot during shutdown.");
+                }
+                catch (Exception ex) when (ex is HttpRequestException
+                                           or OperationCanceledException
+                                           or InvalidOperationException)
+                {
+                    AppLog.Write(
+                        $"Could not restore SayIntentions pilot communications during shutdown: {ex.Message}");
+                }
+            }
             _sayIntentionsCancellation.Cancel();
             foreach (var pulseTimer in _nativePulseTimers.ToArray())
             {
@@ -13097,6 +13347,7 @@ internal sealed class CopilotService : Form
             _voiceCalloutQueue?.Dispose();
             _voiceCalloutQueue = null;
             _sayIntentionsClient.Dispose();
+            _sayIntentionsCommsModeGate.Dispose();
             _sayIntentionsCancellation.Dispose();
             _simConnect?.Dispose();
         }

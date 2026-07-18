@@ -6,6 +6,7 @@ artifacts/
 
 # Temporary development dependencies and scratch data
 .tmp/
+tmp/
 .tooling/
 .agents/
 

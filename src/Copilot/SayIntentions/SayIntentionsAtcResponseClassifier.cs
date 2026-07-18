@@ -2,92 +2,87 @@ namespace Msfs2024Ai.Copilot.SayIntentions;
 
 internal static class SayIntentionsAtcResponseClassifier
 {
-    public static bool IsMatchingOutgoingRequest(
-        SayIntentionsCommunication communication,
-        string stepId)
-    {
-        var text = Normalize(communication.OutgoingMessage);
-        if (text.Length == 0)
-        {
-            return false;
-        }
-
-        return stepId switch
-        {
-            "captain-ifr-clearance" => text.Contains("clearance"),
-            "captain-pushback-clearance" => text.Contains("pushback")
-                                                   || text.Contains("push and start"),
-            "fo-taxi-clearance" => text.Contains("taxi")
-                                    && !text.Contains("takeoff"),
-            "fo-takeoff-clearance" => text.Contains("ready for departure")
-                                       || text.Contains("ready for takeoff")
-                                       || text.Contains("holding short"),
-            _ => false
-        };
-    }
-
-    public static bool IsCompletionReply(string stepId, string reply)
-    {
-        var text = Normalize(reply);
-        if (text.Length == 0
-            || text.Contains("stand by")
-            || text.Contains("standby")
-            || text.Contains("unable"))
-        {
-            return false;
-        }
-
-        return stepId switch
-        {
-            "captain-ifr-clearance" => text.Contains("cleared")
-                                       || text.Contains("clearance delivery")
-                                       || text.Contains("readback correct"),
-            "captain-pushback-clearance" =>
-                (text.Contains("pushback") || text.Contains("push and start"))
-                && (text.Contains("approved")
-                    || text.Contains("cleared")
-                    || text.Contains("at your discretion")),
-            "fo-taxi-clearance" => text.Contains("taxi to")
-                                   || text.Contains("taxi via")
-                                   || text.Contains("taxi runway")
-                                   || text.Contains("cleared to taxi"),
-            "fo-takeoff-clearance" => text.Contains("cleared for takeoff"),
-            _ => false
-        };
-    }
-
     public static bool IsRecent(
-        SayIntentionsCommunication communication,
-        DateTimeOffset now,
+        string? timestampUtc,
+        DateTimeOffset nowUtc,
         TimeSpan maximumAge)
     {
-        if (!DateTimeOffset.TryParse(
-                communication.TimestampUtc,
+        if (string.IsNullOrWhiteSpace(timestampUtc)
+            || !DateTimeOffset.TryParse(
+                timestampUtc,
                 System.Globalization.CultureInfo.InvariantCulture,
-                System.Globalization.DateTimeStyles.AssumeUniversal,
+                System.Globalization.DateTimeStyles.AssumeUniversal
+                | System.Globalization.DateTimeStyles.AdjustToUniversal,
                 out var timestamp))
         {
             return false;
         }
 
-        var age = now - timestamp.ToUniversalTime();
+        var age = nowUtc - timestamp;
         return age >= TimeSpan.Zero && age <= maximumAge;
     }
 
-    private static string Normalize(string? value)
+    public static SayIntentionsCommunication? FindRecentClearance(
+        string stepId,
+        IEnumerable<SayIntentionsCommunication> communications,
+        long minimumExclusiveId,
+        DateTimeOffset nowUtc,
+        TimeSpan maximumAge) =>
+        communications
+            .Where(item => item.Id > minimumExclusiveId)
+            .Where(item => IsRecent(item.TimestampUtc, nowUtc, maximumAge))
+            .Where(item => IsClearanceResponse(stepId, item.OutgoingMessage))
+            .OrderByDescending(item => item.Id)
+            .FirstOrDefault();
+
+    public static bool IsClearanceResponse(string stepId, string? atcMessage)
     {
-        if (string.IsNullOrWhiteSpace(value))
+        if (string.IsNullOrWhiteSpace(atcMessage))
         {
-            return "";
+            return false;
         }
 
-        var characters = value!.Trim().ToLowerInvariant()
-            .Select(character => char.IsLetterOrDigit(character) ? character : ' ')
-            .ToArray();
-        return string.Join(
-            " ",
-            new string(characters).Split(
-                new[] { ' ' },
-                StringSplitOptions.RemoveEmptyEntries));
+        var message = atcMessage!.Trim().ToLowerInvariant();
+        if (ContainsAny(message, "unable", "denied", "stand by", "standby"))
+        {
+            return false;
+        }
+
+        return stepId switch
+        {
+            // Waiting for the accepted readback verifies that the clearance was
+            // received and acknowledged, rather than merely requested.
+            "captain-ifr-clearance" =>
+                ContainsAny(message, "readback correct", "read back correct"),
+            "captain-pushback-clearance" =>
+                ContainsAny(
+                    message,
+                    "pushback",
+                    "push and start",
+                    "push & start")
+                && ContainsAny(message, "approved", "cleared", "at your discretion"),
+            "fo-taxi-clearance" =>
+                message.Contains("taxi")
+                && ContainsAny(message, "runway", "via", "hold short", "cleared"),
+            "fo-takeoff-clearance" =>
+                ContainsAny(message, "cleared for takeoff", "cleared for take-off"),
+            _ => false
+        };
     }
+
+    public static string VerificationMessage(string stepId) => stepId switch
+    {
+        "captain-ifr-clearance" =>
+            "SayIntentions ATC verified: IFR clearance received and readback accepted.",
+        "captain-pushback-clearance" =>
+            "SayIntentions ATC verified: pushback/start clearance received.",
+        "fo-taxi-clearance" =>
+            "SayIntentions ATC verified: taxi clearance received.",
+        "fo-takeoff-clearance" =>
+            "SayIntentions ATC verified: takeoff clearance received.",
+        _ => "SayIntentions ATC response verified."
+    };
+
+    private static bool ContainsAny(string source, params string[] candidates) =>
+        candidates.Any(source.Contains);
 }

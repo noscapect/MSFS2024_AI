@@ -29,6 +29,7 @@ internal sealed class SayIntentionsCommunication
     public string Station { get; set; } = "";
     public string Channel { get; set; } = "";
     public string Frequency { get; set; } = "";
+    public bool IsCopilot { get; set; }
     public string OutgoingMessage { get; set; } = "";
     public string IncomingMessage { get; set; } = "";
 }
@@ -105,6 +106,7 @@ internal static class SayIntentionsResponseParser
                 Station = Text(item, "station_name", Text(item, "ident")),
                 Channel = Text(item, "channel"),
                 Frequency = Text(item, "frequency"),
+                IsCopilot = Boolean(item, "copilot"),
                 OutgoingMessage = Text(item, "outgoing_message"),
                 IncomingMessage = Text(item, "incoming_message")
             })
@@ -189,4 +191,18 @@ internal static class SayIntentionsResponseParser
             out var parsed)
             ? parsed
             : null;
+
+    private static bool Boolean(IDictionary<string, object> source, string key)
+    {
+        if (!source.TryGetValue(key, out var value) || value == null)
+        {
+            return false;
+        }
+
+        var text = Convert.ToString(
+            value,
+            System.Globalization.CultureInfo.InvariantCulture);
+        return string.Equals(text, "1", StringComparison.OrdinalIgnoreCase)
+               || string.Equals(text, "true", StringComparison.OrdinalIgnoreCase);
+    }
 }

@@ -137,27 +137,92 @@ Implemented functionality includes:
 
 - Optional SayIntentions First Officer voices with local speech fallback
 - Read-only ATIS, weather, frequency, gate, and communication context
-- IFR-clearance, pushback/start, taxi, and ready-for-departure/takeoff requests
-  initiated through the normal flow confirmation path
-- Persistent optional assignment of communications to the SayIntentions First
-  Officer through the official `SIAI_COPILOT` interface
-- SayIntentions-owned automatic radio tuning; the app only displays frequency
-  information and never selects or changes COM frequencies
-- Fresh flight context, including the imported SimBrief route when available
-- Waiting for a genuine ATC reply without treating the outgoing request echo
-  as the response
-- First Officer transmissions and ATC responses in the activity log, including
-  station and frequency information
+- Checkpoint-scoped communications assignment through the official
+  `SIAI_COPILOT=1` interface
+- Native SayIntentions Copilot callback actions through SAPI `sendCallback`
+  when the corresponding action identifier is known. IFR clearance uses event
+  `copilot_request` with action `preflight_request_clearance_ifr`, while
+  pushback/start uses action `preflight_request_push_and_start`.
+- Establish SayIntentions Copilot communications when its active session is
+  discovered. Do not fire a native callback in the same instant as a required
+  `SIAI_COPILOT` mode change; the desktop client applies that handoff
+  asynchronously even after SAPI accepts `setVar`.
+- Preserve pending ATC checkpoints across transient SayIntentions discovery or
+  SAPI outages. If no verifiable exchange appears within three minutes, release
+  the wait and let the user retry instead of leaving the flow blocked forever.
+- Before triggering an ATC callback, scan recent communications from the active
+  SayIntentions flight. A matching clearance obtained automatically by the
+  SayIntentions Copilot satisfies the checkpoint and suppresses a duplicate
+  request, including automatic takeoff calls made when lining up.
+- Private pilot-to-First-Officer instructions through `sayAs` on `INTERCOM1`
+  remain in use only for checkpoints whose native callback identifier has not
+  yet been captured and verified.
+- Audible First Officer radio requests, ATC responses, readbacks, and radio
+  management produced entirely by SayIntentions
+- Matching ATC-response verification before the active flow advances
+- Mirroring of SayIntentions First Officer transmissions and ATC
+  responses in the activity log, including station and frequency information
 
 When SayIntentions is disabled or unavailable, its steps bypass cleanly and
 the simulator's built-in ATC or the pilot handles communication. No supported
 aircraft procedure may depend on SayIntentions being installed.
 
-The v0.9.2 integration is being completed on the dedicated SayIntentions
-branch. Automated coverage includes all four departure conversations,
-duplicate suppression, conservative authorization recognition, and non-
-SayIntentions fallback. Persistent Copilot mode requires final live acceptance
-before the next release.
+The post-v0.9.2 integration is being completed on the dedicated SayIntentions
+branch. SayIntentions owns its complete ATC workflow; the app provides the
+Copilot handoff, private checkpoint instruction, voice-callout routing,
+passive communication readouts, and non-SayIntentions fallback.
+
+### SayIntentions implementation lessons
+
+The live-tested ownership boundary is important and must not be replaced by a
+more complicated imitation of the SayIntentions client:
+
+- The app sets `SIAI_COPILOT=1`, then triggers the same SAPI `sendCallback`
+  action used by the corresponding SayIntentions UI button whenever its exact
+  event and action name have been captured.
+- `INTERCOM1` means pilot-to-intercom-passenger. `INTERCOM1_IN` means the
+  intercom passenger speaking to the pilot and remains the correct channel for
+  exact cockpit callouts such as `Flaps up`.
+- A generic `INTERCOM1` instruction is not a reliable substitute for a native
+  callback. Live testing showed that pushback produced only an intercom reply
+  ("I'll contact Ground") and no COM transmission. The native
+  `preflight_request_push_and_start` callback created the real radio exchange.
+- The app must not send the ATC request itself on `COM1`. Doing so represents
+  the pilot, can produce text-only or incorrect voice ownership, and bypasses
+  the native Copilot workflow.
+- The app must never call `setFreq`, infer a station, or tune a radio.
+  SayIntentions performs its own SimBrief import, station selection, radio
+  tuning, request wording, audible First Officer transmission, ATC response,
+  and readback.
+- Do not automate or simulate clicks on the SayIntentions desktop UI. Its
+  buttons expose `javascript:void(0)` and are an internal UI implementation,
+  not a stable integration contract.
+- Do not add an extra spoken announcement such as "I will contact ATC now."
+  It is not an SOP callout. The only required speech is the actual radio
+  request generated by SayIntentions.
+- Use `getCommsHistory` only for passive activity-log mirroring and matching
+  clearance verification. Capture a baseline before the request so stale
+  messages from an earlier flight cannot complete the current checkpoint.
+- SayIntentions can add the ATC response to an existing communication record
+  after first publishing that record with only the aircraft request. Track the
+  incoming and outgoing text per record ID; deduplicating solely by increasing
+  ID loses the later ATC response and can leave pushback waiting forever.
+- A successful HTTP status is insufficient: SAPI can return an error object in
+  a successful response. Parse the response and reject payloads containing an
+  `error` field.
+- `rephrase=0` is supported for `_IN` channels and preserves exact operational
+  cockpit callouts. It is intentionally omitted from the private `INTERCOM1`
+  instruction so the SayIntentions copilot can formulate the radio request.
+- Leave the delegated conversation with SayIntentions long enough to complete
+  its audible request, ATC exchange, readback, and automatic radio handling.
+  The VFO flow advances only after its matching response classifier succeeds.
+- If SayIntentions is unavailable, disabled, or has no active flight, the
+  normal built-in-ATC/pilot path must remain unblocked.
+
+Live acceptance at an IFR checkpoint confirmed that this model makes the
+configured SayIntentions First Officer audibly request clearance, produces an
+audible ATC response and First Officer readback, and allows the VFO flow to
+verify the exchange without controlling the radios.
 
 ## Architecture and stability boundary
 

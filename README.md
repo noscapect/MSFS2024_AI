@@ -128,16 +128,20 @@ Available features include:
 
 - SayIntentions First Officer voices with automatic local voice fallback
 - Read-only ATIS, weather, frequency, gate, and communication information
-- Persistent, optional assignment of radio communications to the
+- Optional, checkpoint-scoped assignment of radio communications to the
   SayIntentions First Officer
-- Pilot-authorized IFR-clearance, pushback/start, taxi, and
-  ready-for-departure requests through the normal flow confirmation button
-- ATC responses in the activity log with conservative clearance recognition
+- Flow checkpoints that trigger the corresponding native SayIntentions
+  Copilot action when its verified SAPI callback is available
+- First Officer transmissions and ATC responses mirrored into the activity log
+- IFR, pushback/start, taxi, and takeoff steps remain open until the matching
+  SayIntentions ATC clearance is detected
 
-This integration remains in live validation. If SayIntentions is unavailable
-or does not respond, the normal manual confirmation path remains available.
-SayIntentions owns all automatic radio tuning; this app never selects or sets
-COM frequencies.
+SayIntentions owns each delegated ATC conversation, including the audible
+First Officer request, ATC response, readback, and automatic radio tuning. This
+app triggers the native Copilot workflow at the matching flow checkpoint and
+monitors communication history before advancing. It never selects or tunes a
+frequency. If SayIntentions is unavailable, built-in MSFS ATC remains the
+normal fallback.
 
 ## Voice callouts
 
@@ -154,8 +158,8 @@ always supplies standard operational callouts in English.
 
 - This is assistance software, not an autopilot and not a replacement for
   aircraft knowledge or checklists.
-- ATC communication and FMC/MCDU data entry remain pilot responsibilities,
-  except for the optional, explicitly authorized SayIntentions requests.
+- ATC communication is handled by the selected ATC service. FMC/MCDU data
+  entry remains a pilot responsibility.
 - Automatic QNH/STD switching is excluded because a sufficiently reliable,
   verified interface was not found for every supported aircraft.
 - Airline procedures vary. The included configuration is a practical standard

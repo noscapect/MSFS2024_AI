@@ -24,26 +24,6 @@ public sealed class SayIntentionsResponseParserTests
     }
 
     [TestMethod]
-    public void CommunicationMatcher_RejectsEchoedOutgoingRequest()
-    {
-        const string request = "KLM1701, request IFR clearance";
-        Assert.IsFalse(SayIntentionsCommunicationMatcher.IsGenuineReply(
-            new SayIntentionsCommunication
-            {
-                OutgoingMessage = request,
-                IncomingMessage = request
-            },
-            request));
-        Assert.IsTrue(SayIntentionsCommunicationMatcher.IsGenuineReply(
-            new SayIntentionsCommunication
-            {
-                OutgoingMessage = request,
-                IncomingMessage = "KLM1701, cleared to EHAM"
-            },
-            request));
-    }
-
-    [TestMethod]
     public void ParseWeather_ReadsOperationalBriefingAndFrequencies()
     {
         const string json = """
@@ -74,7 +54,7 @@ public sealed class SayIntentionsResponseParserTests
         const string json = """
             {"comm_history":[{"id":4721,
               "stamp_zulu":"2026-07-17T12:00:00Z", "station_name":"Ground",
-              "channel":"COM1", "frequency":"121.900",
+              "channel":"COM1", "frequency":"121.900", "copilot":1,
               "outgoing_message":"Request clearance",
               "incoming_message":"Cleared to EHAM"
             }]}
@@ -87,6 +67,7 @@ public sealed class SayIntentionsResponseParserTests
         Assert.AreEqual("Request clearance", result[0].OutgoingMessage);
         Assert.AreEqual("Cleared to EHAM", result[0].IncomingMessage);
         Assert.AreEqual("121.900", result[0].Frequency);
+        Assert.IsTrue(result[0].IsCopilot);
     }
 
     [TestMethod]

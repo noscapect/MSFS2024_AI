@@ -1,313 +1,255 @@
-# MSFS 2024 AI First Officer - Project Handoff
+# MSFS 2024 Virtual First Officer - Project Status and Handoff
 
-Use this file as the starting context in a new chat.
+This file is the primary technical handoff for continuing development. It
+describes the state of the project at public release **v0.9.2** on July 17,
+2026. The flows implemented in the application are authoritative; supporting
+documents must follow the application when they differ.
 
-Suggested opening prompt:
+Suggested opening prompt for a new development chat:
 
-> Continue the project described in `C:\CODE\MSFS2024_AI\PROJECT.md`. Read that
-> file and the referenced documents first. Work documentation-first, avoid
-> speculative switch testing, and keep the iniBuilds A320neo V2 as the only
-> supported aircraft for now.
+> Continue the project described in `C:\CODE\MSFS2024_AI\PROJECT.md`. Read
+> `README.md`, `docs/ARCHITECTURE.md`, `docs/checklist.md`, and the relevant
+> aircraft support document before changing code. Preserve every completed
+> aircraft profile behind its aircraft-specific implementation and regression
+> tests.
 
-## Product goal
+## Product
 
-Build a normal external Windows application that acts as a virtual first
-officer for the iniBuilds A320neo V2 in Microsoft Flight Simulator 2024.
+MSFS 2024 Virtual First Officer is a free external Windows companion for
+Microsoft Flight Simulator 2024. It provides a complete twelve-flow,
+gate-to-gate First Officer experience: it performs supported cockpit actions,
+monitors Captain actions, verifies actual aircraft state, gives spoken
+callouts, and coordinates optional flight-planning and ATC integrations.
 
-The eventual scope is gate-to-gate:
+The project is multi-aircraft and remains beta software. It is assistance
+software, not an autopilot, and the pilot must always be able to take over.
 
-- Cold-and-dark cockpit preparation
-- Before start
-- Engine start
-- After start
-- Taxi and before takeoff
-- Takeoff, climb, cruise, descent, approach, landing
-- Taxi-in, shutdown, and deboarding
+## Current release
 
-The immediate milestone remains reliable checklist/flow assistance through
-cruise. Controls must actually operate the aircraft and independently verify
-the resulting state. Hermes may be used as a development tool but must not be
-a runtime dependency.
+- Public version: **0.9.2**
+- Repository: <https://github.com/noscapect/MSFS2024_AI>
+- Latest release: <https://github.com/noscapect/MSFS2024_AI/releases/tag/v0.9.2>
+- Main project: `src/Copilot/Copilot.csproj`
+- UI/runtime: WinForms, .NET Framework 4.7.2, x64
+- Release executable: `src/Copilot/bin/Release/net472/Copilot.exe`
+- Settings and runtime data: `%LOCALAPPDATA%\MSFS2024_AI`
+- Primary runtime log: `%LOCALAPPDATA%\MSFS2024_AI\logs\copilot.log`
 
-## Current application
-
-- Project: `src\Copilot\Copilot.csproj`
-- Framework: WinForms, .NET Framework 4.7.2, x64
-- Output: `src\Copilot\bin\Release\net472\Copilot.exe`
-- The project builds successfully with no warnings or errors.
-- The application has a normal dashboard, not only a console.
-- It connects through SimConnect and uses the installed MobiFlight WASM event
-  module for aircraft-specific calculator code and native-variable readback.
-- Settings are persisted under `%LOCALAPPDATA%\MSFS2024_AI`.
-- Runtime log:
-  `%LOCALAPPDATA%\MSFS2024_AI\logs\copilot.log`
-
-Build:
+Build and test:
 
 ```powershell
 dotnet build .\src\Copilot\Copilot.csproj -c Release --no-restore
+dotnet test .\tests\Copilot.Tests\Copilot.Tests.csproj -c Release --no-restore
 ```
 
-Run:
+The v0.9.2 release was built with no warnings or errors and passed the full
+151-test release suite.
 
-```powershell
-.\src\Copilot\bin\Release\net472\Copilot.exe
-```
+## Supported aircraft
 
-MSFS and the iniBuilds A320neo V2 must already be loaded. Desktop-session
-access matters: a sandboxed/background process may not be able to reach the
-running simulator even when MSFS is open.
+| Aircraft | Status | Runtime interface |
+| --- | --- | --- |
+| iniBuilds A320neo V2 | Gate-to-gate live validated | SimConnect and MobiFlight WASM |
+| iniBuilds A321LR | Gate-to-gate live validated | SimConnect and MobiFlight WASM |
+| FlyByWire A32NX for MSFS 2024 | Gate-to-gate live validated | SimConnect and MobiFlight WASM |
+| PMDG 737-800 | Gate-to-gate live validated | SimConnect and PMDG SDK data broadcast |
+| iniBuilds A330-300 (GE) | Gate-to-gate implemented and live tested; continue field validation | SimConnect and MobiFlight WASM |
 
-## Architecture
+Unsupported aircraft are identified but never controlled with guessed generic
+commands. FlyByWire A380X research code is deliberately dormant and hidden
+from users; it is not a supported profile.
 
-Important files:
+The PMDG aircraft requires `EnableDataBroadcast=1` in its SDK options. Airbus
+profiles require the MobiFlight WASM module. Release packages include both
+required SimConnect client DLLs, so end users do not need the MSFS SDK.
 
-- `src\Copilot\CopilotService.cs` — SimConnect, MobiFlight, commands, UI,
-  state monitoring, and action verification
-- `src\Copilot\AircraftState.cs` — normalized aircraft state
-- `src\Copilot\Procedures\A320ProcedureLibrary.cs` — flows through cruise
-- `src\Copilot\Procedures\ProcedureRunner.cs` — procedure orchestration
-- `src\Copilot\Checklists\A320ChecklistLibrary.cs` — checklist verification
-- `src\Copilot\Domain\AircraftCapabilities.cs` — honest support status
-- `src\Copilot\Controls\IniBuildsA320ControlCatalog.Generated.cs` —
-  generated documented-control catalog
-- `docs\events.txt` — user-supplied iniBuilds A320 HubHop export
-- `docs\control-matrix.csv` — parsed control matrix
-- `docs\behavior-viewer-mappings.csv` — sourced native-control evidence
-- `docs\before-start-input-event-inspection.tsv` — read-only Input Event metadata
-- `docs\LIVE_TESTS.md` — dated end-to-end verification evidence
-- `docs\NATIVE_CONTROL_STRATEGY.md` — mandatory command/state control pattern
-- `docs\CONTROL_MAPPING.md` — mapping evidence and readiness
-- `docs\ARCHITECTURE.md`
-- `docs\PRODUCT_VISION.md`
-- `docs\FSFO_BENCHMARK.md`
+## Gate-to-gate flow
 
-MobiFlight protocol currently used:
+The application currently exposes these twelve flows:
 
-- Init areas: `MobiFlight.Command`, `MobiFlight.Response`
-- Calculator command: `MF.SimVars.Set.<calculator code>`
-- Runtime client: `MSFS2024_AI_Copilot`
-- Runtime LVar/BVar monitoring is registered through the client's `LVars`
-  data area.
+1. Power Up & Initial Setup
+2. Flight Computer & Pre-Flight
+3. APU Start & Pushback
+4. Engine Start Sequence
+5. After Start & Taxi
+6. Before Takeoff
+7. Takeoff & Climb
+8. Cruise
+9. Descent Preparation
+10. Approach & Landing
+11. After Landing & Taxi
+12. Parking & Shutdown
 
-Aircraft-specific controls should use native iniBuilds command/state LVar
-pairs whenever available. Command LVars are pulsed through MobiFlight and
-verified against separate native state LVars. See
-`docs\NATIVE_CONTROL_STRATEGY.md`.
+The aircraft profile owns the actions, readbacks, Captain/First Officer roles,
+timing, approach schedule, and callouts inside those common flow names. Flows
+6 to 7 and the landing/taxi sequence can chain automatically so the pilot does
+not need to interact with the app during high-workload phases.
 
-## Documentation-driven control workflow
+Flow 12 supports both outcomes: **Confirm** continues to final cold-and-dark
+secure, while **Cancel** preserves the aircraft for a follow-up/turnaround
+flight instead of forcing shutdown.
 
-Do not guess control expressions repeatedly in the live simulator.
+Automatic QNH/STD operation remains excluded because no sufficiently reliable
+cross-aircraft control and independent readback was found. ATC and FMC/MCDU
+entry remain pilot responsibilities except for explicitly enabled integration
+features.
 
-After changing `docs\events.txt`, run:
+## Major user features
 
-```powershell
-powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\tools\Refresh-ControlCatalog.ps1
-```
+- Prominent flow start and confirmation controls with clear running/completed
+  states
+- Automatic First Officer actions with independent cockpit-state verification
+- Monitored Captain actions without app confirmation during takeoff, approach,
+  landing, and taxi where reliable telemetry exists
+- Aircraft-specific, editable approach profiles with practical defaults and
+  persistent airline-SOP overrides
+- Editable transition altitude, V1, VR, and V2 values
+- `Minimal`, `Standard`, and `Expanded` voice-callout detail
+- Aircraft/livery information card with package images and exterior fallbacks
+- Safe interrupted-flight restore that requires the user to resume, plus a
+  visible `New flight / Reset progress` action
+- Unified integration manager and top-level integration status badges
+- Quiet diagnostics, exportable issue reports, and bounded flight recording;
+  only the last three flights are retained
+- Developer jump-to-flow support for targeted approach and landing tests
 
-This:
+## SimBrief integration
 
-1. Parses `events.txt`
-2. Regenerates `docs\control-matrix.csv`
-3. Checks duplicate names and required battery controls
-4. Regenerates the C# control catalog
+SimBrief support is optional, read-only, and free for both the project and its
+users. A Pilot ID or username is sufficient; no paid API key is required.
 
-Current catalog size: 249 documented presets.
+The latest generated OFP provides the app with operational briefing data such
+as route and runway information, cruise data, fuel, takeoff flap setting,
+transition altitude, and V1/VR/V2 references. Imported data is displayed for
+comparison and pre-fills supported flight settings. SimBrief never writes to
+the aircraft FMC/MCDU and cannot block a flow when unavailable.
 
-Evidence classifications:
+The dashboard has a SimBrief status badge, and all integration configuration
+is available from the single **Manage integrations** screen.
 
-- Documented preset
-- Aircraft-discovered Input Event
-- Live verified
-- Inferred/unverified
+## SayIntentions integration
 
-Only documented or Behavior-Viewer-confirmed commands with independent
-readback should enter automatic flows.
+SayIntentions support is optional and requires its running Windows client and
+an active SayIntentions flight. The app discovers the local session and does
+not store the user's account API key.
 
-## Live-verified controls
+Implemented functionality includes:
 
-### BAT 1
+- Optional SayIntentions First Officer voices with local speech fallback
+- Read-only ATIS, weather, frequency, gate, and communication context
+- IFR-clearance, pushback/start, taxi, and ready-for-departure/takeoff requests
+  initiated through the normal flow confirmation path
+- Station-aware COM1 tuning through the official local API when needed
+- Fresh flight context, including the imported SimBrief route when available
+- Waiting for a genuine ATC reply without treating the outgoing request echo
+  as the response
+- First Officer transmissions and ATC responses in the activity log, including
+  station and frequency information
 
-- ON: `1 (>L:INI_OVHD_ELEC_BAT_1_PB_IS_AUTO_SWITCH)`
-- OFF: `0 (>L:INI_OVHD_ELEC_BAT_1_PB_IS_AUTO_SWITCH)`
-- Readback: `INI_OVHD_ELEC_BAT_1_PB_IS_AUTO_SWITCH`
-- Documented in `events.txt`
-- Live verified
+When SayIntentions is disabled or unavailable, its steps bypass cleanly and
+the simulator's built-in ATC or the pilot handles communication. No supported
+aircraft procedure may depend on SayIntentions being installed.
 
-### BAT 2
+The integration is functional in v0.9.2 but should continue receiving live
+validation across airports and radio configurations.
 
-- ON: `1 (>L:INI_OVHD_ELEC_BAT_2_PB_IS_AUTO_SWITCH)`
-- OFF: `0 (>L:INI_OVHD_ELEC_BAT_2_PB_IS_AUTO_SWITCH)`
-- Readback: `INI_OVHD_ELEC_BAT_2_PB_IS_AUTO_SWITCH`
-- Documented in the updated `events.txt`
-- Live verified
+## Architecture and stability boundary
 
-### External power
+The application deliberately shares the user experience and normalized
+aircraft state, but does not share aircraft-specific cockpit assumptions.
 
-- Command: SimConnect `SET_EXTERNAL_POWER`
-- Readback: `EXTERNAL POWER ON:1`
-- Live verified
+Important layers and files:
 
-### Beacon
+- `src/Copilot/CopilotService.cs` - runtime orchestration, SimConnect,
+  integration coordination, command dispatch, and normalized telemetry
+- `src/Copilot/AircraftState.cs` - normalized simulator state
+- `src/Copilot/Procedures/ProcedureRunner.cs` - ordered flow execution,
+  waiting, retry, verification, pause/resume, and cancellation
+- `src/Copilot/Procedures/A320ProcedureLibrary.cs` - iniBuilds A320neo V2
+- `src/Copilot/Procedures/A321ProcedureLibrary.cs` - iniBuilds A321LR
+- `src/Copilot/Procedures/FbwA320ProcedureLibrary.cs` - FlyByWire A32NX
+- `src/Copilot/Procedures/A330ProcedureLibrary.cs` - iniBuilds A330
+- `src/Copilot/Procedures/B737ProcedureLibrary.cs` - PMDG 737-800
+- Matching aircraft-specific libraries under `src/Copilot/Checklists`
+- `docs/ARCHITECTURE.md` - detailed adapter and regression boundaries
+- `docs/NATIVE_CONTROL_STRATEGY.md` - required command/readback discipline
 
-- Command: SimConnect `BEACON_LIGHTS_SET`
-- Readback: `LIGHT BEACON`
-- Live verified
+Each supported aircraft owns its procedure, checklist, command/readback, and
+approach behavior. Similar aircraft must not silently fall through to another
+profile's native variables. Completed profiles are protected by structural
+fingerprint and regression tests. A change for one aircraft must add or use an
+aircraft-specific path and must not weaken another profile's verification to
+make a new aircraft pass.
 
-### NAV & LOGO selector
+### Native-control rule
 
-The generic MSFS `NAV_LIGHTS_SET` and `LIGHT NAV` pair was proven incorrect
-for this selector and must not be used.
+An automatic action is complete only when the aircraft reports the intended
+state through a reliable and independent readback. Sending a command, seeing a
+generic SimVar change, or observing a cockpit animation alone is not enough.
 
-Behavior Viewer information supplied by the user:
+Use this order of evidence:
 
-- Input Event: `AIRLINER_LT_NAVLOGO`
-- Explicit bindings: `STATE1`, `STATE2`, `STATE3`, `Set`, `Inc`, `Dec`
-- Native variable: `INI_LOGO_LIGHT_SWITCH`
+1. Aircraft documentation or SDK
+2. MSFS Behavior Viewer/Input Event evidence
+3. A controlled probe that records command and state changes
+4. Live verification in the exact aircraft profile
 
-Verified mapping:
+Do not repeatedly guess LVars, B-events, Input Event values, or Rotor Brake
+codes. Record discovered mappings in the relevant support document or control
+matrix and add a regression test before considering the fix complete.
 
-- Selector position **2**:
-  - Command: ` (>B:AIRLINER_LT_NAVLOGO_STATE1)`
-  - Readback: `INI_LOGO_LIGHT_SWITCH == 0`
-  - Live verified by the user
-- Selector **OFF**:
-  - Command: ` (>B:AIRLINER_LT_NAVLOGO_STATE3)`
-  - Readback: `INI_LOGO_LIGHT_SWITCH == 2`
-  - Live verified by the user
+## Testing and release discipline
 
-Position 1 did not actuate reliably and is intentionally not used. Only
-position 2 and OFF should be exposed or used in flows.
+Before handing a build to the user or publishing a release:
 
-## Cockpit Preparation status
+1. Confirm the intended aircraft profile is selected and no other profile was
+   modified unintentionally.
+2. Run the focused tests for the changed subsystem and aircraft.
+3. Run the complete Release test suite.
+4. Build the x64 Release package and test the executable from the Release
+   folder, because that is the build used during live flights.
+5. Update `README.md`, `docs/checklist.md`, `docs/LIVE_TESTS.md`, and aircraft
+   support documents when behavior or validation status changes.
+6. Use `tools/Publish-Release.ps1` and follow `docs/RELEASING.md` for public
+   releases.
 
-The automatic Cockpit Preparation flow:
+Never restart the app during an active user flight unless explicitly asked.
+When a debug/probe build is required, say so clearly; the user normally tests
+the Release build and the UI does not identify Debug versus Release.
 
-1. Confirms A320neo V2 loaded
-2. Confirms stationary on the ground
-3. Confirms parking brake set
-4. Confirms engines off
-5. Sets BAT 1 ON and verifies native readback
-6. Sets BAT 2 ON and verifies native readback
-7. Connects external power and verifies readback
-8. Sets NAV & LOGO to position 2 and verifies
+## Deferred and remaining work
 
-The complete flow passed live on June 19, 2026. BAT 1 and BAT 2 changed to ON
-with native readback, external power reported ON, and NAV & LOGO position 2
-reported native value 0. Detailed evidence is in `docs\LIVE_TESTS.md`.
+- Continue real-flight validation of SayIntentions exchanges and the A330
+  profile after simulator or aircraft updates
+- Add GSX Pro ground-service integration using its official bidirectional
+  Remote Control SDK; feasibility research is in
+  `docs/GSX_INTEGRATION_FEASIBILITY.md`
+- Improve interactive checklist and crew-audio behavior
+- Revisit FlyByWire A380X support only on a dedicated development branch
+- Add further aircraft only with a separate adapter/procedure/checklist and a
+  full gate-to-gate validation plan
+- Implement go-around and rejected-takeoff procedures last; both require safe
+  interruption and recovery branches rather than small additions to normal
+  flows
 
-## Before Start status
+An AI-controlled Pilot Flying mode, taxi automation, and the former Boeing
+autoland-assist experiment are not current product features.
 
-Before Start exists structurally but is not ready for unattended automation.
+## Authoritative supporting documents
 
-Current steps include:
+- `README.md` - customer-facing installation and use
+- `docs/checklist.md` - detailed implemented flow content
+- `docs/LIVE_TESTS.md` - aircraft and flow validation evidence
+- `docs/ARCHITECTURE.md` - contributor architecture and isolation rules
+- `docs/NATIVE_CONTROL_STRATEGY.md` - cockpit command/readback standard
+- `docs/SIMBRIEF_INTEGRATION_PLAN.md` - SimBrief design and status
+- `docs/SAYINTENTIONS_INTEGRATION_PLAN.md` - SayIntentions design and status
+- `docs/ROADMAP.md` - deliberately deferred features
+- `docs/RELEASING.md` - release process
 
-- Aircraft/stationary/electrical-power checks
-- Doors closed and boarding complete — manual captain confirmation
-- Six fuel-pump pushbuttons (L1/L2/C1/C2/R1/R2) — exact Behavior Viewer
-  Mouserect code with independent native readback; live verified ON and OFF
-- APU master/start selection — automatic native command pulses and state verification
-- APU available — separate native observed condition after start/warm-up
-- APU generator pushbutton — observed in its normal ON configuration; no routine press
-- APU bleed ON — exact Behavior Viewer Mouserect code; live verified ON/OFF
-- Beacon ON — automatic and verified
-- External power disconnect — automatic only after native APU available and
-  generator-on verification
+## Operational note
 
-All automatic cockpit actions in the current Before Start flow are mapped and
-live verified. Doors closed/boarding complete remains an intentional captain
-confirmation because it represents operational context, not only switch state.
-
-## Known unreliable or unfinished areas
-
-### Fuel pumps
-
-- The aircraft exposes B-events such as:
-  - `AIRLINER_FUEL_ENG1_L1`
-  - `AIRLINER_FUEL_ENG1_L2`
-  - `AIRLINER_FUEL_ENG2_R1`
-  - `AIRLINER_FUEL_ENG2_R2`
-- ON commands appeared to work and native B-event readback later showed all
-  four ON.
-- OFF did not verify reliably.
-- These controls are absent from the supplied A320 HubHop export.
-- They are excluded from the normal command switch and automatic flow.
-- Experimental actuation code was removed from `CopilotService.cs`. Read-only
-  discovery remains isolated in `SimConnectProbe`.
-
-### APU
-
-- Generic telemetry has produced suspicious/inconsistent results, including
-  reporting an operating APU after resets.
-- APU generator command verification failed.
-- APU start/generator controls are not documented in the supplied A320
-  HubHop export.
-- Do not disconnect external power based only on APU RPM, generator-switch
-  indication, or generic generator-active telemetry.
-- Automatic external-power OFF is blocked while engines are stopped. Before
-  Start requires manual pilot verification and disconnection until native APU
-  power readback is mapped.
-- Experimental APU-generator actuation code was removed from
-  `CopilotService.cs`.
-
-The read-only Input Event inspector confirms that APU master, start, bleed,
-and generator events exist and accept a `FLOAT64` parameter. It does not
-establish value semantics or independent native readback.
-
-A passive subscription and polling test showed that these APU Input Events
-remain at 0 even while generic APU master/RPM/generator telemetry changes.
-Treat them as command endpoints, never as state readback.
-
-Behavior Viewer later confirmed explicit `PUSH` bindings for APU master,
-start, bleed, and generator. MobiFlight LVar enumeration discovered
-`INI_APU_MASTER_SWITCH`, `INI_APU_START_BUTTON`, `INI_APU_BLEED_BUTTON`,
-`INI_APU_GEN_ON`, and `INI_APU_AVAILABLE` for independent verification.
-Implementation is ready for controlled live verification.
-
-### Doors, ADIRS, signs, ground services
-
-Not mapped sufficiently for automation. Boarding complete/ground crew clear
-is operational context and may still require pilot confirmation even after
-door-state telemetry is added.
-
-### SimConnect/MobiFlight noise
-
-`ALREADY_CREATED` exceptions can occur when MobiFlight client-data areas
-already exist. They have been harmless but make logs noisy.
-
-Current application strings are UTF-8 and no known mojibake remains.
-
-## Critical lessons
-
-Read `docs\NATIVE_CONTROL_STRATEGY.md` before implementing or testing another
-aircraft-specific control.
-
-1. Cockpit visual state and native selector variables override generic
-   SimVars when they disagree.
-2. A successful command call is not success; require independent readback.
-3. Never mark a control supported from its name alone.
-4. Prefer Behavior Viewer or a documented HubHop preset before implementation.
-5. Test complete subsystems in one controlled batch rather than repeatedly
-   guessing individual suffixes.
-6. If a test fails, do not retry variations blindly. Update the control
-   matrix/evidence first.
-7. Keep Hermes out of the shipped runtime.
-
-## Recommended next work
-
-1. Use MSFS Behavior Viewer to document the missing Before Start controls:
-   - APU master/start/available/generator
-   - Six fuel-pump pushbuttons (left 1/2, center 1/2, right 1/2)
-   - ADIRS selectors
-   - Seat-belt signs
-   - Relevant door states
-2. Add each Behavior Viewer result to `docs\behavior-viewer-mappings.csv` before
-   adding code.
-3. Implement and batch-test Before Start only after every automatic step has
-   a command, native readback, timeout, and safe failure behavior.
-
-## Current operational note
-
-The Copilot process may not be running because it is routinely stopped before
-rebuilding to release the executable lock. Start the latest Release executable
-manually when beginning a new live test.
+MSFS and the selected aircraft must be loaded before live testing. Desktop
+session access matters: a hidden or sandboxed process may not connect to the
+running simulator. The app is normally stopped before rebuilding because a
+running executable locks the Release output.

@@ -13,6 +13,7 @@ public sealed class SayIntentionsFlightContextTests
             {
               "flight_details": {
                 "api_key": "secret-value",
+                "flight_id": "flight-42",
                 "hostname": "https://apipri.sayintentions.ai",
                 "callsign": "KLM123",
                 "current_airport": "EHAM",
@@ -30,6 +31,7 @@ public sealed class SayIntentionsFlightContextTests
         Assert.AreEqual("KLM123", context.Callsign);
         Assert.AreEqual("EHAM-EBBR", context.RouteLabel);
         Assert.AreEqual("D52", context.AssignedGate);
+        Assert.AreEqual("flight-42", context.SessionKey);
         Assert.IsFalse(context.RouteLabel.Contains("secret-value"));
     }
 

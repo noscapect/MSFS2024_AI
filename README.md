@@ -128,14 +128,16 @@ Available features include:
 
 - SayIntentions First Officer voices with automatic local voice fallback
 - Read-only ATIS, weather, frequency, gate, and communication information
-- Pilot-authorized IFR-clearance and pushback/start requests through the
-  normal flow confirmation button
-- Temporary First Officer control of the COM1 exchange while the app waits for
-  an ATC response
+- Persistent, optional assignment of radio communications to the
+  SayIntentions First Officer
+- Pilot-authorized IFR-clearance, pushback/start, taxi, and
+  ready-for-departure requests through the normal flow confirmation button
+- ATC responses in the activity log with conservative clearance recognition
 
 This integration remains in live validation. If SayIntentions is unavailable
 or does not respond, the normal manual confirmation path remains available.
-The app deliberately does not tune radio frequencies automatically.
+SayIntentions owns all automatic radio tuning; this app never selects or sets
+COM frequencies.
 
 ## Voice callouts
 

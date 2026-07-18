@@ -72,8 +72,11 @@ diagnostics** or **Copy last diagnostic** when reporting a test issue.
    block fuel.
 9. **Captain confirmation:** MCDU PERF complete with V1, VR, V2, transition
    altitude, and takeoff flap setting.
-10. **Pilot:** After MCDU programming is complete, request and acknowledge IFR
-    clearance through MSFS ATC. The app monitors IFR-clearance state.
+10. **Pilot/F/O ATC:** After MCDU programming is complete, press **Confirm
+    now** to authorize the First Officer to request IFR clearance when an
+    active SayIntentions flight has Copilot communications enabled.
+    SayIntentions owns radio tuning. Without SayIntentions, use built-in MSFS
+    ATC; the integration step does not block the flow.
 11. **F/O automatic:** Turn all six fuel pumps ON, pressing them sequentially
     at one-second intervals.
 12. **F/O automatic:** Set seatbelt signs to AUTO.
@@ -93,8 +96,10 @@ the FMC TAKEOFF REF setup in this same flow.
 5. **Captain:** Turn APU BLEED ON; detected from native state.
 6. **Captain:** Disconnect external power; detected from aircraft state.
 7. **Captain:** Turn beacon ON; detected from aircraft state.
-8. **Pilot confirmation:** Request and acknowledge pushback and engine-start
-   clearance through MSFS ATC, then confirm in the app.
+8. **Pilot/F/O ATC:** Press **Confirm now** to authorize the First Officer to
+   request pushback and engine-start clearance through SayIntentions. Without
+   SayIntentions, request it through built-in MSFS ATC. The app never tunes the
+   radio itself.
 9. **F/O automatic:** Set transponder mode to AUTO.
 10. **Monitor:** Wait until all configured cabin and cargo doors are closed.
 
@@ -128,7 +133,8 @@ Master ON steps complete.
 8. **F/O automatic:** Set nose light to TAXI.
 9. **F/O confirmation:** Check ECAM for remaining memos or system warnings.
 10. **F/O ATC:** Press **Confirm now** to let the First Officer request taxi
-    clearance through SayIntentions. Without an active SayIntentions flight,
+    clearance through SayIntentions. SayIntentions manages the correct radio
+    frequency and subsequent exchange. Without an active SayIntentions flight,
     this step is bypassed automatically so MSFS built-in ATC can continue
     handling taxi and takeoff requests without extra app confirmations.
 11. **Monitor:** Detect Captain commencing taxi when the parking brake is
@@ -148,7 +154,8 @@ Master ON steps complete.
 8. **F/O automatic:** Set both landing lights ON.
 9. **F/O ATC:** With an active SayIntentions flight and while holding short,
    press **Confirm now** to let the First Officer report ready for departure
-   and request takeoff clearance on Tower. Without SayIntentions, this step is
+   and request takeoff clearance. SayIntentions manages Tower tuning and the
+   continuing exchange. Without SayIntentions, this step is
    bypassed automatically and MSFS built-in ATC continues normally.
 
 By default, completing Flow 6 automatically starts Flow 7. This keeps the

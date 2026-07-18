@@ -6,7 +6,9 @@ profiles remain protected by their aircraft-specific regression tests.
 
 ## Current development
 
-1. Complete and live-validate the optional SayIntentions integration.
+1. Complete the final live-acceptance matrix for persistent SayIntentions
+   Copilot communications and its four departure ATC conversations. Frequency
+   tuning belongs exclusively to SayIntentions.
 2. SimBrief latest-OFP integration is released as an optional read-only
    operational briefing. Future work may add more advisory comparisons after
    live validation, without allowing network data to control cockpit systems.

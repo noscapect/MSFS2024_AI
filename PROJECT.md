@@ -139,7 +139,10 @@ Implemented functionality includes:
 - Read-only ATIS, weather, frequency, gate, and communication context
 - IFR-clearance, pushback/start, taxi, and ready-for-departure/takeoff requests
   initiated through the normal flow confirmation path
-- Station-aware COM1 tuning through the official local API when needed
+- Persistent optional assignment of communications to the SayIntentions First
+  Officer through the official `SIAI_COPILOT` interface
+- SayIntentions-owned automatic radio tuning; the app only displays frequency
+  information and never selects or changes COM frequencies
 - Fresh flight context, including the imported SimBrief route when available
 - Waiting for a genuine ATC reply without treating the outgoing request echo
   as the response
@@ -150,8 +153,11 @@ When SayIntentions is disabled or unavailable, its steps bypass cleanly and
 the simulator's built-in ATC or the pilot handles communication. No supported
 aircraft procedure may depend on SayIntentions being installed.
 
-The integration is functional in v0.9.2 but should continue receiving live
-validation across airports and radio configurations.
+The v0.9.2 integration is being completed on the dedicated SayIntentions
+branch. Automated coverage includes all four departure conversations,
+duplicate suppression, conservative authorization recognition, and non-
+SayIntentions fallback. Persistent Copilot mode requires final live acceptance
+before the next release.
 
 ## Architecture and stability boundary
 

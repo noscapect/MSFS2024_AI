@@ -1,5 +1,24 @@
 # Live test evidence
 
+## 2026-07-18 - SayIntentions completion build awaiting live acceptance
+
+The completion branch removes all application-owned COM frequency selection
+and tuning. SayIntentions now owns automatic tuning and continuing radio
+communications. The app uses the official SAPI `setVar` endpoint to assign
+communications persistently to the SayIntentions First Officer through
+`SIAI_COPILOT`, independent of MobiFlight.
+
+The four flow-authorized requests cover IFR clearance, pushback/start, taxi,
+and ready for departure. Duplicate requests are suppressed, outgoing echoes
+are ignored, interim or negative replies do not complete a flow, and a normal
+manual fallback remains available after timeout or when SayIntentions is not
+active.
+
+Automated result: **165 tests passed in Debug with no failures.** Final live
+acceptance remains pending for the visible Pilot-to-Co-Pilot handoff,
+SayIntentions-owned tuning, all four audible conversations, and the built-in
+ATC fallback path.
+
 ## 2026-07-15 - PMDG 737-800 end-to-end validation complete
 
 The PMDG 737-800 has completed live testing of all twelve Boeing-specific

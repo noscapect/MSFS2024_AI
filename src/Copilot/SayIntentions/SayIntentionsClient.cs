@@ -11,9 +11,16 @@ internal sealed class SayIntentionsClient : IDisposable
     private readonly HttpClient _apiClient;
 
     public SayIntentionsClient()
+        : this(new HttpClientHandler(), new HttpClientHandler())
     {
-        _localClient = new HttpClient { Timeout = TimeSpan.FromSeconds(2) };
-        _apiClient = new HttpClient { Timeout = TimeSpan.FromSeconds(6) };
+    }
+
+    internal SayIntentionsClient(
+        HttpMessageHandler localHandler,
+        HttpMessageHandler apiHandler)
+    {
+        _localClient = new HttpClient(localHandler) { Timeout = TimeSpan.FromSeconds(2) };
+        _apiClient = new HttpClient(apiHandler) { Timeout = TimeSpan.FromSeconds(6) };
         _apiClient.DefaultRequestHeaders.UserAgent.ParseAdd("MSFS2024-Virtual-First-Officer/0.9.2");
     }
 
@@ -148,32 +155,19 @@ internal sealed class SayIntentionsClient : IDisposable
         return SayIntentionsResponseParser.ParseCurrentFrequencies(json);
     }
 
-    public async Task<bool> SetFrequencyAsync(
+    public async Task<bool> SetCopilotCommunicationsAsync(
         SayIntentionsFlightContext context,
-        double frequencyMhz,
-        int com = 1,
+        bool enabled,
         CancellationToken cancellationToken = default)
     {
-        if (frequencyMhz is < 118 or > 136.975)
-        {
-            throw new ArgumentOutOfRangeException(nameof(frequencyMhz));
-        }
-        if (com is not (1 or 2))
-        {
-            throw new ArgumentOutOfRangeException(nameof(com));
-        }
-
         var json = await GetSapiJsonAsync(
                 context,
-                "setFreq",
+                "setVar",
                 new Dictionary<string, string>
                 {
-                    ["freq"] = frequencyMhz.ToString(
-                        "0.000",
-                        System.Globalization.CultureInfo.InvariantCulture),
-                    ["com"] = com.ToString(
-                        System.Globalization.CultureInfo.InvariantCulture),
-                    ["mode"] = "active"
+                    ["var"] = "SIAI_COPILOT",
+                    ["value"] = enabled ? "1" : "0",
+                    ["category"] = "L"
                 },
                 cancellationToken)
             .ConfigureAwait(false);

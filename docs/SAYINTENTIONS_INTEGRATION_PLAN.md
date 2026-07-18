@@ -1,64 +1,116 @@
 # SayIntentions Integration
 
-## Goal
+## Status
 
-Add optional SayIntentions companion features without making SayIntentions a
-runtime requirement and without coupling it to any aircraft adapter.
+The planned SayIntentions feature scope is implemented on the
+`feature/sayintentions-completion` branch. Automated regression coverage is
+complete; the persistent Copilot handoff and four departure conversations
+still require final live acceptance in SayIntentions before release.
 
-## Implemented first slice
+SayIntentions is optional. No aircraft procedure, callout, or normal flow may
+require its client, subscription, or API to be available.
 
-- Detect the local SayIntentions Windows client through
+## Ownership boundary
+
+SayIntentions owns:
+
+- COM frequency selection and automatic tuning;
+- continuing ATC exchanges and readbacks while its Copilot has communications;
+- generated First Officer and ATC audio.
+
+MSFS 2024 Virtual First Officer owns:
+
+- the point in the operational flow where the pilot authorizes an initial ATC
+  request;
+- the initial request context and standard phraseology;
+- conservative detection of the required ATC authorization;
+- flow completion, timeout, activity-log presentation, and manual fallback.
+
+The application must never call SayIntentions `setFreq` or select a clearance,
+ground, or tower frequency. Frequency information is read-only in this app.
+
+## Implemented functionality
+
+- Detect the local SayIntentions client through
   `http://127.0.0.1:63287/flightJSON`.
-- Read the active callsign, route, airport, and assigned gate.
-- Obtain the active SAPI context from the local payload without asking the
-  user to copy an API key into this application.
-- Show `OFFLINE`, `READY`, or `CONNECTED` state in the dashboard.
-- Offer an opt-in `SayIntentions voices` preference for existing First Officer
-  callouts.
-- Offer `Minimal`, `Standard`, and `Expanded` callout detail. Standard adds
-  verified configuration acknowledgements while routine switch movements stay
-  silent; Expanded adds selected system-status and checklist-completion calls.
-- Send exact callout text through `INTERCOM1_IN` with rephrasing disabled.
-- Fall back to the existing Windows voice if SayIntentions is unavailable or
-  rejects a callout.
-- Show read-only ATIS, METAR, TAF, active-runway, frequency, assigned-parking,
-  and recent-communications data in `Manage SayIntentions`.
-- Provide a user-triggered First Officer voice test.
-- During the existing IFR-clearance and pushback/start-clearance pilot steps,
-  reuse the normal `Confirm now` button as the pilot's authorization for the
-  First Officer to contact SayIntentions ATC on COM1.
-- Build and send the request directly from the active callsign, route, and
-  gate context without opening a second dialog.
-- Set SayIntentions' documented `SIAI_COPILOT` communications state for the
-  duration of the authorized COM1 exchange so the transmission is attributed
-  to and voiced as the First Officer, then release it after the reply or
-  timeout.
-- Keep the flow waiting while monitoring for a new ATC response. Complete the
-  clearance step only after a reply is detected; after a timeout, retain a
-  normal manual-confirm fallback without blocking the flight.
+- Read the active callsign, route, airport, gate, flight identifier, and SAPI
+  context without asking the user to copy an API key.
+- Show offline, ready, or connected status on the dashboard.
+- Show read-only ATIS, METAR, TAF, runway, frequency, parking, and recent
+  communications information in **Manage integrations**.
+- Offer optional SayIntentions First Officer voices with local Windows speech
+  fallback.
+- Offer `Minimal`, `Standard`, and `Expanded` callout detail.
+- Send exact operational callout text through `INTERCOM1_IN` with rephrasing
+  disabled.
+- Provide a First Officer voice test.
+- Offer a persisted, default-enabled setting that assigns ATC communications
+  to the SayIntentions First Officer.
+- Set Copilot communications through the official SAPI `setVar` endpoint using
+  `SIAI_COPILOT=1`. This does not depend on MobiFlight and therefore also works
+  with the PMDG profile.
+- Keep Copilot mode active for the SayIntentions flight instead of releasing it
+  after each transmission.
+- Restore `SIAI_COPILOT=0` when the user disables the setting or the app closes
+  normally.
+- Use the normal flow confirmation button to authorize:
+  - IFR clearance;
+  - pushback and engine-start clearance;
+  - taxi clearance;
+  - ready-for-departure/takeoff clearance.
+- Build requests from the active callsign, route, gate, and optional SimBrief
+  context.
+- Detect a recent matching request already initiated by SayIntentions and
+  suppress a duplicate transmission.
+- Ignore outgoing-message echoes and unrelated communications.
+- Treat `stand by`, `unable`, `hold position`, and `line up and wait` as
+  non-completing responses where applicable.
+- Require step-specific authorization, including `cleared for takeoff` for the
+  takeoff-clearance step.
+- Keep waiting for up to 60 seconds and then expose a normal manual fallback.
+- Record First Officer transmissions and ATC responses in the activity log,
+  including the station and frequency reported by SayIntentions.
 
 ## Security and isolation
 
-- API credentials are held only in memory and are never saved in settings.
-- The app never writes the flight JSON, API key, SAPI request URI, or SAPI
-  exception details to player or diagnostic logs.
-- A hostname supplied by the local payload is accepted only when it is HTTPS
-  and belongs to `sayintentions.ai`; otherwise the official primary API host
-  is used.
-- SayIntentions code lives under `src/Copilot/SayIntentions`. It does not
-  participate in aircraft identification, command routing, state readback,
-  checklists, or procedures.
-- All existing functionality remains available when the SayIntentions client
-  is closed or no active SayIntentions flight exists.
+- API credentials stay in memory and are never saved in settings.
+- Flight JSON, API keys, SAPI request URIs, and credential-bearing exception
+  details are never written to user or diagnostic logs.
+- A host supplied by the local payload is accepted only when it uses HTTPS and
+  belongs to `sayintentions.ai`; otherwise the official primary API host is
+  used.
+- All integration code stays under `src/Copilot/SayIntentions` and does not
+  participate in aircraft identification, command routing, checklists, or
+  aircraft-native readback.
+- When SayIntentions is disabled, closed, or has no active flight, its ATC
+  steps bypass cleanly so built-in MSFS ATC or the pilot can continue.
 
-## Next slices
+## Final live acceptance
 
-1. Live-validate IFR-clearance and pushback transmissions across multiple
-   airports, frequencies, and callsigns.
-2. Consider automatic clearance recognition only after that validation. It
-   must remain conservative and must never block a normal flight when
-   SayIntentions is unavailable.
+Run one normal departure and verify:
 
-Frequency changes remain out of scope so the app cannot fight SayIntentions
-or cockpit radio management. The normal flow confirmation is the explicit
-authorization for each automated transmission.
+1. The SayIntentions desktop client changes from **Pilot** to **Co-Pilot**
+   after the integration detects the active flight.
+2. The app does not tune COM1 and SayIntentions changes frequencies itself.
+3. IFR clearance is requested audibly, the reply is logged, and the flow
+   completes only after clearance is issued.
+4. Pushback/start, taxi, and ready-for-departure behave the same way.
+5. A `stand by` or `line up and wait` response leaves the relevant flow waiting.
+6. Repeatedly pressing Confirm cannot send duplicate requests.
+7. Disabling Copilot communications returns the SayIntentions client to Pilot.
+8. Closing SayIntentions or running without an active SayIntentions flight
+   leaves the normal built-in-ATC path unblocked.
+
+After this matrix passes, mark the integration complete in `docs/LIVE_TESTS.md`
+and proceed to GSX development on a separate branch.
+
+## Official interfaces
+
+- Local flight discovery: `flightJSON`
+- First Officer callouts and ATC transmissions: SAPI `sayAs`
+- Communications history: SAPI `getCommsHistory`
+- Copilot handoff: SAPI `setVar`, category `L`, variable `SIAI_COPILOT`
+- Operational briefing: SAPI `getWX` and `getParking`
+
+Official documentation:
+<https://p2.sayintentions.ai/p2/docs/>

@@ -8,6 +8,7 @@ internal sealed class SayIntentionsFlightContext
     private SayIntentionsFlightContext(
         string apiKey,
         Uri apiHost,
+        string flightId,
         string callsign,
         string originIcao,
         string destinationIcao,
@@ -16,6 +17,7 @@ internal sealed class SayIntentionsFlightContext
     {
         ApiKey = apiKey;
         ApiHost = apiHost;
+        FlightId = flightId;
         Callsign = callsign;
         OriginIcao = originIcao;
         DestinationIcao = destinationIcao;
@@ -25,6 +27,7 @@ internal sealed class SayIntentionsFlightContext
 
     internal string ApiKey { get; }
     internal Uri ApiHost { get; }
+    public string FlightId { get; }
     public string Callsign { get; }
     public string OriginIcao { get; }
     public string DestinationIcao { get; }
@@ -35,6 +38,10 @@ internal sealed class SayIntentionsFlightContext
         !string.IsNullOrWhiteSpace(OriginIcao) && !string.IsNullOrWhiteSpace(DestinationIcao)
             ? $"{OriginIcao}-{DestinationIcao}"
             : "active flight";
+
+    public string SessionKey => !string.IsNullOrWhiteSpace(FlightId)
+        ? FlightId
+        : $"{Callsign}|{OriginIcao}|{DestinationIcao}";
 
     public static bool TryParse(string? json, out SayIntentionsFlightContext? context)
     {
@@ -58,6 +65,7 @@ internal sealed class SayIntentionsFlightContext
             context = new SayIntentionsFlightContext(
                 apiKey,
                 SafeApiHost(Text(details, "hostname")),
+                Text(details, "flight_id"),
                 Text(details, "callsign_icao", Text(details, "callsign")),
                 Text(currentFlight, "flight_origin"),
                 Text(currentFlight, "flight_destination"),

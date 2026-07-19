@@ -2,10 +2,11 @@
 
 ## Status
 
-The SayIntentions ownership model is implemented on the
-`feature/sayintentions-completion` branch. Automated regression coverage is
-complete; the persistent Copilot handoff and passive communication mirroring
-still require final live acceptance before release.
+The SayIntentions ownership model is released in v0.9.3 and was live validated
+gate-to-gate on July 19, 2026. Persistent Copilot handoff, native IFR and
+pushback/start requests, automatic takeoff-clearance reuse, response
+verification, voice-callout routing, and passive communication mirroring are
+covered by the release regression suite.
 
 SayIntentions is optional. No aircraft procedure, callout, or normal flow may
 require its client, subscription, or API to be available.
@@ -98,9 +99,9 @@ ground, or tower frequency. Frequency information is read-only in this app.
 - When SayIntentions is disabled, closed, or has no active flight, its ATC
   steps bypass cleanly so built-in MSFS ATC or the pilot can continue.
 
-## Final live acceptance
+## Completed live acceptance
 
-Run one normal departure and verify:
+The v0.9.3 gate-to-gate acceptance flight verified:
 
 1. At an ATC checkpoint, the SayIntentions desktop client changes to
    **Co-Pilot** and remains responsible for the delegated conversation.
@@ -116,8 +117,9 @@ Run one normal departure and verify:
 8. Closing SayIntentions or running without an active SayIntentions flight
    leaves the normal built-in-ATC path unblocked.
 
-After this matrix passes, mark the integration complete in `docs/LIVE_TESTS.md`
-and proceed to GSX development on a separate branch.
+The corresponding result is recorded in `docs/LIVE_TESTS.md`. Future changes
+must preserve this ownership boundary and pass the SayIntentions regression
+suite before release.
 
 ## Official interfaces
 

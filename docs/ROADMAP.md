@@ -22,6 +22,14 @@ by SayIntentions.
    Control SDK. See `GSX_INTEGRATION_FEASIBILITY.md`.
 2. Interactive checklist and crew-audio improvements.
 
+## Post-1.0 features
+
+1. Configurable single-engine taxi procedures. Preserve dual-engine taxi as
+   the universal default, then add aircraft- and airline-specific options for
+   single-engine taxi-in and taxi-out with the appropriate engine selection,
+   APU coordination, operating restrictions, and engine warm-up/cool-down
+   timing. Do not introduce this feature before the public 1.0 release.
+
 ## Final planned major feature
 
 Go-around and rejected-takeoff procedures are deliberately parked until the

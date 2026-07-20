@@ -228,12 +228,11 @@ internal static class A320ProcedureLibrary
             new[]
             {
                 Observe("start-condition", "Aircraft on ground with beacon ON", state => state.OnGround && state.BeaconOn),
-                Manual(
+                Observe(
                     "captain-engine-mode-start",
                     "Engine mode selector IGN/START",
-                    "Captain: set the engine mode selector to IGN/START, then confirm.",
+                    state => state.EngineModeIgnStart,
                     CrewRole.Captain,
-                    complete: state => state.EngineModeIgnStart,
                     recoveryComplete: state => state.Engine1Running || state.Engine2Running),
                 Manual("captain-engine-two", "Engine 2 master ON", "Captain: set Engine 2 Master ON.", CrewRole.Captain, state => state.Engine2StarterActive || state.Engine2Running),
                 Observe(

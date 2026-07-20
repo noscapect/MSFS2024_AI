@@ -104,7 +104,8 @@ the FMC TAKEOFF REF setup in this same flow.
 ## 4. Engine Start Sequence
 
 1. **Monitor:** Aircraft on the ground with beacon ON.
-2. **Captain confirmation:** Set engine mode selector to IGN/START.
+2. **Captain monitored:** Set engine mode selector to IGN/START; the app
+   continues automatically when the selector readback reaches IGN/START.
 3. **Captain:** Set Engine 2 Master ON; starter/running state is monitored.
 4. **F/O callout:** “Engine two starter valve open.”
 5. **F/O callout:** “Engine two fuel flow.”

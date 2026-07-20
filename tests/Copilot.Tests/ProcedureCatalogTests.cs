@@ -97,6 +97,24 @@ public sealed class ProcedureCatalogTests
         Assert.AreEqual(A320ProcedureLibrary.GateToGate.Count, flows.Count);
     }
 
+    [DataTestMethod]
+    [DataRow("A320neo V2")]
+    [DataRow("A321")]
+    [DataRow("A330-300 (GE)")]
+    [DataRow("FlyByWire A32NX")]
+    public void AirbusEngineModeIgnStartIsMonitoredWithoutConfirmation(string title)
+    {
+        var state = new AircraftState { Title = title };
+        var step = ProcedureCatalog.ForAircraft(state)[3].Steps
+            .Single(item => item.Id == "captain-engine-mode-start");
+
+        Assert.AreEqual(ProcedureStepKind.Observe, step.Kind);
+        Assert.IsNull(step.ManualInstruction);
+        Assert.IsFalse(step.IsComplete(state));
+        state.EngineModeSelectorPosition = 2;
+        Assert.IsTrue(step.IsComplete(state));
+    }
+
     [TestMethod]
     public void IniBuildsA330UsesA330ProcedureCatalog()
     {

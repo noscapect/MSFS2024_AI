@@ -11031,6 +11031,10 @@ internal sealed class CopilotService : Form
             : "Installed - waiting for the Couatl engine.";
     }
 
+    private string GsxConfigurationSummary() =>
+        $"Boarding {(_settings.GsxAutomaticallyRequestBoarding ? "ON" : "OFF")} | "
+        + $"Departure preparation {(_settings.GsxAutomaticallyPrepareDeparture ? "ON" : "OFF")}";
+
     private void UpdateGsxStatus(bool couatlStarted)
     {
         _gsxCouatlStarted = couatlStarted;
@@ -11115,19 +11119,34 @@ internal sealed class CopilotService : Form
         };
         var boarding = new CheckBox
         {
-            Text = "Request boarding from the preflight flow",
+            Text = "Automatically request GSX boarding when Flow 2 starts",
             Checked = _settings.GsxAutomaticallyRequestBoarding,
             AutoSize = true
         };
         var departure = new CheckBox
         {
-            Text = "Prepare for pushback and departure from the normal flow",
+            Text = "Automatically prepare for pushback after clearance in Flow 3",
             Checked = _settings.GsxAutomaticallyPrepareDeparture,
             AutoSize = true
         };
         layout.Controls.Add(enabled);
         layout.Controls.Add(boarding);
         layout.Controls.Add(departure);
+        layout.Controls.Add(new Label
+        {
+            Text = "These options are independent. Disable boarding for cargo, positioning, or other flights without passengers while keeping GSX pushback coordination enabled.",
+            AutoSize = true,
+            MaximumSize = new System.Drawing.Size(620, 0),
+            ForeColor = System.Drawing.Color.DimGray,
+            Margin = new Padding(20, 4, 0, 4)
+        });
+        void UpdateGsxOptionAvailability()
+        {
+            boarding.Enabled = enabled.Checked;
+            departure.Enabled = enabled.Checked;
+        }
+        enabled.CheckedChanged += (_, _) => UpdateGsxOptionAvailability();
+        UpdateGsxOptionAvailability();
 
         var status = new Label
         {
@@ -11236,10 +11255,11 @@ internal sealed class CopilotService : Form
         {
             Text = "Manage integrations",
             Width = 680,
-            Height = 500,
+            Height = 560,
+            MinimumSize = new System.Drawing.Size(620, 500),
             StartPosition = FormStartPosition.CenterParent,
-            FormBorderStyle = FormBorderStyle.FixedDialog,
-            MaximizeBox = false,
+            FormBorderStyle = FormBorderStyle.Sizable,
+            MaximizeBox = true,
             MinimizeBox = false
         };
         var layout = new TableLayoutPanel
@@ -11247,9 +11267,8 @@ internal sealed class CopilotService : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(16),
             ColumnCount = 1,
-            RowCount = 4
+            RowCount = 3
         };
-        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -11290,9 +11309,9 @@ internal sealed class CopilotService : Form
             RowCount = 3,
             Margin = new Padding(0, 8, 0, 8)
         };
-        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 33));
-        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 33));
-        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 34));
+        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33F));
+        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33F));
+        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 33.34F));
         layout.Controls.Add(cards, 0, 1);
 
         var simBriefCard = new GroupBox
@@ -11362,7 +11381,8 @@ internal sealed class CopilotService : Form
         };
         gsxCardLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         gsxCardLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        var gsxStatus = NewDashboardLabel(GsxStatusText());
+        var gsxStatus = NewDashboardLabel(
+            GsxStatusText() + Environment.NewLine + GsxConfigurationSummary());
         gsxStatus.MaximumSize = new System.Drawing.Size(470, 0);
         var manageGsx = new Button { Text = "Manage GSX", AutoSize = true };
         gsxCardLayout.Controls.Add(gsxStatus, 0, 0);
@@ -11382,7 +11402,8 @@ internal sealed class CopilotService : Form
                 ?? "Client not detected - optional integration inactive.";
             sayIntentionsStatus.ForeColor = _sayIntentionsStatusLabel?.ForeColor
                 ?? System.Drawing.Color.DimGray;
-            gsxStatus.Text = GsxStatusText();
+            gsxStatus.Text =
+                GsxStatusText() + Environment.NewLine + GsxConfigurationSummary();
             gsxStatus.ForeColor = _gsxStatusLabel?.ForeColor
                 ?? System.Drawing.Color.DimGray;
         }

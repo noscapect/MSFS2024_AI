@@ -143,7 +143,12 @@ weather, and GSX version.
 
 Only one component may own GSX Remote Control in a session. Startup must
 detect an existing Remote Control owner and avoid disrupting aircraft EFBs or
-other add-ons. Shutdown and crash recovery must release ownership safely.
+other add-ons. The implementation records VFO ownership in a short-lived
+local lease so a replacement VFO process can recover after an interrupted
+shutdown. Because GSX exposes only a binary active flag and no owner identity,
+an active flag without a valid VFO lease requires explicit user confirmation
+through `Manage GSX`; it is never taken over silently. Clean shutdown releases
+the GSX flag and clears the lease.
 
 ## Risks and constraints
 

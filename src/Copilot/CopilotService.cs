@@ -54,6 +54,7 @@ internal sealed class CopilotService : Form
     private VoiceCalloutQueue? _voiceCalloutQueue;
     private readonly SayIntentionsClient _sayIntentionsClient = new();
     private readonly GsxInstallation? _gsxInstallation = GsxInstallation.Discover();
+    private readonly GsxOwnershipLease _gsxOwnershipLease = new();
     private GsxFileReader? _gsxFileReader;
     private bool _gsxCouatlStarted;
     private bool _gsxRemoteControlActive;
@@ -1520,6 +1521,7 @@ internal sealed class CopilotService : Form
             SetGsxValue(Definition.GsxRemoteControl, 1);
             _gsxOwnsRemoteControl = true;
             _gsxRemoteControlActive = true;
+            _gsxOwnershipLease.MarkOwned(DateTime.UtcNow);
         }
         UpdateGsxStatus(true);
 
@@ -1623,8 +1625,25 @@ internal sealed class CopilotService : Form
         }
         _gsxOwnsRemoteControl = false;
         _gsxRemoteControlActive = false;
+        _gsxOwnershipLease.Clear();
         _pendingGsxAction = null;
         _pendingGsxActionDeadlineUtc = null;
+    }
+
+    private void RecoverGsxRemoteControl()
+    {
+        if (_simConnect == null
+            || !_gsxCouatlStarted
+            || !_gsxRemoteControlActive
+            || _gsxOwnsRemoteControl)
+        {
+            return;
+        }
+
+        _gsxOwnsRemoteControl = true;
+        _gsxOwnershipLease.MarkOwned(DateTime.UtcNow);
+        UpdateGsxStatus(true);
+        AppendDashboardLog("Recovered GSX Remote Control after an interrupted VFO session.");
     }
 
     private void InitializeMobiFlight(SimConnect sender)
@@ -3142,6 +3161,18 @@ internal sealed class CopilotService : Form
         if (_gsxOwnsRemoteControl && !_gsxRemoteControlActive)
         {
             _gsxOwnsRemoteControl = false;
+            _gsxOwnershipLease.Clear();
+        }
+        else if (_gsxRemoteControlActive
+                 && !_gsxOwnsRemoteControl
+                 && _gsxOwnershipLease.CanRecover(DateTime.UtcNow))
+        {
+            _gsxOwnsRemoteControl = true;
+            AppLog.Write("Recovered GSX Remote Control ownership from the previous VFO process.");
+        }
+        else if (!_gsxRemoteControlActive && !_gsxOwnsRemoteControl)
+        {
+            _gsxOwnershipLease.Clear();
         }
         UpdateGsxStatus(raw.GsxCouatlStarted != 0);
         CheckGsxPendingTimeout();
@@ -11262,15 +11293,45 @@ internal sealed class CopilotService : Form
             AutoSize = true,
             Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted
         };
+        var recoverControl = new Button
+        {
+            Text = "Recover VFO GSX control",
+            AutoSize = true,
+            Visible = _gsxRemoteControlActive && !_gsxOwnsRemoteControl,
+            Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted
+        };
         requestBoarding.Click += (_, _) => BeginGsxAction(GsxDepartureAction.Boarding);
         prepareDeparture.Click += (_, _) => BeginGsxAction(GsxDepartureAction.PrepareForDeparture);
+        recoverControl.Click += (_, _) =>
+        {
+            var result = MessageBox.Show(
+                dialog,
+                "GSX reports that Remote Control is active, but its protocol does not identify the owner. "
+                + "Only continue if no other GSX remote-control add-on or EFB is currently active.\n\n"
+                + "Recover control for MSFS 2024 Virtual First Officer?",
+                "Recover GSX control",
+                MessageBoxButtons.YesNo,
+                MessageBoxIcon.Warning,
+                MessageBoxDefaultButton.Button2);
+            if (result != DialogResult.Yes)
+            {
+                return;
+            }
+
+            RecoverGsxRemoteControl();
+            recoverControl.Visible = false;
+            status.Text = GsxStatusText();
+        };
         testControls.Controls.Add(requestBoarding);
         testControls.Controls.Add(prepareDeparture);
+        testControls.Controls.Add(recoverControl);
         layout.Controls.Add(testControls);
 
         void RefreshObservedState()
         {
             status.Text = GsxStatusText();
+            recoverControl.Visible = _gsxRemoteControlActive && !_gsxOwnsRemoteControl;
+            recoverControl.Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted;
             var tooltip = _gsxFileReader?.ReadTooltip() ?? Array.Empty<string>();
             var menu = _gsxFileReader?.ReadMenu()
                        ?? new GsxMenuSnapshot(string.Empty, Array.Empty<string>());
@@ -11312,6 +11373,7 @@ internal sealed class CopilotService : Form
             UpdateGsxStatus(_gsxCouatlStarted);
             requestBoarding.Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted;
             prepareDeparture.Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted;
+            recoverControl.Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted;
             RefreshObservedState();
         };
         refresh.Click += (_, _) => RefreshObservedState();

@@ -240,6 +240,11 @@ checkpoint can request GSX **Prepare for Pushback and Departure**.
 When GSX departure coordination is active, an early Flow 4 selection remains
 pending until the parking brake is released and aircraft movement confirms
 that pushback is underway; engine start then begins automatically.
+GSX ownership is recorded in a short-lived local lease. A replacement VFO
+process can recover its own interrupted session automatically, while an
+unknown existing owner is never overridden silently. `Manage GSX` exposes an
+explicit recovery action for legacy stale locks after the user confirms that
+no other GSX remote-control add-on or EFB is active.
 
 The app must not hardcode GSX menu indexes, duplicate an active GSX operation,
 take Remote Control away from another add-on, or prevent a flight when GSX is

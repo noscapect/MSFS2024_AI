@@ -141,8 +141,8 @@ Master ON steps complete.
 
 ## 6. Before Takeoff
 
-1. **Captain confirmation:** When cleared to line up, turn runway turnoff
-   lights ON.
+1. **F/O automatic:** When cleared to line up, set runway turnoff lights ON.
+   The cockpit state is verified automatically; no confirmation is required.
 2. **Captain confirmation:** Takeoff briefing complete.
 3. **F/O callout:** “Cabin crew, prepare for takeoff.”
 4. **F/O automatic:** Set TCAS altitude reporting ON.

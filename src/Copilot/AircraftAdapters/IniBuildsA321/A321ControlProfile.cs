@@ -10,6 +10,7 @@ internal static class A321ControlProfile
     public const ulong SeatbeltInputEventHash = 12887035727064807174UL;
     public const ulong NoSmokingInputEventHash = 12889273306186432835UL;
     public const ulong EmergencyExitInputEventHash = 15249578372676866282UL;
+    public const ulong RunwayTurnoffInputEventHash = 346751915044149355UL;
 
     public static ulong GetSignInputEventHash(int selectorIndex) =>
         selectorIndex switch

@@ -65,6 +65,7 @@ internal sealed class CopilotService : Form
     private bool _gsxDepartureRequestedThisFlight;
     private bool _gsxDepartureRequestAccepted;
     private DateTime? _gsxDepartureRequestAcceptedUtc;
+    private bool _gsxGoodEngineStartMenuRequested;
     private ProcedureDefinition? _pendingGsxEngineStartProcedure;
     private bool _gsxMenuOpen;
     private GsxMenuSnapshot _gsxMenu =
@@ -74,6 +75,7 @@ internal sealed class CopilotService : Form
     private readonly object _sayIntentionsVoiceQueueSync = new();
     private Task _sayIntentionsVoiceTail = Task.CompletedTask;
     private int _sayIntentionsIntercomReceivingMask;
+    private int _sayIntentionsIntercomSignalObserved;
     private readonly SemaphoreSlim _sayIntentionsCommsModeGate = new(1, 1);
     private readonly CancellationTokenSource _sayIntentionsCancellation = new();
     private SayIntentionsFlightContext? _sayIntentionsFlight;
@@ -799,6 +801,8 @@ internal sealed class CopilotService : Form
         public double FbwLeftLandingLightCircuit;
         public double FbwRightLandingLightCircuit;
         public double FbwNoseTaxiLightCircuit;
+        public double LeftRunwayTurnoffLightCircuit;
+        public double RightRunwayTurnoffLightCircuit;
         public double ApuRpm;
         public double ApuStarter;
         public double ApuMasterSwitch;
@@ -1243,6 +1247,8 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "CIRCUIT SWITCH ON:18", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "CIRCUIT SWITCH ON:19", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "CIRCUIT SWITCH ON:20", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "CIRCUIT SWITCH ON:21", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "CIRCUIT SWITCH ON:22", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "APU PCT RPM", "Percent", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "APU PCT STARTER", "Percent", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "APU SWITCH", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
@@ -1472,9 +1478,36 @@ internal sealed class CopilotService : Form
                 {
                     AppLog.Write("GSX status: " + string.Join(" | ", _gsxTooltip));
                 }
+                HandleGsxStatusPrompt();
                 UpdateDashboard();
                 break;
         }
+    }
+
+    private void HandleGsxStatusPrompt()
+    {
+        var needsConfirmation =
+            GsxPromptPolicy.RequiresGoodEngineStartMenu(_gsxTooltip);
+        if (!needsConfirmation)
+        {
+            _gsxGoodEngineStartMenuRequested = false;
+            return;
+        }
+
+        if (_gsxGoodEngineStartMenuRequested
+            || _gsxMenuOpen
+            || !_gsxOwnsRemoteControl
+            || !_gsxDepartureRequestAccepted)
+        {
+            return;
+        }
+
+        _gsxGoodEngineStartMenuRequested = true;
+        SetGsxValue(Definition.GsxMenuOpen, 1);
+        AppendDashboardLog(
+            "GSX is waiting for good-engine-start confirmation; opening the response menu.");
+        AppLog.Write(
+            "Opened the GSX menu from its good-engine-start status prompt.");
     }
 
     private void HandleGsxMenuEvent(uint eventData)
@@ -3338,9 +3371,20 @@ internal sealed class CopilotService : Form
             (raw.SayIntentionsIntercom1Receiving != 0 ? 1 : 0)
             | (raw.SayIntentionsIntercom2Receiving != 0 ? 2 : 0)
             | (raw.SayIntentionsIntercom3Receiving != 0 ? 4 : 0);
+        var previousIntercomMask = Volatile.Read(
+            ref _sayIntentionsIntercomReceivingMask);
         Volatile.Write(
             ref _sayIntentionsIntercomReceivingMask,
             sayIntentionsIntercomMask);
+        if (sayIntentionsIntercomMask != 0)
+        {
+            Volatile.Write(ref _sayIntentionsIntercomSignalObserved, 1);
+        }
+        if (sayIntentionsIntercomMask != previousIntercomMask)
+        {
+            AppLog.Write(
+                $"SayIntentions intercom receive mask changed from {previousIntercomMask} to {sayIntentionsIntercomMask}.");
+        }
         _gsxRemoteControlActive = raw.GsxRemoteControl != 0;
         if (_gsxOwnsRemoteControl && !_gsxRemoteControlActive)
         {
@@ -4056,8 +4100,9 @@ internal sealed class CopilotService : Form
                         pmdg.RightLandingLight)
                 : _nativeRightLandingLightSelector,
             RunwayTurnoffLightsOn = isPmdg737 && pmdg != null
-                && pmdg.LeftRunwayTurnoffLight
-                && pmdg.RightRunwayTurnoffLight,
+                ? pmdg.LeftRunwayTurnoffLight && pmdg.RightRunwayTurnoffLight
+                : raw.LeftRunwayTurnoffLightCircuit != 0
+                  && raw.RightRunwayTurnoffLightCircuit != 0,
             TcasAltitudeReportingOn = isFlyByWireAirbus
                 ? ResolveFbwTcasAltitudeReporting(
                     _fbwCommandedTcasAltitudeReporting,
@@ -5307,6 +5352,12 @@ internal sealed class CopilotService : Form
             case "pmdg runway-turnoff off":
                 SetPmdgRunwayTurnoffLights(false);
                 break;
+            case "runway-turnoff on":
+                SetAirbusRunwayTurnoffLights(true);
+                break;
+            case "runway-turnoff off":
+                SetAirbusRunwayTurnoffLights(false);
+                break;
             case "pmdg landing-lights on":
                 SetPmdgLandingLights(true);
                 break;
@@ -5807,6 +5858,43 @@ internal sealed class CopilotService : Form
         FinishOneShot();
     }
 
+    private void SetAirbusRunwayTurnoffLights(bool on)
+    {
+        if (_state == null || _simConnect == null)
+        {
+            AppendDashboardLog("Runway turnoff lights blocked: aircraft state is unavailable.");
+            FinishOneShot(4);
+            return;
+        }
+
+        if (_state.IsFlyByWireA320Neo)
+        {
+            var desired = on ? 1 : 0;
+            SendMobiFlightCommand(
+                $"MF.SimVars.Set.(A:CIRCUIT SWITCH ON:21, Bool) {desired} != if{{ 21 (>K:ELECTRICAL_CIRCUIT_TOGGLE) }} " +
+                $"(A:CIRCUIT SWITCH ON:22, Bool) {desired} != if{{ 22 (>K:ELECTRICAL_CIRCUIT_TOGGLE) }}");
+            SendMobiFlightCommand("MF.DummyCmd");
+        }
+        else
+        {
+            var inputEventHash = _state.IsIniBuildsA321Lr
+                ? A321ControlProfile.RunwayTurnoffInputEventHash
+                : _state.IsIniBuildsA330
+                    ? A330ControlProfile.RunwayTurnoffInputEventHash
+                    : A320RunwayTurnoffProfile.InputEventHash;
+            _simConnect.SetInputEvent(inputEventHash, on ? 1.0 : 0.0);
+        }
+
+        BeginNativeAction(
+            "Runway turnoff lights",
+            state => state.RunwayTurnoffLightsOn == on,
+            false,
+            TimeSpan.FromSeconds(10),
+            on ? "ON" : "OFF");
+        AppLog.Write(
+            $"Executed {_state.Variant} runway turnoff light command: {(on ? "ON" : "OFF")}.");
+    }
+
     private void SetPmdgLandingLights(bool on)
     {
         var commandedPosition = on ? 2f : 0f;
@@ -6099,6 +6187,7 @@ internal sealed class CopilotService : Form
         _gsxDepartureRequestedThisFlight = false;
         _gsxDepartureRequestAccepted = false;
         _gsxDepartureRequestAcceptedUtc = null;
+        _gsxGoodEngineStartMenuRequested = false;
         _pendingGsxEngineStartProcedure = null;
         _pendingGsxAction = null;
         _pendingGsxActionDeadlineUtc = null;
@@ -6461,6 +6550,13 @@ internal sealed class CopilotService : Form
                 priority,
                 DateTime.UtcNow,
                 SayIntentionsVoicePolicy.MaxQueueAge(stepId));
+            if (SayIntentionsVoicePolicy.BypassesQueue(stepId))
+            {
+                _ = SendImmediateSayIntentionsCalloutAsync(
+                    sayIntentionsFlight,
+                    callout);
+                return;
+            }
             lock (_sayIntentionsVoiceQueueSync)
             {
                 _sayIntentionsVoiceTail = PlaySayIntentionsCalloutAfterAsync(
@@ -6472,6 +6568,38 @@ internal sealed class CopilotService : Form
         }
 
         _voiceCalloutQueue?.Enqueue(phrase, priority);
+    }
+
+    private async Task SendImmediateSayIntentionsCalloutAsync(
+        SayIntentionsFlightContext flight,
+        SayIntentionsQueuedCallout callout)
+    {
+        try
+        {
+            if (await _sayIntentionsClient
+                    .SayCopilotCalloutAsync(
+                        flight,
+                        callout.Phrase,
+                        _sayIntentionsCancellation.Token)
+                    .ConfigureAwait(false))
+            {
+                return;
+            }
+        }
+        catch (OperationCanceledException) when (_sayIntentionsCancellation.IsCancellationRequested)
+        {
+            return;
+        }
+        catch (Exception ex) when (ex is HttpRequestException
+                                   or OperationCanceledException
+                                   or ArgumentOutOfRangeException
+                                   or ObjectDisposedException)
+        {
+            AppLog.Write(
+                "Immediate SayIntentions takeoff callout unavailable; using local voice fallback.");
+        }
+
+        _voiceCalloutQueue?.Enqueue(callout.Phrase, callout.Priority);
     }
 
     private async Task PlaySayIntentionsCalloutAfterAsync(
@@ -6562,7 +6690,10 @@ internal sealed class CopilotService : Form
 
     private async Task WaitForSayIntentionsPlaybackAsync()
     {
-        var playbackStartDeadlineUtc = DateTime.UtcNow + TimeSpan.FromSeconds(8);
+        var signalWasObserved =
+            Volatile.Read(ref _sayIntentionsIntercomSignalObserved) != 0;
+        var playbackStartDeadlineUtc = DateTime.UtcNow +
+            (signalWasObserved ? TimeSpan.FromSeconds(8) : TimeSpan.FromSeconds(2));
         while (DateTime.UtcNow < playbackStartDeadlineUtc
                && Volatile.Read(ref _sayIntentionsIntercomReceivingMask) == 0)
         {
@@ -6574,7 +6705,7 @@ internal sealed class CopilotService : Form
         {
             // The API accepted the callout but no playback signal was observed.
             // Keep a small separation so successive requests are never rapid-fired.
-            await Task.Delay(1000, _sayIntentionsCancellation.Token)
+            await Task.Delay(250, _sayIntentionsCancellation.Token)
                 .ConfigureAwait(false);
             return;
         }

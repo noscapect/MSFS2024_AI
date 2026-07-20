@@ -309,7 +309,7 @@ internal static class FbwA320ProcedureLibrary
             "6. Before Takeoff",
             new[]
             {
-                Manual("captain-runway-lights", "Runway turnoff lights ON", "Captain: when cleared to line up, turn runway turnoff lights ON, then confirm.", CrewRole.Captain),
+                Automatic("fo-runway-turnoff-on", "Runway turnoff lights ON", state => state.RunwayTurnoffLightsOn, "runway-turnoff on"),
                 Manual("captain-briefing", "Takeoff briefing complete", "Captain: confirm the takeoff briefing is complete.", CrewRole.Captain),
                 Observe(
                     "fo-cabin-call",

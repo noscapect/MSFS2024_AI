@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Msfs2024Ai.Copilot.Checklists;
+using Msfs2024Ai.Copilot.Domain;
 using Msfs2024Ai.Copilot.Procedures;
 
 namespace Msfs2024Ai.Copilot.Tests;
@@ -7,6 +8,33 @@ namespace Msfs2024Ai.Copilot.Tests;
 [TestClass]
 public sealed class ProcedureCatalogTests
 {
+    [DataTestMethod]
+    [DataRow("A320neo V2")]
+    [DataRow("A321")]
+    [DataRow("A330-300 (GE)")]
+    [DataRow("FlyByWire A32NX")]
+    [DataRow("PMDG 737-800")]
+    public void RunwayTurnoffLightsAreFirstOfficerAutomaticAndVerified(string title)
+    {
+        var state = new AircraftState { Title = title };
+        var step = ProcedureCatalog.ForAircraft(state)
+            .SelectMany(flow => flow.Steps)
+            .First(item => item.Id == "fo-runway-turnoff-on");
+
+        Assert.AreEqual(ProcedureStepKind.AutomaticAction, step.Kind);
+        Assert.AreEqual(CrewRole.FirstOfficer, step.AssignedRole);
+        Assert.IsFalse(step.IsComplete(new AircraftState
+        {
+            Title = title,
+            RunwayTurnoffLightsOn = false
+        }));
+        Assert.IsTrue(step.IsComplete(new AircraftState
+        {
+            Title = title,
+            RunwayTurnoffLightsOn = true
+        }));
+    }
+
     [TestMethod]
     public void Pmdg737UsesBoeingProcedureCatalog()
     {

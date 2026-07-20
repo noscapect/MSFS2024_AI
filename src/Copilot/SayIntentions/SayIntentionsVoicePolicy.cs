@@ -2,6 +2,12 @@ namespace Msfs2024Ai.Copilot.SayIntentions;
 
 internal static class SayIntentionsVoicePolicy
 {
+    public static bool BypassesQueue(string? stepId) =>
+        stepId is "captain-takeoff" or "thrust-set"
+            or "fo-100-knots" or "hundred-knots"
+            or "fo-v1" or "v1"
+            or "fo-rotate" or "rotate";
+
     public static TimeSpan MaxQueueAge(string? stepId)
     {
         if (IsEngineStartCallout(stepId))
@@ -24,6 +30,14 @@ internal static class SayIntentionsVoicePolicy
                 or "fo-reverse-callout"
                 or "fo-decel-callout"
                 or "stable-approach" => TimeSpan.FromSeconds(6),
+            "fo-ground-spoilers" or "fo-ground-spoilers-disarm"
+                or "fo-spoilers-arm"
+                or "fo-takeoff-flaps" or "fo-flaps-takeoff"
+                or "fo-flaps-one" or "fo-flaps-two"
+                or "fo-flaps-three" or "fo-flaps-full"
+                or "fo-flaps-five" or "fo-flaps-fifteen"
+                or "fo-flaps-landing" or "fo-flaps"
+                or "fo-flaps-zero" or "fo-flaps-up" => TimeSpan.FromSeconds(8),
             _ => TimeSpan.FromSeconds(45)
         };
     }

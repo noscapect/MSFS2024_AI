@@ -7,6 +7,7 @@ namespace Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA330;
 /// </summary>
 internal static class A330ControlProfile
 {
+    public const ulong RunwayTurnoffInputEventHash = 346751915044149355UL;
     public const int FlapStepIntervalMilliseconds = 700;
     public const string FlapsRetractOneDetentCommand =
         "MF.SimVars.Set.16384 (A:FLAPS NUM HANDLE POSITIONS, Number) / (>B:AIRLINER_Flaps_Dec)";

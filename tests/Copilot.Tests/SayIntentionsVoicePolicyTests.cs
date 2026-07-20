@@ -31,11 +31,32 @@ public sealed class SayIntentionsVoicePolicyTests
             SayIntentionsVoicePolicy.MaxQueueAge("fo-v1"));
     }
 
-    [TestMethod]
-    public void RoutineCalloutsCanWaitForCabinAudio()
+    [DataTestMethod]
+    [DataRow("fo-ground-spoilers")]
+    [DataRow("fo-flaps-takeoff")]
+    [DataRow("fo-flaps-one")]
+    [DataRow("fo-flaps-full")]
+    [DataRow("fo-flaps-up")]
+    public void ConfigurationCalloutsExpireBeforeTheyBecomeMisleading(string stepId)
     {
         Assert.AreEqual(
-            TimeSpan.FromSeconds(45),
-            SayIntentionsVoicePolicy.MaxQueueAge("fo-flaps-one"));
+            TimeSpan.FromSeconds(8),
+            SayIntentionsVoicePolicy.MaxQueueAge(stepId));
+    }
+
+    [DataTestMethod]
+    [DataRow("thrust-set")]
+    [DataRow("fo-100-knots")]
+    [DataRow("fo-v1")]
+    [DataRow("fo-rotate")]
+    public void TakeoffCalloutsBypassOlderVoiceQueueWork(string stepId)
+    {
+        Assert.IsTrue(SayIntentionsVoicePolicy.BypassesQueue(stepId));
+    }
+
+    [TestMethod]
+    public void ConfigurationCalloutsRemainOrdered()
+    {
+        Assert.IsFalse(SayIntentionsVoicePolicy.BypassesQueue("fo-flaps-one"));
     }
 }

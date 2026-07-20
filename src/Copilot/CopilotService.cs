@@ -64,6 +64,7 @@ internal sealed class CopilotService : Form
     private bool _gsxBoardingRequestedThisFlight;
     private bool _gsxDepartureRequestedThisFlight;
     private bool _gsxDepartureRequestAccepted;
+    private DateTime? _gsxDepartureRequestAcceptedUtc;
     private ProcedureDefinition? _pendingGsxEngineStartProcedure;
     private bool _gsxMenuOpen;
     private GsxMenuSnapshot _gsxMenu =
@@ -424,6 +425,7 @@ internal sealed class CopilotService : Form
     private ComboBox? _replayFlightBox;
     private ListBox? _eventLog;
     private ListBox? _flowList;
+    private Button? _startFirstFlowButton;
     private Button? _startSelectedFlowButton;
     private Button? _confirmCompletedButton;
     private bool _sayIntentionsHandoffInProgress;
@@ -1461,6 +1463,7 @@ internal sealed class CopilotService : Form
                 {
                     AppLog.Write("GSX status: " + string.Join(" | ", _gsxTooltip));
                 }
+                UpdateDashboard();
                 break;
         }
     }
@@ -1578,6 +1581,7 @@ internal sealed class CopilotService : Form
         if (action == GsxDepartureAction.PrepareForDeparture)
         {
             _gsxDepartureRequestAccepted = true;
+            _gsxDepartureRequestAcceptedUtc = DateTime.UtcNow;
         }
         AppendDashboardLog(
             action == GsxDepartureAction.Boarding
@@ -4755,6 +4759,11 @@ internal sealed class CopilotService : Form
             case "procedure cancel":
                 CancelFuelPumpSequence();
                 CancelPendingSayIntentionsAtcRequest();
+                if (_pendingGsxEngineStartProcedure != null)
+                {
+                    _pendingGsxEngineStartProcedure = null;
+                    AppendDashboardLog("Cancelled the queued engine-start flow.");
+                }
                 _procedureRunner.Cancel();
                 FinishOneShot();
                 break;
@@ -5189,6 +5198,7 @@ internal sealed class CopilotService : Form
                 _pendingGsxEngineStartProcedure = definition;
                 AppendDashboardLog(
                     "Flow 4 is waiting for GSX pushback to begin. Engine start will begin automatically after parking-brake release and aircraft movement.");
+                UpdateDashboard();
                 FinishOneShot();
                 return;
             }
@@ -5228,6 +5238,7 @@ internal sealed class CopilotService : Form
 
         var definition = _pendingGsxEngineStartProcedure;
         _pendingGsxEngineStartProcedure = null;
+        _gsxDepartureRequestAcceptedUtc = null;
         AppendDashboardLog(
             "GSX pushback is underway; starting the engine-start flow.");
         StartProcedure(definition);
@@ -5907,6 +5918,7 @@ internal sealed class CopilotService : Form
         _gsxBoardingRequestedThisFlight = false;
         _gsxDepartureRequestedThisFlight = false;
         _gsxDepartureRequestAccepted = false;
+        _gsxDepartureRequestAcceptedUtc = null;
         _pendingGsxEngineStartProcedure = null;
         _pendingGsxAction = null;
         _pendingGsxActionDeadlineUtc = null;
@@ -10508,7 +10520,8 @@ internal sealed class CopilotService : Form
             System.Drawing.Color.FromArgb(34, 148, 96);
         _startSelectedFlowButton.Click += (_, _) =>
         {
-            if (IsProcedureActive(_procedureRunner.Status))
+            if (IsProcedureActive(_procedureRunner.Status)
+                || _pendingGsxEngineStartProcedure != null)
             {
                 return;
             }
@@ -10566,14 +10579,15 @@ internal sealed class CopilotService : Form
             FlowDirection = FlowDirection.LeftToRight,
             Padding = new Padding(0, 6, 0, 0)
         };
-        procedureButtons.Controls.Add(NewProcedureButton(
+        _startFirstFlowButton = NewProcedureButton(
             "Start first flow",
             "procedure start power-up-initial-setup",
             132,
             System.Drawing.Color.FromArgb(39, 130, 87),
             System.Drawing.Color.FromArgb(22, 101, 52),
             System.Drawing.Color.FromArgb(34, 148, 96),
-            emphasize: true));
+            emphasize: true);
+        procedureButtons.Controls.Add(_startFirstFlowButton);
         _confirmCompletedButton = NewProcedureButton(
             "Confirm completed",
             "procedure confirm",
@@ -13114,14 +13128,19 @@ internal sealed class CopilotService : Form
             ? System.Drawing.Color.DarkSlateBlue
             : System.Drawing.Color.DarkRed;
 
-        var definition = _procedureRunner.Definition;
-        var currentStep = _procedureRunner.CurrentStep;
+        var gsxEngineStartPending = _pendingGsxEngineStartProcedure != null;
+        var definition = _pendingGsxEngineStartProcedure ?? _procedureRunner.Definition;
+        var currentStep = gsxEngineStartPending ? null : _procedureRunner.CurrentStep;
         SetStatusBadge(
             _flowBadgeLabel,
-            definition == null
+            gsxEngineStartPending
+                ? $"WAITING FOR GSX - {definition!.Name.Split('.')[0]}"
+                : definition == null
                 ? "FLOW IDLE"
                 : $"{FormatProcedureStatus(_procedureRunner.Status).ToUpperInvariant()} - {definition.Name.Split('.')[0]}",
-            _procedureRunner.Status switch
+            gsxEngineStartPending
+                ? System.Drawing.Color.FromArgb(190, 126, 37)
+                : _procedureRunner.Status switch
             {
                 ProcedureStatus.Running => System.Drawing.Color.FromArgb(39, 130, 87),
                 ProcedureStatus.WaitingForVerification => System.Drawing.Color.FromArgb(40, 95, 150),
@@ -13138,25 +13157,30 @@ internal sealed class CopilotService : Form
         UpdateProcedureStatusBadge();
         UpdateProcedureActionButtons();
         _procedureLabel!.Text =
-            definition == null
+            gsxEngineStartPending
+                ? $"{definition!.Name} - Waiting for GSX pushback"
+                : definition == null
                 ? "None"
                 : $"{definition.Name} - {_procedureRunner.Status} - {definition.AutomationSummary}";
         _stepLabel!.Text =
-            currentStep == null
+            gsxEngineStartPending
+                ? "Current step: GSX pushback preparation"
+                : currentStep == null
                 ? "No active step"
                 : $"Current step: {currentStep.Label} " +
                   $"({FormatCrewRole(currentStep.AssignedRole)})";
-        _waitingForLabel!.Text = FormatWaitingReason(
-            currentStep,
-            _state,
-            _procedureRunner.Status);
+        _waitingForLabel!.Text = gsxEngineStartPending
+            ? FormatGsxPushbackWaitingReason()
+            : FormatWaitingReason(currentStep, _state, _procedureRunner.Status);
         _waitingForLabel.ForeColor = _procedureRunner.Status == ProcedureStatus.Failed
             ? System.Drawing.Color.DarkRed
-            : System.Drawing.Color.DimGray;
+            : gsxEngineStartPending
+                ? System.Drawing.Color.DarkOrange
+                : System.Drawing.Color.DimGray;
         _procedureProgress!.Maximum = Math.Max(1, definition?.Steps.Count ?? 1);
         _procedureProgress.Value = Math.Min(
             _procedureProgress.Maximum,
-            _procedureRunner.CompletedStepCount);
+            gsxEngineStartPending ? 0 : _procedureRunner.CompletedStepCount);
 
         var recommendation = FlowRecommendationEngine.Recommend(
             _state,
@@ -13463,6 +13487,13 @@ internal sealed class CopilotService : Form
             return;
         }
 
+        if (_pendingGsxEngineStartProcedure != null)
+        {
+            _statusBadgeLabel.Text = "Status: Waiting for GSX";
+            _statusBadgeLabel.ForeColor = System.Drawing.Color.DarkOrange;
+            return;
+        }
+
         var status = _procedureRunner.Status;
         _statusBadgeLabel.Text = $"Status: {FormatProcedureStatus(status)}";
         _statusBadgeLabel.ForeColor = status switch
@@ -13481,15 +13512,28 @@ internal sealed class CopilotService : Form
     {
         var status = _procedureRunner.Status;
         var active = IsProcedureActive(status);
+        var waitingForGsx = _pendingGsxEngineStartProcedure != null;
+
+        if (_startFirstFlowButton != null)
+        {
+            _startFirstFlowButton.Enabled = !waitingForGsx;
+            _startFirstFlowButton.BackColor = waitingForGsx
+                ? System.Drawing.Color.FromArgb(107, 114, 128)
+                : System.Drawing.Color.FromArgb(39, 130, 87);
+        }
 
         if (_startSelectedFlowButton != null)
         {
-            _startSelectedFlowButton.Text = status == ProcedureStatus.Paused
+            _startSelectedFlowButton.Text = waitingForGsx
+                ? "Waiting for GSX"
+                : status == ProcedureStatus.Paused
                 ? "Flow paused"
                 : active
                     ? "Flow running"
                     : "Start selected flow";
-            _startSelectedFlowButton.BackColor = status switch
+            _startSelectedFlowButton.BackColor = waitingForGsx
+                ? System.Drawing.Color.FromArgb(190, 126, 37)
+                : status switch
             {
                 ProcedureStatus.Paused => System.Drawing.Color.FromArgb(151, 110, 35),
                 ProcedureStatus.Running => System.Drawing.Color.FromArgb(30, 64, 175),
@@ -13498,27 +13542,39 @@ internal sealed class CopilotService : Form
                 _ => System.Drawing.Color.FromArgb(39, 130, 87)
             };
             _startSelectedFlowButton.ForeColor = System.Drawing.Color.White;
-            _startSelectedFlowButton.FlatAppearance.BorderSize = active ? 2 : 0;
+            _startSelectedFlowButton.Enabled = !waitingForGsx;
+            _startSelectedFlowButton.FlatAppearance.BorderSize = active || waitingForGsx ? 2 : 0;
             _startSelectedFlowButton.FlatAppearance.BorderColor =
-                active ? System.Drawing.Color.FromArgb(15, 23, 42) : _startSelectedFlowButton.BackColor;
+                active || waitingForGsx
+                    ? System.Drawing.Color.FromArgb(15, 23, 42)
+                    : _startSelectedFlowButton.BackColor;
         }
 
         if (_confirmCompletedButton != null)
         {
             var waitingForPilot = status == ProcedureStatus.WaitingForManualAction;
             var waitingForAtc = _pendingSayIntentionsAtcStepId != null;
-            _confirmCompletedButton.BackColor = waitingForPilot
+            _confirmCompletedButton.BackColor = waitingForGsx
+                ? System.Drawing.Color.FromArgb(107, 114, 128)
+                : waitingForPilot
                 ? System.Drawing.Color.FromArgb(194, 65, 12)
                 : System.Drawing.Color.FromArgb(39, 130, 87);
-            _confirmCompletedButton.FlatAppearance.MouseDownBackColor = waitingForPilot
+            _confirmCompletedButton.FlatAppearance.MouseDownBackColor = waitingForGsx
+                ? System.Drawing.Color.FromArgb(107, 114, 128)
+                : waitingForPilot
                 ? System.Drawing.Color.FromArgb(146, 64, 14)
                 : System.Drawing.Color.FromArgb(22, 101, 52);
-            _confirmCompletedButton.FlatAppearance.MouseOverBackColor = waitingForPilot
+            _confirmCompletedButton.FlatAppearance.MouseOverBackColor = waitingForGsx
+                ? System.Drawing.Color.FromArgb(107, 114, 128)
+                : waitingForPilot
                 ? System.Drawing.Color.FromArgb(245, 158, 11)
                 : System.Drawing.Color.FromArgb(34, 148, 96);
-            _confirmCompletedButton.Enabled = !_sayIntentionsHandoffInProgress
+            _confirmCompletedButton.Enabled = !waitingForGsx
+                                              && !_sayIntentionsHandoffInProgress
                                               && !waitingForAtc;
-            _confirmCompletedButton.Text = _sayIntentionsHandoffInProgress
+            _confirmCompletedButton.Text = waitingForGsx
+                ? "Waiting for GSX..."
+                : _sayIntentionsHandoffInProgress
                 ? "Handing ATC to F/O..."
                 : waitingForAtc
                     ? "Waiting for ATC..."
@@ -13526,6 +13582,19 @@ internal sealed class CopilotService : Form
                     ? "Confirm now"
                     : "Confirm completed";
         }
+    }
+
+    private string FormatGsxPushbackWaitingReason()
+    {
+        var status = _gsxTooltip.Count > 0
+            ? string.Join(" | ", _gsxTooltip)
+            : "GSX is preparing the tug.";
+        var appearsStalled = _gsxDepartureRequestAcceptedUtc.HasValue
+                             && DateTime.UtcNow - _gsxDepartureRequestAcceptedUtc.Value
+                             >= TimeSpan.FromMinutes(2);
+        return appearsStalled
+            ? $"Waiting for GSX: {status} GSX has not progressed for over two minutes; check the GSX toolbar/status."
+            : $"Waiting for GSX: {status} Flow 4 will start automatically when pushback movement begins.";
     }
 
     private static bool IsProcedureActive(ProcedureStatus status) =>

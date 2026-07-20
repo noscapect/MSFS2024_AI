@@ -36,6 +36,12 @@ guard, and the two initial request hooks are implemented. Parking-brake and
 engine-start prompt handling still requires live GSX menu/status captures.
 Flow 4 is sequenced behind confirmed pushback movement whenever GSX departure
 coordination is enabled, preventing engine start at the stand before pushback.
+Live testing confirmed that Remote Control cannot be used as a one-way service
+launcher. After the tug connects, GSX emits additional menus (for example,
+deicing and pushback direction) to the registered remote controller. The app
+must display every unhandled menu dynamically and return the user's selected
+zero-based choice through `L:FSDT_GSX_MENU_CHOICE`; otherwise GSX remains at
+`Locking gear` until its hidden prompt times out.
 
 ## Confirmed capabilities
 

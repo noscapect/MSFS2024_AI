@@ -70,6 +70,7 @@ internal sealed class CopilotService : Form
     private GsxMenuSnapshot _gsxMenu =
         new(string.Empty, Array.Empty<string>());
     private IReadOnlyList<string> _gsxTooltip = Array.Empty<string>();
+    private Form? _gsxChoiceDialog;
     private readonly SemaphoreSlim _sayIntentionsVoiceGate = new(1, 1);
     private readonly SemaphoreSlim _sayIntentionsCommsModeGate = new(1, 1);
     private readonly CancellationTokenSource _sayIntentionsCancellation = new();
@@ -1478,13 +1479,177 @@ internal sealed class CopilotService : Form
                                string.Empty,
                                Array.Empty<string>());
                 _gsxMenuOpen = !_gsxMenu.IsEmpty;
+                if (_gsxMenuOpen)
+                {
+                    AppLog.Write(
+                        $"GSX menu: {_gsxMenu.Title} | "
+                        + string.Join(" | ", _gsxMenu.Choices));
+                }
                 TrySelectPendingGsxAction();
+                if (_gsxMenuOpen)
+                {
+                    ShowGsxChoiceDialog(_gsxMenu);
+                }
                 break;
             case 2:
             case 3:
             case 4:
                 _gsxMenuOpen = false;
+                CloseGsxChoiceDialog();
                 break;
+        }
+    }
+
+    private void ShowGsxChoiceDialog(GsxMenuSnapshot menu)
+    {
+        if (!_showUi || menu.IsEmpty || _gsxChoiceDialog != null)
+        {
+            return;
+        }
+
+        var dialog = new Form
+        {
+            Text = "GSX response required",
+            Width = 620,
+            Height = 430,
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MinimizeBox = false,
+            MaximizeBox = false,
+            ShowInTaskbar = false
+        };
+        _gsxChoiceDialog = dialog;
+        var layout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(16),
+            ColumnCount = 1,
+            RowCount = 4
+        };
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        dialog.Controls.Add(layout);
+        layout.Controls.Add(new Label
+        {
+            Text = menu.Title,
+            AutoSize = true,
+            Font = new System.Drawing.Font(
+                Font.FontFamily,
+                12,
+                System.Drawing.FontStyle.Bold),
+            Margin = new Padding(0, 0, 0, 8)
+        });
+        layout.Controls.Add(new Label
+        {
+            Text = "GSX is waiting for a response. Select the required option to continue the active service.",
+            AutoSize = true,
+            MaximumSize = new System.Drawing.Size(560, 0),
+            ForeColor = System.Drawing.Color.DimGray,
+            Margin = new Padding(0, 0, 0, 10)
+        });
+        var choices = new ListBox
+        {
+            Dock = DockStyle.Fill,
+            IntegralHeight = false
+        };
+        foreach (var choice in menu.Choices)
+        {
+            choices.Items.Add(choice);
+        }
+        if (choices.Items.Count > 0)
+        {
+            choices.SelectedIndex = 0;
+        }
+        layout.Controls.Add(choices);
+
+        var buttons = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            Margin = new Padding(0, 12, 0, 0)
+        };
+        var send = new Button
+        {
+            Text = "Send selection to GSX",
+            AutoSize = true,
+            BackColor = System.Drawing.Color.FromArgb(39, 130, 87),
+            ForeColor = System.Drawing.Color.White,
+            FlatStyle = FlatStyle.Flat,
+            UseVisualStyleBackColor = false
+        };
+        var cancel = new Button { Text = "Cancel GSX prompt", AutoSize = true };
+        send.Click += (_, _) =>
+        {
+            if (choices.SelectedIndex < 0)
+            {
+                return;
+            }
+
+            SendGsxMenuChoice(choices.SelectedIndex, choices.SelectedItem?.ToString());
+            dialog.Close();
+        };
+        cancel.Click += (_, _) =>
+        {
+            SendGsxMenuChoice(-1, "cancelled");
+            dialog.Close();
+        };
+        buttons.Controls.Add(send);
+        buttons.Controls.Add(cancel);
+        layout.Controls.Add(buttons);
+        dialog.FormClosing += (_, _) =>
+        {
+            if (_gsxMenuOpen && ReferenceEquals(_gsxChoiceDialog, dialog))
+            {
+                SendGsxMenuChoice(-1, "cancelled");
+            }
+        };
+        dialog.FormClosed += (_, _) =>
+        {
+            if (ReferenceEquals(_gsxChoiceDialog, dialog))
+            {
+                _gsxChoiceDialog = null;
+            }
+        };
+        AppendDashboardLog($"GSX response required: {menu.Title}.");
+        dialog.Show(this);
+        dialog.Activate();
+    }
+
+    private void SendGsxMenuChoice(int choice, string? label)
+    {
+        SetGsxValue(Definition.GsxMenuChoice, choice);
+        _gsxMenuOpen = false;
+        if (_pendingGsxAction.HasValue)
+        {
+            if (_pendingGsxAction.Value == GsxDepartureAction.PrepareForDeparture
+                && choice >= 0)
+            {
+                _gsxDepartureRequestAccepted = true;
+                _gsxDepartureRequestAcceptedUtc = DateTime.UtcNow;
+            }
+            _pendingGsxAction = null;
+            _pendingGsxActionDeadlineUtc = null;
+        }
+        AppendDashboardLog(
+            choice >= 0
+                ? $"GSX selection sent: {label ?? $"option {choice + 1}"}."
+                : "GSX prompt cancelled.");
+    }
+
+    private void CloseGsxChoiceDialog()
+    {
+        if (_gsxChoiceDialog == null)
+        {
+            return;
+        }
+
+        var dialog = _gsxChoiceDialog;
+        _gsxChoiceDialog = null;
+        if (!dialog.IsDisposed)
+        {
+            dialog.Close();
         }
     }
 

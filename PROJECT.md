@@ -240,6 +240,11 @@ checkpoint can request GSX **Prepare for Pushback and Departure**.
 When GSX departure coordination is active, an early Flow 4 selection remains
 pending until the parking brake is released and aircraft movement confirms
 that pushback is underway; engine start then begins automatically.
+GSX Remote Control is fully bidirectional: every secondary menu emitted by
+GSX is shown in a VFO response dialog and the selected zero-based choice is
+returned to GSX. This is required for prompts such as deicing and pushback
+direction; handling only the first service menu causes GSX to stop after the
+tug connects and locks the nose gear.
 GSX ownership is recorded in a short-lived local lease. A replacement VFO
 process can recover its own interrupted session automatically, while an
 unknown existing owner is never overridden silently. `Manage GSX` exposes an

@@ -224,6 +224,27 @@ configured SayIntentions First Officer audibly request clearance, produces an
 audible ATC response and First Officer readback, and allows the VFO flow to
 verify the exchange without controlling the radios.
 
+## GSX integration
+
+GSX Pro departure integration is under development on
+`feature/gsx-integration`. GSX remains the owner of all passenger, fuel,
+cargo, catering, door, timing, airport-profile, and aircraft-profile choices.
+The Virtual First Officer only coordinates natural departure milestones.
+
+The initial implementation follows the locally installed official GSX Remote
+Control SDK contract. It provides installation and Couatl discovery, passive
+menu/status observation, Remote Control ownership protection, dynamic menu
+matching, and non-blocking fallback. Flow 2 can request the user-configured
+GSX boarding operation. Completing the existing pushback/start-clearance
+checkpoint can request GSX **Prepare for Pushback and Departure**.
+
+The app must not hardcode GSX menu indexes, duplicate an active GSX operation,
+take Remote Control away from another add-on, or prevent a flight when GSX is
+unavailable. Follow-up pushback prompts, parking-brake handling, and
+good-engine-start responses require live GSX capture and validation before
+automation. Arrival integration is deliberately deferred until the departure
+sequence is complete.
+
 ## Architecture and stability boundary
 
 The application deliberately shares the user experience and normalized
@@ -292,9 +313,9 @@ the Release build and the UI does not identify Debug versus Release.
 
 - Continue regression validation of SayIntentions exchanges and the A330
   profile after simulator or aircraft updates
-- Add GSX Pro ground-service integration using its official bidirectional
-  Remote Control SDK; feasibility research is in
-  `docs/GSX_INTEGRATION_FEASIBILITY.md`
+- Complete and live-validate the GSX Pro departure coordinator, then design
+  arrival integration. Feasibility research is in
+  `docs/GSX_INTEGRATION_FEASIBILITY.md`.
 - Improve interactive checklist and crew-audio behavior
 - Revisit FlyByWire A380X support only on a dedicated development branch
 - Add further aircraft only with a separate adapter/procedure/checklist and a

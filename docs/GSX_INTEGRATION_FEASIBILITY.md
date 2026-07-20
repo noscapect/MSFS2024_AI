@@ -17,6 +17,24 @@ uses SimConnect, GSX LVars, two GSX events, and the dynamically generated GSX
 menu and tooltip files. This is substantially safer than automating toolbar
 clicks or guessing undocumented aircraft variables.
 
+## Development status
+
+Implementation started on `feature/gsx-integration`. The agreed first scope is
+intentionally smaller than complete GSX automation:
+
+- GSX keeps all service-depth and timing configuration.
+- The app requests boarding during preflight when enabled.
+- The app requests **Prepare for Pushback and Departure** after the existing
+  ATC clearance checkpoint.
+- The app will handle later GSX questions only when the answer is unambiguous
+  and belongs to the First Officer; captain actions remain prompted and
+  monitored.
+- Arrival services remain deferred until this departure path is live tested.
+
+The protocol proof, settings UI, Couatl status, dynamic menu parser, ownership
+guard, and the two initial request hooks are implemented. Parking-brake and
+engine-start prompt handling still requires live GSX menu/status captures.
+
 ## Confirmed capabilities
 
 The official interface can:

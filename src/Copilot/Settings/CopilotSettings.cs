@@ -37,4 +37,7 @@ public sealed class CopilotSettings
     public bool SimBriefAutoImportOnNewFlight { get; set; }
     public bool UseSayIntentionsVoiceCallouts { get; set; }
     public bool UseSayIntentionsCopilotCommunications { get; set; } = true;
+    public bool EnableGsxIntegration { get; set; } = true;
+    public bool GsxAutomaticallyRequestBoarding { get; set; } = true;
+    public bool GsxAutomaticallyPrepareDeparture { get; set; } = true;
 }

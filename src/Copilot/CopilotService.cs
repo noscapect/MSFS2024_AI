@@ -9,6 +9,7 @@ using Msfs2024Ai.Copilot.Checklists;
 using Msfs2024Ai.Copilot.Controls;
 using Msfs2024Ai.Copilot.Diagnostics;
 using Msfs2024Ai.Copilot.Domain;
+using Msfs2024Ai.Copilot.Gsx;
 using Msfs2024Ai.Copilot.Procedures;
 using Msfs2024Ai.Copilot.Settings;
 using Msfs2024Ai.Copilot.SayIntentions;
@@ -52,6 +53,19 @@ internal sealed class CopilotService : Form
     private readonly ProcedureRunner _procedureRunner;
     private VoiceCalloutQueue? _voiceCalloutQueue;
     private readonly SayIntentionsClient _sayIntentionsClient = new();
+    private readonly GsxInstallation? _gsxInstallation = GsxInstallation.Discover();
+    private GsxFileReader? _gsxFileReader;
+    private bool _gsxCouatlStarted;
+    private bool _gsxRemoteControlActive;
+    private bool _gsxOwnsRemoteControl;
+    private GsxDepartureAction? _pendingGsxAction;
+    private DateTime? _pendingGsxActionDeadlineUtc;
+    private bool _gsxBoardingRequestedThisFlight;
+    private bool _gsxDepartureRequestedThisFlight;
+    private bool _gsxMenuOpen;
+    private GsxMenuSnapshot _gsxMenu =
+        new(string.Empty, Array.Empty<string>());
+    private IReadOnlyList<string> _gsxTooltip = Array.Empty<string>();
     private readonly SemaphoreSlim _sayIntentionsVoiceGate = new(1, 1);
     private readonly SemaphoreSlim _sayIntentionsCommsModeGate = new(1, 1);
     private readonly CancellationTokenSource _sayIntentionsCancellation = new();
@@ -373,6 +387,7 @@ internal sealed class CopilotService : Form
     private Label? _adapterLabel;
     private Label? _simBriefStatusLabel;
     private Label? _sayIntentionsStatusLabel;
+    private Label? _gsxStatusLabel;
     private Label? _simBadgeLabel;
     private Label? _aircraftBadgeLabel;
     private Label? _adapterBadgeLabel;
@@ -380,6 +395,7 @@ internal sealed class CopilotService : Form
     private Label? _versionBadgeLabel;
     private Label? _simBriefBadgeLabel;
     private Label? _sayIntentionsBadgeLabel;
+    private Label? _gsxBadgeLabel;
     private PictureBox? _aircraftThumbnailBox;
     private Label? _aircraftCardTitleLabel;
     private Label? _aircraftCardVariationLabel;
@@ -417,7 +433,10 @@ internal sealed class CopilotService : Form
 
     private enum Definition
     {
-        AircraftState
+        AircraftState,
+        GsxRemoteControl = 400,
+        GsxMenuOpen = 401,
+        GsxMenuChoice = 402
     }
 
     private enum Request
@@ -689,7 +708,14 @@ internal sealed class CopilotService : Form
         CabinSeatbeltsToggle,
         GearUp,
         GearDown,
-        RotorBrake
+        RotorBrake,
+        GsxExternalSystemSet = 400,
+        GsxExternalSystemToggle = 401
+    }
+
+    private enum NotificationGroup
+    {
+        Gsx = 400
     }
 
     private enum Priority
@@ -857,6 +883,19 @@ internal sealed class CopilotService : Form
         public double Nav1DmeNm;
         public double Nav2DmeNm;
         public double TotalFuelWeightPounds;
+        public double GsxCouatlStarted;
+        public double GsxRemoteControl;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    private struct GsxValue
+    {
+        public GsxValue(double value)
+        {
+            Value = value;
+        }
+
+        public double Value;
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -1032,6 +1071,7 @@ internal sealed class CopilotService : Form
             () => _settings.AutomationPolicy);
         _procedureRunner.Changed += OnProcedureChanged;
         _procedureRunner.StepCompleted += SpeakProcedureCallout;
+        _procedureRunner.StepCompleted += OnProcedureStepCompleted;
         try
         {
             _voiceCalloutQueue = new VoiceCalloutQueue();
@@ -1083,6 +1123,7 @@ internal sealed class CopilotService : Form
             _simConnect.OnRecvSimobjectData += OnAircraftData;
             _simConnect.OnRecvClientData += OnClientData;
             _simConnect.OnRecvGetInputEvent += OnGetInputEvent;
+            _simConnect.OnRecvEvent += OnGsxEvent;
         }
         catch (COMException exception)
         {
@@ -1251,6 +1292,8 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "NAV DME:1", "Nautical miles", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "NAV DME:2", "Nautical miles", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "FUEL TOTAL QUANTITY WEIGHT", "Pounds", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:FSDT_GSX_COUATL_STARTED", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:FSDT_GSX_SET_REMOTECONTROL", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.RegisterDataDefineStruct<AircraftData>(Definition.AircraftState);
         sender.MapClientEventToSimEvent(CopilotEvent.SetExternalPower, "SET_EXTERNAL_POWER");
         sender.MapClientEventToSimEvent(CopilotEvent.SetBeacon, "BEACON_LIGHTS_SET");
@@ -1266,6 +1309,7 @@ internal sealed class CopilotService : Form
         sender.MapClientEventToSimEvent(CopilotEvent.GearUp, "GEAR_UP");
         sender.MapClientEventToSimEvent(CopilotEvent.GearDown, "GEAR_DOWN");
         sender.MapClientEventToSimEvent(CopilotEvent.RotorBrake, "ROTOR_BRAKE");
+        InitializeGsxProtocol(sender);
         InitializeMobiFlight(sender);
         InitializePmdgNg3Sdk(sender);
 
@@ -1340,6 +1384,241 @@ internal sealed class CopilotService : Form
         {
             StartConsoleReader();
         }
+    }
+
+    private void InitializeGsxProtocol(SimConnect sender)
+    {
+        if (_gsxInstallation == null)
+        {
+            return;
+        }
+
+        sender.AddToDataDefinition(
+            Definition.GsxRemoteControl,
+            "L:FSDT_GSX_SET_REMOTECONTROL",
+            "Number",
+            SIMCONNECT_DATATYPE.FLOAT64,
+            0,
+            SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(
+            Definition.GsxMenuOpen,
+            "L:FSDT_GSX_MENU_OPEN",
+            "Number",
+            SIMCONNECT_DATATYPE.FLOAT64,
+            0,
+            SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(
+            Definition.GsxMenuChoice,
+            "L:FSDT_GSX_MENU_CHOICE",
+            "Number",
+            SIMCONNECT_DATATYPE.FLOAT64,
+            0,
+            SimConnect.SIMCONNECT_UNUSED);
+        sender.RegisterDataDefineStruct<GsxValue>(Definition.GsxRemoteControl);
+        sender.RegisterDataDefineStruct<GsxValue>(Definition.GsxMenuOpen);
+        sender.RegisterDataDefineStruct<GsxValue>(Definition.GsxMenuChoice);
+        sender.MapClientEventToSimEvent(
+            CopilotEvent.GsxExternalSystemSet,
+            "EXTERNAL_SYSTEM_SET");
+        sender.MapClientEventToSimEvent(
+            CopilotEvent.GsxExternalSystemToggle,
+            "EXTERNAL_SYSTEM_TOGGLE");
+        sender.AddClientEventToNotificationGroup(
+            NotificationGroup.Gsx,
+            CopilotEvent.GsxExternalSystemSet,
+            false);
+        sender.AddClientEventToNotificationGroup(
+            NotificationGroup.Gsx,
+            CopilotEvent.GsxExternalSystemToggle,
+            false);
+        sender.SetNotificationGroupPriority(
+            NotificationGroup.Gsx,
+            (uint)Priority.Highest);
+
+        AppLog.Write(
+            "GSX protocol registered in passive mode; Remote Control has not been claimed.");
+    }
+
+    private void OnGsxEvent(SimConnect sender, SIMCONNECT_RECV_EVENT data)
+    {
+        if (_gsxInstallation == null || !_settings.EnableGsxIntegration)
+        {
+            return;
+        }
+
+        switch ((CopilotEvent)data.uEventID)
+        {
+            case CopilotEvent.GsxExternalSystemToggle:
+                HandleGsxMenuEvent(data.dwData);
+                break;
+            case CopilotEvent.GsxExternalSystemSet:
+                _gsxTooltip = _gsxFileReader?.ReadTooltip()
+                              ?? Array.Empty<string>();
+                if (_gsxTooltip.Count > 0)
+                {
+                    AppLog.Write("GSX status: " + string.Join(" | ", _gsxTooltip));
+                }
+                break;
+        }
+    }
+
+    private void HandleGsxMenuEvent(uint eventData)
+    {
+        switch (eventData)
+        {
+            case 1:
+                _gsxMenu = _gsxFileReader?.ReadMenu()
+                           ?? new GsxMenuSnapshot(
+                               string.Empty,
+                               Array.Empty<string>());
+                _gsxMenuOpen = !_gsxMenu.IsEmpty;
+                TrySelectPendingGsxAction();
+                break;
+            case 2:
+            case 3:
+            case 4:
+                _gsxMenuOpen = false;
+                break;
+        }
+    }
+
+    private bool BeginGsxAction(GsxDepartureAction action)
+    {
+        if (!_settings.EnableGsxIntegration)
+        {
+            AppendDashboardLog("GSX integration is disabled; use GSX manually if desired.");
+            return false;
+        }
+        if (_gsxInstallation == null)
+        {
+            AppendDashboardLog("GSX is not installed; the normal flight flow remains available.");
+            return false;
+        }
+        if (!_gsxCouatlStarted || _simConnect == null)
+        {
+            AppendDashboardLog("GSX Couatl is not ready; use GSX manually or retry shortly.");
+            return false;
+        }
+        if (_gsxRemoteControlActive && !_gsxOwnsRemoteControl)
+        {
+            AppendDashboardLog(
+                "GSX Remote Control is already in use by another add-on; no request was sent.");
+            return false;
+        }
+        if (_pendingGsxAction.HasValue)
+        {
+            AppendDashboardLog("A GSX departure request is already pending.");
+            return false;
+        }
+
+        _pendingGsxAction = action;
+        _pendingGsxActionDeadlineUtc = DateTime.UtcNow.AddSeconds(20);
+        if (!_gsxOwnsRemoteControl)
+        {
+            SetGsxValue(Definition.GsxRemoteControl, 1);
+            _gsxOwnsRemoteControl = true;
+            _gsxRemoteControlActive = true;
+        }
+        UpdateGsxStatus(true);
+
+        var timer = new System.Windows.Forms.Timer { Interval = 500 };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            SetGsxValue(Definition.GsxMenuOpen, 1);
+            _nativePulseTimers.Remove(timer);
+            timer.Dispose();
+        };
+        _nativePulseTimers.Add(timer);
+        timer.Start();
+        AppendDashboardLog(
+            action == GsxDepartureAction.Boarding
+                ? "Requesting boarding through GSX."
+                : "Requesting GSX preparation for pushback and departure.");
+        return true;
+    }
+
+    private void TrySelectPendingGsxAction()
+    {
+        if (!_pendingGsxAction.HasValue || !_gsxMenuOpen)
+        {
+            return;
+        }
+        if (_pendingGsxActionDeadlineUtc.HasValue
+            && DateTime.UtcNow >= _pendingGsxActionDeadlineUtc.Value)
+        {
+            AppendDashboardLog(
+                "GSX did not provide the expected service menu; use GSX manually or retry.");
+            _pendingGsxAction = null;
+            _pendingGsxActionDeadlineUtc = null;
+            return;
+        }
+
+        var choice = GsxDepartureCoordinator.FindChoice(
+            _gsxMenu,
+            _pendingGsxAction.Value);
+        if (!choice.HasValue)
+        {
+            AppLog.Write(
+                $"GSX menu '{_gsxMenu.Title}' did not contain the pending "
+                + $"{_pendingGsxAction.Value} action. Choices: "
+                + string.Join(" | ", _gsxMenu.Choices));
+            return;
+        }
+
+        var action = _pendingGsxAction.Value;
+        SetGsxValue(Definition.GsxMenuChoice, choice.Value);
+        _pendingGsxAction = null;
+        _pendingGsxActionDeadlineUtc = null;
+        _gsxMenuOpen = false;
+        AppendDashboardLog(
+            action == GsxDepartureAction.Boarding
+                ? "GSX boarding request accepted."
+                : "GSX departure preparation request accepted.");
+    }
+
+    private void SetGsxValue(Definition definition, double value)
+    {
+        _simConnect?.SetDataOnSimObject(
+            definition,
+            SimConnect.SIMCONNECT_OBJECT_ID_USER,
+            SIMCONNECT_DATA_SET_FLAG.DEFAULT,
+            new GsxValue(value));
+    }
+
+    private void CheckGsxPendingTimeout()
+    {
+        if (!_pendingGsxActionDeadlineUtc.HasValue
+            || DateTime.UtcNow < _pendingGsxActionDeadlineUtc.Value)
+        {
+            return;
+        }
+
+        AppendDashboardLog(
+            "GSX did not provide the expected service menu; use GSX manually or retry.");
+        _pendingGsxAction = null;
+        _pendingGsxActionDeadlineUtc = null;
+    }
+
+    private void ReleaseGsxRemoteControl()
+    {
+        if (!_gsxOwnsRemoteControl || _simConnect == null)
+        {
+            return;
+        }
+
+        try
+        {
+            SetGsxValue(Definition.GsxRemoteControl, 0);
+        }
+        catch (COMException exception)
+        {
+            AppLog.Write($"Could not release GSX Remote Control: {exception.Message}");
+        }
+        _gsxOwnsRemoteControl = false;
+        _gsxRemoteControlActive = false;
+        _pendingGsxAction = null;
+        _pendingGsxActionDeadlineUtc = null;
     }
 
     private void InitializeMobiFlight(SimConnect sender)
@@ -2853,6 +3132,13 @@ internal sealed class CopilotService : Form
         }
 
         var raw = (AircraftData)data.dwData[0];
+        _gsxRemoteControlActive = raw.GsxRemoteControl != 0;
+        if (_gsxOwnsRemoteControl && !_gsxRemoteControlActive)
+        {
+            _gsxOwnsRemoteControl = false;
+        }
+        UpdateGsxStatus(raw.GsxCouatlStarted != 0);
+        CheckGsxPendingTimeout();
         var approachDistance = ResolveApproachDistance(raw);
         var aircraftVariant = AircraftVariantResolver.Resolve(
             raw.Title,
@@ -5527,6 +5813,10 @@ internal sealed class CopilotService : Form
         _procedureRunner.Cancel();
         ClearCommandedAircraftState();
         _completedProcedureIds.Clear();
+        _gsxBoardingRequestedThisFlight = false;
+        _gsxDepartureRequestedThisFlight = false;
+        _pendingGsxAction = null;
+        _pendingGsxActionDeadlineUtc = null;
         _procedureSession.ResetProgress(DateTime.UtcNow);
         _simBriefFlightPlan = null;
         ProcedureSessionStore.Save(_procedureSession);
@@ -5707,6 +5997,20 @@ internal sealed class CopilotService : Form
 
     private void OnProcedureChanged()
     {
+        if (!_gsxBoardingRequestedThisFlight
+            && _settings.GsxAutomaticallyRequestBoarding
+            && string.Equals(
+                _procedureRunner.Definition?.Id,
+                "flight-computer-preflight",
+                StringComparison.OrdinalIgnoreCase)
+            && _procedureRunner.Status is ProcedureStatus.Running
+                or ProcedureStatus.WaitingForManualAction
+                or ProcedureStatus.WaitingForVerification)
+        {
+            _gsxBoardingRequestedThisFlight =
+                BeginGsxAction(GsxDepartureAction.Boarding);
+        }
+
         var completedDefinition = _procedureRunner.Status == ProcedureStatus.Completed
             ? _procedureRunner.Definition
             : null;
@@ -5729,6 +6033,22 @@ internal sealed class CopilotService : Form
                 $"{completedDefinition!.Name} complete; {nextFlow.Name} will start automatically.");
             _commands.Enqueue($"procedure start {nextFlow.Id}");
         }
+    }
+
+    private void OnProcedureStepCompleted(ProcedureStep step)
+    {
+        if (_gsxDepartureRequestedThisFlight
+            || !_settings.GsxAutomaticallyPrepareDeparture
+            || !string.Equals(
+                step.Id,
+                "captain-pushback-clearance",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _gsxDepartureRequestedThisFlight =
+            BeginGsxAction(GsxDepartureAction.PrepareForDeparture);
     }
 
     private void SaveProcedureSession()
@@ -9654,6 +9974,8 @@ internal sealed class CopilotService : Form
         topStatusBar.Controls.Add(_simBriefBadgeLabel);
         _sayIntentionsBadgeLabel = NewStatusBadge("SAYINTENTIONS CHECKING", System.Drawing.Color.DarkGoldenrod);
         topStatusBar.Controls.Add(_sayIntentionsBadgeLabel);
+        _gsxBadgeLabel = NewStatusBadge("GSX CHECKING", System.Drawing.Color.DarkGoldenrod);
+        topStatusBar.Controls.Add(_gsxBadgeLabel);
         topStatusBar.Controls.Add(_versionBadgeLabel);
         root.Controls.Add(topStatusBar);
         UpdateSimBriefStatus();
@@ -9695,6 +10017,10 @@ internal sealed class CopilotService : Form
             statusPanel,
             "SayIntentions",
             "Client not detected - optional integration inactive.");
+        _gsxStatusLabel = AddDashboardRow(
+            statusPanel,
+            "GSX",
+            GsxStatusText());
         var integrationsButton = new Button
         {
             Text = "Manage\r\nintegrations",
@@ -9710,11 +10036,12 @@ internal sealed class CopilotService : Form
             System.Drawing.Color.FromArgb(190, 198, 208);
         integrationsButton.Click += (_, _) => ShowIntegrationsDialog();
         statusPanel.Controls.Add(integrationsButton, 2, simBriefRow);
-        statusPanel.SetRowSpan(integrationsButton, 2);
+        statusPanel.SetRowSpan(integrationsButton, 3);
         _versionLabel = AddDashboardRow(
             statusPanel,
             "Version",
             $"{GetApplicationVersion()} - checking GitHub releases...");
+        UpdateGsxStatus(_gsxCouatlStarted);
 
         var settingsPanel = new TableLayoutPanel
         {
@@ -10683,13 +11010,233 @@ internal sealed class CopilotService : Form
 
     }
 
+    private string GsxStatusText()
+    {
+        if (!_settings.EnableGsxIntegration)
+        {
+            return "Disabled - flights continue without GSX coordination.";
+        }
+
+        if (_gsxInstallation == null)
+        {
+            return "Not installed - optional integration inactive.";
+        }
+
+        return _gsxCouatlStarted
+            ? _gsxRemoteControlActive && !_gsxOwnsRemoteControl
+                ? "Attention - GSX Remote Control is already owned by another add-on."
+                : _gsxOwnsRemoteControl
+                    ? "Active - coordinating the current GSX departure operation."
+                    : "Ready - Couatl connected; passive monitoring active."
+            : "Installed - waiting for the Couatl engine.";
+    }
+
+    private void UpdateGsxStatus(bool couatlStarted)
+    {
+        _gsxCouatlStarted = couatlStarted;
+        if (_gsxInstallation != null && _gsxFileReader == null)
+        {
+            _gsxFileReader = new GsxFileReader(_gsxInstallation);
+        }
+
+        if (_gsxStatusLabel != null)
+        {
+            _gsxStatusLabel.Text = GsxStatusText();
+            _gsxStatusLabel.ForeColor = !_settings.EnableGsxIntegration
+                || _gsxInstallation == null
+                    ? System.Drawing.Color.DimGray
+                    : couatlStarted
+                        ? System.Drawing.Color.DarkGreen
+                        : System.Drawing.Color.DarkGoldenrod;
+        }
+
+        var badgeText = !_settings.EnableGsxIntegration
+            ? "GSX DISABLED"
+            : _gsxInstallation == null
+                ? "GSX NOT INSTALLED"
+                : couatlStarted
+                    ? _gsxRemoteControlActive && !_gsxOwnsRemoteControl
+                        ? "GSX ATTENTION"
+                        : _gsxOwnsRemoteControl
+                            ? "GSX ACTIVE"
+                            : "GSX READY"
+                    : "GSX OFFLINE";
+        var badgeColor = !_settings.EnableGsxIntegration || _gsxInstallation == null
+            ? System.Drawing.Color.DimGray
+            : couatlStarted
+                ? _gsxRemoteControlActive && !_gsxOwnsRemoteControl
+                    ? System.Drawing.Color.DarkOrange
+                    : System.Drawing.Color.SeaGreen
+                : System.Drawing.Color.DarkGoldenrod;
+        SetStatusBadge(_gsxBadgeLabel, badgeText, badgeColor);
+    }
+
+    private void ShowGsxDialog(IWin32Window? owner = null)
+    {
+        using var dialog = new Form
+        {
+            Text = "GSX departure integration",
+            Width = 680,
+            Height = 520,
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.FixedDialog,
+            MaximizeBox = false,
+            MinimizeBox = false
+        };
+        var layout = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(16),
+            FlowDirection = FlowDirection.TopDown,
+            WrapContents = false,
+            AutoScroll = true
+        };
+        dialog.Controls.Add(layout);
+        layout.Controls.Add(new Label
+        {
+            Text = "GSX departure coordination",
+            AutoSize = true,
+            Font = new System.Drawing.Font(Font.FontFamily, 14, System.Drawing.FontStyle.Bold)
+        });
+        layout.Controls.Add(new Label
+        {
+            Text = "GSX keeps control of passenger, fuel, cargo, catering, door and timing settings. The First Officer only coordinates boarding and departure milestones.",
+            AutoSize = true,
+            MaximumSize = new System.Drawing.Size(620, 0),
+            ForeColor = System.Drawing.Color.DimGray,
+            Margin = new Padding(0, 6, 0, 12)
+        });
+
+        var enabled = new CheckBox
+        {
+            Text = "Enable GSX integration",
+            Checked = _settings.EnableGsxIntegration,
+            AutoSize = true
+        };
+        var boarding = new CheckBox
+        {
+            Text = "Request boarding from the preflight flow",
+            Checked = _settings.GsxAutomaticallyRequestBoarding,
+            AutoSize = true
+        };
+        var departure = new CheckBox
+        {
+            Text = "Prepare for pushback and departure from the normal flow",
+            Checked = _settings.GsxAutomaticallyPrepareDeparture,
+            AutoSize = true
+        };
+        layout.Controls.Add(enabled);
+        layout.Controls.Add(boarding);
+        layout.Controls.Add(departure);
+
+        var status = new Label
+        {
+            Text = GsxStatusText(),
+            AutoSize = true,
+            MaximumSize = new System.Drawing.Size(620, 0),
+            Margin = new Padding(0, 14, 0, 4)
+        };
+        layout.Controls.Add(status);
+
+        var observed = new TextBox
+        {
+            Width = 620,
+            Height = 180,
+            Multiline = true,
+            ReadOnly = true,
+            ScrollBars = ScrollBars.Vertical,
+            Text = "Passive protocol proof: no GSX service command has been sent."
+        };
+        layout.Controls.Add(observed);
+
+        var testControls = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            Margin = new Padding(0, 10, 0, 0)
+        };
+        var requestBoarding = new Button
+        {
+            Text = "Request boarding now",
+            AutoSize = true,
+            Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted
+        };
+        var prepareDeparture = new Button
+        {
+            Text = "Prepare departure now",
+            AutoSize = true,
+            Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted
+        };
+        requestBoarding.Click += (_, _) => BeginGsxAction(GsxDepartureAction.Boarding);
+        prepareDeparture.Click += (_, _) => BeginGsxAction(GsxDepartureAction.PrepareForDeparture);
+        testControls.Controls.Add(requestBoarding);
+        testControls.Controls.Add(prepareDeparture);
+        layout.Controls.Add(testControls);
+
+        void RefreshObservedState()
+        {
+            status.Text = GsxStatusText();
+            var tooltip = _gsxFileReader?.ReadTooltip() ?? Array.Empty<string>();
+            var menu = _gsxFileReader?.ReadMenu()
+                       ?? new GsxMenuSnapshot(string.Empty, Array.Empty<string>());
+            var lines = new List<string>
+            {
+                GsxStatusText(),
+                "",
+                menu.IsEmpty ? "No live GSX menu is currently open." : $"Menu: {menu.Title}"
+            };
+            lines.AddRange(menu.Choices.Select((choice, index) => $"{index + 1}. {choice}"));
+            if (tooltip.Count > 0)
+            {
+                lines.Add("");
+                lines.Add("Latest GSX status:");
+                lines.AddRange(tooltip);
+            }
+            observed.Lines = lines.ToArray();
+        }
+
+        var buttons = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            Margin = new Padding(0, 12, 0, 0)
+        };
+        var save = new Button { Text = "Save", AutoSize = true };
+        var refresh = new Button { Text = "Refresh status", AutoSize = true };
+        var close = new Button { Text = "Close", AutoSize = true };
+        save.Click += (_, _) =>
+        {
+            _settings.EnableGsxIntegration = enabled.Checked;
+            _settings.GsxAutomaticallyRequestBoarding = boarding.Checked;
+            _settings.GsxAutomaticallyPrepareDeparture = departure.Checked;
+            SettingsStore.Save(_settings);
+            if (!_settings.EnableGsxIntegration)
+            {
+                ReleaseGsxRemoteControl();
+            }
+            UpdateGsxStatus(_gsxCouatlStarted);
+            requestBoarding.Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted;
+            prepareDeparture.Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted;
+            RefreshObservedState();
+        };
+        refresh.Click += (_, _) => RefreshObservedState();
+        close.Click += (_, _) => dialog.Close();
+        buttons.Controls.Add(save);
+        buttons.Controls.Add(refresh);
+        buttons.Controls.Add(close);
+        layout.Controls.Add(buttons);
+
+        RefreshObservedState();
+        dialog.ShowDialog(owner ?? this);
+    }
+
     private void ShowIntegrationsDialog()
     {
         using var dialog = new Form
         {
             Text = "Manage integrations",
             Width = 680,
-            Height = 380,
+            Height = 500,
             StartPosition = FormStartPosition.CenterParent,
             FormBorderStyle = FormBorderStyle.FixedDialog,
             MaximizeBox = false,
@@ -10740,11 +11287,12 @@ internal sealed class CopilotService : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 2,
+            RowCount = 3,
             Margin = new Padding(0, 8, 0, 8)
         };
-        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
-        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 50));
+        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 33));
+        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 33));
+        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 34));
         layout.Controls.Add(cards, 0, 1);
 
         var simBriefCard = new GroupBox
@@ -10799,6 +11347,29 @@ internal sealed class CopilotService : Form
         sayIntentionsCard.Controls.Add(sayIntentionsCardLayout);
         cards.Controls.Add(sayIntentionsCard, 0, 1);
 
+        var gsxCard = new GroupBox
+        {
+            Text = "GSX Pro",
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12),
+            Margin = new Padding(0, 7, 0, 0)
+        };
+        var gsxCardLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1
+        };
+        gsxCardLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        gsxCardLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        var gsxStatus = NewDashboardLabel(GsxStatusText());
+        gsxStatus.MaximumSize = new System.Drawing.Size(470, 0);
+        var manageGsx = new Button { Text = "Manage GSX", AutoSize = true };
+        gsxCardLayout.Controls.Add(gsxStatus, 0, 0);
+        gsxCardLayout.Controls.Add(manageGsx, 1, 0);
+        gsxCard.Controls.Add(gsxCardLayout);
+        cards.Controls.Add(gsxCard, 0, 2);
+
         void RefreshStatuses()
         {
             simBriefStatus.Text = SimBriefStatusText();
@@ -10811,6 +11382,9 @@ internal sealed class CopilotService : Form
                 ?? "Client not detected - optional integration inactive.";
             sayIntentionsStatus.ForeColor = _sayIntentionsStatusLabel?.ForeColor
                 ?? System.Drawing.Color.DimGray;
+            gsxStatus.Text = GsxStatusText();
+            gsxStatus.ForeColor = _gsxStatusLabel?.ForeColor
+                ?? System.Drawing.Color.DimGray;
         }
 
         manageSimBrief.Click += (_, _) =>
@@ -10821,6 +11395,11 @@ internal sealed class CopilotService : Form
         manageSayIntentions.Click += (_, _) =>
         {
             ShowSayIntentionsDialog(dialog);
+            RefreshStatuses();
+        };
+        manageGsx.Click += (_, _) =>
+        {
+            ShowGsxDialog(dialog);
             RefreshStatuses();
         };
 
@@ -13218,6 +13797,11 @@ internal sealed class CopilotService : Form
     {
         Console.WriteLine("MSFS closed the SimConnect session.");
         AppLog.Write("MSFS closed the SimConnect session.");
+        _gsxOwnsRemoteControl = false;
+        _gsxRemoteControlActive = false;
+        _pendingGsxAction = null;
+        _pendingGsxActionDeadlineUtc = null;
+        UpdateGsxStatus(false);
         _mobiFlightReady = false;
         ResetMobiFlightRuntimeAfterDisconnect();
         _simConnect?.Dispose();
@@ -13333,6 +13917,7 @@ internal sealed class CopilotService : Form
                 }
             }
             _sayIntentionsCancellation.Cancel();
+            ReleaseGsxRemoteControl();
             foreach (var pulseTimer in _nativePulseTimers.ToArray())
             {
                 pulseTimer.Dispose();

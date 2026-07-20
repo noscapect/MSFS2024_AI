@@ -126,6 +126,11 @@ simulator commands are suppressed.
 
 Spoken callouts use one non-overlapping priority queue. Time-critical takeoff,
 gear, minimums, and landing calls are ordered ahead of routine queued speech;
+when SayIntentions voices are enabled, the queue also observes all three
+`SIAI_INTERCOM*_RECEIVING` signals. A callout is submitted only after the
+intercom has remained quiet, and the next callout waits for SayIntentions
+playback to finish. Engine-start milestones retain their order and expire if a
+long cabin routine would make them operationally stale.
 calls with equal priority preserve their original sequence.
 
 ## Operational state

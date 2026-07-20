@@ -71,7 +71,9 @@ internal sealed class CopilotService : Form
         new(string.Empty, Array.Empty<string>());
     private IReadOnlyList<string> _gsxTooltip = Array.Empty<string>();
     private Form? _gsxChoiceDialog;
-    private readonly SemaphoreSlim _sayIntentionsVoiceGate = new(1, 1);
+    private readonly object _sayIntentionsVoiceQueueSync = new();
+    private Task _sayIntentionsVoiceTail = Task.CompletedTask;
+    private int _sayIntentionsIntercomReceivingMask;
     private readonly SemaphoreSlim _sayIntentionsCommsModeGate = new(1, 1);
     private readonly CancellationTokenSource _sayIntentionsCancellation = new();
     private SayIntentionsFlightContext? _sayIntentionsFlight;
@@ -889,6 +891,9 @@ internal sealed class CopilotService : Form
         public double Nav1DmeNm;
         public double Nav2DmeNm;
         public double TotalFuelWeightPounds;
+        public double SayIntentionsIntercom1Receiving;
+        public double SayIntentionsIntercom2Receiving;
+        public double SayIntentionsIntercom3Receiving;
         public double GsxCouatlStarted;
         public double GsxRemoteControl;
     }
@@ -1298,6 +1303,9 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "NAV DME:1", "Nautical miles", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "NAV DME:2", "Nautical miles", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "FUEL TOTAL QUANTITY WEIGHT", "Pounds", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:SIAI_INTERCOM1_RECEIVING", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:SIAI_INTERCOM2_RECEIVING", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:SIAI_INTERCOM3_RECEIVING", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "L:FSDT_GSX_COUATL_STARTED", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "L:FSDT_GSX_SET_REMOTECONTROL", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.RegisterDataDefineStruct<AircraftData>(Definition.AircraftState);
@@ -3326,6 +3334,13 @@ internal sealed class CopilotService : Form
         }
 
         var raw = (AircraftData)data.dwData[0];
+        var sayIntentionsIntercomMask =
+            (raw.SayIntentionsIntercom1Receiving != 0 ? 1 : 0)
+            | (raw.SayIntentionsIntercom2Receiving != 0 ? 2 : 0)
+            | (raw.SayIntentionsIntercom3Receiving != 0 ? 4 : 0);
+        Volatile.Write(
+            ref _sayIntentionsIntercomReceivingMask,
+            sayIntentionsIntercomMask);
         _gsxRemoteControlActive = raw.GsxRemoteControl != 0;
         if (_gsxOwnsRemoteControl && !_gsxRemoteControlActive)
         {
@@ -6404,7 +6419,7 @@ internal sealed class CopilotService : Form
 
         try
         {
-            DispatchVoiceCallout(phrase, GetCalloutPriority(step.Id));
+            DispatchVoiceCallout(phrase, GetCalloutPriority(step.Id), step.Id);
             AppendDashboardLog($"Voice callout: {phrase}");
         }
         catch (InvalidOperationException ex)
@@ -6433,37 +6448,73 @@ internal sealed class CopilotService : Form
         AppendDashboardLog($"Voice callout: {phrase}");
     }
 
-    private void DispatchVoiceCallout(string phrase, int priority)
+    private void DispatchVoiceCallout(
+        string phrase,
+        int priority,
+        string? stepId = null)
     {
         var sayIntentionsFlight = _sayIntentionsFlight;
         if (_settings.UseSayIntentionsVoiceCallouts && sayIntentionsFlight != null)
         {
-            _ = SayWithSayIntentionsOrFallbackAsync(sayIntentionsFlight, phrase, priority);
+            var callout = new SayIntentionsQueuedCallout(
+                phrase,
+                priority,
+                DateTime.UtcNow,
+                SayIntentionsVoicePolicy.MaxQueueAge(stepId));
+            lock (_sayIntentionsVoiceQueueSync)
+            {
+                _sayIntentionsVoiceTail = PlaySayIntentionsCalloutAfterAsync(
+                    _sayIntentionsVoiceTail,
+                    sayIntentionsFlight,
+                    callout);
+            }
             return;
         }
 
         _voiceCalloutQueue?.Enqueue(phrase, priority);
     }
 
-    private async Task SayWithSayIntentionsOrFallbackAsync(
+    private async Task PlaySayIntentionsCalloutAfterAsync(
+        Task previous,
         SayIntentionsFlightContext flight,
-        string phrase,
-        int priority)
+        SayIntentionsQueuedCallout callout)
     {
-        var enteredGate = false;
         try
         {
-            await _sayIntentionsVoiceGate
-                .WaitAsync(_sayIntentionsCancellation.Token)
-                .ConfigureAwait(false);
-            enteredGate = true;
+            await previous.ConfigureAwait(false);
+        }
+        catch (Exception ex) when (ex is not OutOfMemoryException)
+        {
+            AppLog.Write("A previous SayIntentions callout ended unexpectedly; continuing the voice queue.");
+        }
+
+        await SayWithSayIntentionsOrFallbackAsync(flight, callout)
+            .ConfigureAwait(false);
+    }
+
+    private async Task SayWithSayIntentionsOrFallbackAsync(
+        SayIntentionsFlightContext flight,
+        SayIntentionsQueuedCallout callout)
+    {
+        try
+        {
+            if (!await WaitForSayIntentionsIntercomQuietAsync(callout)
+                    .ConfigureAwait(false))
+            {
+                AppLog.Write(
+                    $"Skipped stale SayIntentions callout while the intercom was occupied: {callout.Phrase}");
+                return;
+            }
+
             if (await _sayIntentionsClient
                     .SayCopilotCalloutAsync(
                         flight,
-                        phrase,
+                        callout.Phrase,
                         _sayIntentionsCancellation.Token)
                     .ConfigureAwait(false))
             {
+                await WaitForSayIntentionsPlaybackAsync()
+                    .ConfigureAwait(false);
                 return;
             }
         }
@@ -6479,15 +6530,78 @@ internal sealed class CopilotService : Form
             // Never log the exception or request URI: SAPI authenticates in the query string.
             AppLog.Write("SayIntentions voice unavailable; using local voice fallback.");
         }
-        finally
+        _voiceCalloutQueue?.Enqueue(callout.Phrase, callout.Priority);
+    }
+
+    private async Task<bool> WaitForSayIntentionsIntercomQuietAsync(
+        SayIntentionsQueuedCallout callout)
+    {
+        DateTime? quietSinceUtc = null;
+        while (DateTime.UtcNow - callout.CreatedUtc <= callout.MaxQueueAge)
         {
-            if (enteredGate)
+            _sayIntentionsCancellation.Token.ThrowIfCancellationRequested();
+            if (Volatile.Read(ref _sayIntentionsIntercomReceivingMask) == 0)
             {
-                _sayIntentionsVoiceGate.Release();
+                quietSinceUtc ??= DateTime.UtcNow;
+                if (DateTime.UtcNow - quietSinceUtc.Value >= TimeSpan.FromSeconds(1.5))
+                {
+                    return true;
+                }
             }
+            else
+            {
+                quietSinceUtc = null;
+            }
+
+            await Task.Delay(200, _sayIntentionsCancellation.Token)
+                .ConfigureAwait(false);
         }
 
-        _voiceCalloutQueue?.Enqueue(phrase, priority);
+        return false;
+    }
+
+    private async Task WaitForSayIntentionsPlaybackAsync()
+    {
+        var playbackStartDeadlineUtc = DateTime.UtcNow + TimeSpan.FromSeconds(8);
+        while (DateTime.UtcNow < playbackStartDeadlineUtc
+               && Volatile.Read(ref _sayIntentionsIntercomReceivingMask) == 0)
+        {
+            await Task.Delay(200, _sayIntentionsCancellation.Token)
+                .ConfigureAwait(false);
+        }
+
+        if (Volatile.Read(ref _sayIntentionsIntercomReceivingMask) == 0)
+        {
+            // The API accepted the callout but no playback signal was observed.
+            // Keep a small separation so successive requests are never rapid-fired.
+            await Task.Delay(1000, _sayIntentionsCancellation.Token)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        var playbackEndDeadlineUtc = DateTime.UtcNow + TimeSpan.FromSeconds(60);
+        DateTime? quietSinceUtc = null;
+        while (DateTime.UtcNow < playbackEndDeadlineUtc)
+        {
+            _sayIntentionsCancellation.Token.ThrowIfCancellationRequested();
+            if (Volatile.Read(ref _sayIntentionsIntercomReceivingMask) == 0)
+            {
+                quietSinceUtc ??= DateTime.UtcNow;
+                if (DateTime.UtcNow - quietSinceUtc.Value >= TimeSpan.FromSeconds(1.5))
+                {
+                    return;
+                }
+            }
+            else
+            {
+                quietSinceUtc = null;
+            }
+
+            await Task.Delay(200, _sayIntentionsCancellation.Token)
+                .ConfigureAwait(false);
+        }
+
+        AppLog.Write("SayIntentions intercom remained active; releasing the callout queue after timeout.");
     }
 
     private static int GetCalloutPriority(string stepId) =>

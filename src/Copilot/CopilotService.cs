@@ -62,6 +62,8 @@ internal sealed class CopilotService : Form
     private DateTime? _pendingGsxActionDeadlineUtc;
     private bool _gsxBoardingRequestedThisFlight;
     private bool _gsxDepartureRequestedThisFlight;
+    private bool _gsxDepartureRequestAccepted;
+    private ProcedureDefinition? _pendingGsxEngineStartProcedure;
     private bool _gsxMenuOpen;
     private GsxMenuSnapshot _gsxMenu =
         new(string.Empty, Array.Empty<string>());
@@ -1571,6 +1573,10 @@ internal sealed class CopilotService : Form
         _pendingGsxAction = null;
         _pendingGsxActionDeadlineUtc = null;
         _gsxMenuOpen = false;
+        if (action == GsxDepartureAction.PrepareForDeparture)
+        {
+            _gsxDepartureRequestAccepted = true;
+        }
         AppendDashboardLog(
             action == GsxDepartureAction.Boarding
                 ? "GSX boarding request accepted."
@@ -3901,6 +3907,7 @@ internal sealed class CopilotService : Form
         VerifyPendingFireTest();
         TryRestoreProcedureSession();
         _procedureRunner.Update(_state);
+        TryStartPendingGsxEngineFlow();
         UpdateCruiseSeatbeltMonitoring();
         if (_procedureRunner.Status == ProcedureStatus.Completed
             && _procedureRunner.Definition != null)
@@ -5132,6 +5139,30 @@ internal sealed class CopilotService : Form
             return;
         }
 
+        if (string.Equals(
+                definition.Id,
+                "engine-start-sequence",
+                StringComparison.OrdinalIgnoreCase)
+            && ShouldCoordinateGsxDeparture())
+        {
+            if (!_gsxDepartureRequestedThisFlight)
+            {
+                _gsxDepartureRequestedThisFlight =
+                    BeginGsxAction(GsxDepartureAction.PrepareForDeparture);
+            }
+
+            if ((_gsxDepartureRequestedThisFlight
+                 || _gsxDepartureRequestAccepted)
+                && !IsPushbackUnderway(_state))
+            {
+                _pendingGsxEngineStartProcedure = definition;
+                AppendDashboardLog(
+                    "Flow 4 is waiting for GSX pushback to begin. Engine start will begin automatically after parking-brake release and aircraft movement.");
+                FinishOneShot();
+                return;
+            }
+        }
+
         _cruiseSeatbeltMonitoring =
             string.Equals(definition.Id, "cruise", StringComparison.OrdinalIgnoreCase)
             && !_state.IsIniBuildsA321Lr
@@ -5140,6 +5171,35 @@ internal sealed class CopilotService : Form
         _nextCruiseSeatbeltCommandUtc = DateTime.MinValue;
         _procedureRunner.Start(definition, _state);
         FinishProcedureOneShotIfTerminal();
+    }
+
+    private bool ShouldCoordinateGsxDeparture() =>
+        _settings.EnableGsxIntegration
+        && _settings.GsxAutomaticallyPrepareDeparture
+        && _gsxInstallation != null
+        && _gsxCouatlStarted;
+
+    private static bool IsPushbackUnderway(AircraftState state) =>
+        GsxDepartureCoordinator.IsPushbackUnderway(
+            state.OnGround,
+            state.ParkingBrakeSet,
+            state.GroundSpeedKnots);
+
+    private void TryStartPendingGsxEngineFlow()
+    {
+        if (_pendingGsxEngineStartProcedure == null
+            || _state == null
+            || !IsPushbackUnderway(_state)
+            || IsProcedureActive(_procedureRunner.Status))
+        {
+            return;
+        }
+
+        var definition = _pendingGsxEngineStartProcedure;
+        _pendingGsxEngineStartProcedure = null;
+        AppendDashboardLog(
+            "GSX pushback is underway; starting the engine-start flow.");
+        StartProcedure(definition);
     }
 
     private void SetPmdgIrsSelector(bool left, uint position)
@@ -5815,6 +5875,8 @@ internal sealed class CopilotService : Form
         _completedProcedureIds.Clear();
         _gsxBoardingRequestedThisFlight = false;
         _gsxDepartureRequestedThisFlight = false;
+        _gsxDepartureRequestAccepted = false;
+        _pendingGsxEngineStartProcedure = null;
         _pendingGsxAction = null;
         _pendingGsxActionDeadlineUtc = null;
         _procedureSession.ResetProgress(DateTime.UtcNow);
@@ -5978,7 +6040,21 @@ internal sealed class CopilotService : Form
             return;
         }
 
+        var step = _procedureRunner.CurrentStep;
+        var stepIndex = _procedureRunner.CurrentStepIndex;
         _procedureRunner.ConfirmManualStep(_state);
+        if (step != null
+            && _procedureRunner.CurrentStepIndex > stepIndex
+            && string.Equals(
+                step.Id,
+                "captain-pushback-clearance",
+                StringComparison.OrdinalIgnoreCase)
+            && !_gsxDepartureRequestedThisFlight
+            && _settings.GsxAutomaticallyPrepareDeparture)
+        {
+            _gsxDepartureRequestedThisFlight =
+                BeginGsxAction(GsxDepartureAction.PrepareForDeparture);
+        }
         FinishProcedureOneShotIfTerminal();
     }
 

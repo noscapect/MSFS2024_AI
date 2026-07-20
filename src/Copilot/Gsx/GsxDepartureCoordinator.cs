@@ -8,6 +8,12 @@ internal enum GsxDepartureAction
 
 internal static class GsxDepartureCoordinator
 {
+    public static bool IsPushbackUnderway(
+        bool onGround,
+        bool parkingBrakeSet,
+        double groundSpeedKnots) =>
+        onGround && !parkingBrakeSet && groundSpeedKnots >= 0.1;
+
     public static int? FindChoice(
         GsxMenuSnapshot menu,
         GsxDepartureAction action)

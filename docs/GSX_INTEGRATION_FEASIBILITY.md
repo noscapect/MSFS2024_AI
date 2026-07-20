@@ -34,6 +34,8 @@ intentionally smaller than complete GSX automation:
 The protocol proof, settings UI, Couatl status, dynamic menu parser, ownership
 guard, and the two initial request hooks are implemented. Parking-brake and
 engine-start prompt handling still requires live GSX menu/status captures.
+Flow 4 is sequenced behind confirmed pushback movement whenever GSX departure
+coordination is enabled, preventing engine start at the stand before pushback.
 
 ## Confirmed capabilities
 

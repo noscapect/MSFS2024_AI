@@ -42,4 +42,13 @@ public sealed class GsxDepartureCoordinatorTests
         Assert.IsNull(
             GsxDepartureCoordinator.FindChoice(menu, GsxDepartureAction.Boarding));
     }
+
+    [TestMethod]
+    public void PushbackRequiresBrakeReleaseAndActualMovement()
+    {
+        Assert.IsFalse(GsxDepartureCoordinator.IsPushbackUnderway(true, true, 1));
+        Assert.IsFalse(GsxDepartureCoordinator.IsPushbackUnderway(true, false, 0.05));
+        Assert.IsFalse(GsxDepartureCoordinator.IsPushbackUnderway(false, false, 20));
+        Assert.IsTrue(GsxDepartureCoordinator.IsPushbackUnderway(true, false, 0.1));
+    }
 }

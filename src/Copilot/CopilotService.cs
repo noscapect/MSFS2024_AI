@@ -11458,6 +11458,7 @@ internal sealed class CopilotService : Form
             Text = "SayIntentions companion",
             Width = 760,
             Height = 600,
+            MinimumSize = new System.Drawing.Size(640, 460),
             StartPosition = FormStartPosition.CenterParent,
             FormBorderStyle = FormBorderStyle.Sizable,
             MinimizeBox = false
@@ -11467,8 +11468,9 @@ internal sealed class CopilotService : Form
             Dock = DockStyle.Fill,
             Padding = new Padding(14),
             ColumnCount = 1,
-            RowCount = 3
+            RowCount = 4
         };
+        layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         layout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
         layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -11508,6 +11510,7 @@ internal sealed class CopilotService : Form
         var details = new RichTextBox
         {
             Dock = DockStyle.Fill,
+            MinimumSize = new System.Drawing.Size(0, 220),
             ReadOnly = true,
             BackColor = System.Drawing.Color.White,
             Font = new System.Drawing.Font("Consolas", 9),

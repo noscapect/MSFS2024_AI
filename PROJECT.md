@@ -1,7 +1,7 @@
 # MSFS 2024 Virtual First Officer - Project Status and Handoff
 
 This file is the primary technical handoff for continuing development. It
-describes the state of the project at public release **v0.9.3** on July 19,
+describes the state of the project at public release **v0.9.5** on July 20,
 2026. The flows implemented in the application are authoritative; supporting
 documents must follow the application when they differ.
 
@@ -26,9 +26,9 @@ software, not an autopilot, and the pilot must always be able to take over.
 
 ## Current release
 
-- Public version: **0.9.3**
+- Public version: **0.9.5**
 - Repository: <https://github.com/noscapect/MSFS2024_AI>
-- Latest release: <https://github.com/noscapect/MSFS2024_AI/releases/tag/v0.9.3>
+- Latest release: <https://github.com/noscapect/MSFS2024_AI/releases/tag/v0.9.5>
 - Main project: `src/Copilot/Copilot.csproj`
 - UI/runtime: WinForms, .NET Framework 4.7.2, x64
 - Release executable: `src/Copilot/bin/Release/net472/Copilot.exe`
@@ -42,8 +42,8 @@ dotnet build .\src\Copilot\Copilot.csproj -c Release --no-restore
 dotnet test .\tests\Copilot.Tests\Copilot.Tests.csproj -c Release --no-restore
 ```
 
-The v0.9.3 release was built with no warnings or errors and passed the full
-159-test release suite.
+The v0.9.5 release was built with no warnings or errors and passed the full
+176-test release suite.
 
 ## Supported aircraft
 
@@ -226,12 +226,12 @@ verify the exchange without controlling the radios.
 
 ## GSX integration
 
-GSX Pro departure integration is under development on
-`feature/gsx-integration`. GSX remains the owner of all passenger, fuel,
+GSX Pro departure integration is available as optional beta functionality in
+v0.9.5. GSX remains the owner of all passenger, fuel,
 cargo, catering, door, timing, airport-profile, and aircraft-profile choices.
 The Virtual First Officer only coordinates natural departure milestones.
 
-The initial implementation follows the locally installed official GSX Remote
+The released implementation follows the locally installed official GSX Remote
 Control SDK contract. It provides installation and Couatl discovery, passive
 menu/status observation, Remote Control ownership protection, dynamic menu
 matching, and non-blocking fallback. Flow 2 can request the user-configured
@@ -253,10 +253,9 @@ no other GSX remote-control add-on or EFB is active.
 
 The app must not hardcode GSX menu indexes, duplicate an active GSX operation,
 take Remote Control away from another add-on, or prevent a flight when GSX is
-unavailable. Follow-up pushback prompts, parking-brake handling, and
-good-engine-start responses require live GSX capture and validation before
-automation. Arrival integration is deliberately deferred until the departure
-sequence is complete.
+unavailable. Follow-up parking-brake handling and good-engine-start responses
+still require more live validation before automation. Arrival integration is
+deliberately deferred until after v1.0.
 
 ## Architecture and stability boundary
 
@@ -322,20 +321,18 @@ Never restart the app during an active user flight unless explicitly asked.
 When a debug/probe build is required, say so clearly; the user normally tests
 the Release build and the UI does not identify Debug versus Release.
 
-## Deferred and remaining work
+## Stabilization work through v1.0
 
-- Continue regression validation of SayIntentions exchanges and the A330
-  profile after simulator or aircraft updates
-- Complete and live-validate the GSX Pro departure coordinator, then design
-  arrival integration. Feasibility research is in
-  `docs/GSX_INTEGRATION_FEASIBILITY.md`.
-- Improve interactive checklist and crew-audio behavior
-- Revisit FlyByWire A380X support only on a dedicated development branch
-- Add further aircraft only with a separate adapter/procedure/checklist and a
-  full gate-to-gate validation plan
-- Implement go-around and rejected-takeoff procedures last; both require safe
-  interruption and recovery branches rather than small additions to normal
-  flows
+- Fix verified bugs and regressions without expanding product scope.
+- Continue regression validation of aircraft profiles, SayIntentions, GSX,
+  SimBrief, and voice behavior after simulator or add-on updates.
+- Improve diagnostics and documentation only where they help resolve defects.
+- Preserve all completed aircraft-specific contracts and the optional nature
+  of every external integration.
+
+New aircraft, GSX arrival automation, single-engine taxi, interactive feature
+expansion, FlyByWire A380X support, go-around procedures, and rejected-takeoff
+procedures are deferred until after the v1.0 stability milestone.
 
 An AI-controlled Pilot Flying mode, taxi automation, and the former Boeing
 autoland-assist experiment are not current product features.

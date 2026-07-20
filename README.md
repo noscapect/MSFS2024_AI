@@ -31,7 +31,7 @@ guessed generic commands to an unknown cockpit.
 - Spoken engine-start, takeoff, configuration, minimums, gear, and landing
   callouts
 - `Minimal`, `Standard`, and `Expanded` voice detail
-- Optional SimBrief and SayIntentions integration
+- Optional SimBrief, SayIntentions, and GSX Pro integration
 - Saved flight progress with a clear `New flight / Reset progress` control
 - Quiet diagnostic recording for troubleshooting
 
@@ -153,6 +153,19 @@ normal fallback.
 
 SayIntentions may apply the language configured for its First Officer. The app
 always supplies standard operational callouts in English.
+
+## GSX Pro
+
+GSX Pro support is optional beta functionality. When enabled under **Manage
+integrations**, the app can request the user-configured boarding service and
+coordinate **Prepare for Pushback and Departure** with the normal preflight and
+engine-start flows. GSX remains responsible for service configuration,
+aircraft and airport profiles, doors, loading, deicing, and pushback choices.
+
+Every contextual GSX question is shown to the pilot rather than guessed. The
+integration does not take control from another GSX-aware add-on without an
+explicit recovery choice, and normal flows remain available when GSX is not
+installed or disabled.
 
 ## Important limitations
 

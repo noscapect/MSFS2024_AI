@@ -4,22 +4,31 @@ This roadmap records intentionally deferred product work. It is not a promise
 that experimental features belong in the next public release. Stable aircraft
 profiles remain protected by their aircraft-specific regression tests.
 
-## Current development
+## Current development: v0.9.5 to v1.0
 
-1. Begin GSX Pro integration on a dedicated development branch, preserving all
-   completed aircraft and SayIntentions behavior behind regression tests.
-2. SimBrief latest-OFP integration is released as an optional read-only
-   operational briefing. Future work may add more advisory comparisons after
-   live validation, without allowing network data to control cockpit systems.
+Development is restricted to bug fixing and stabilization until the public
+v1.0 release. Do not add new aircraft, integrations, procedure branches, or
+major UX features during this phase.
+
+Priorities are:
+
+1. Fix reproducible defects and regressions.
+2. Protect completed aircraft profiles with their existing isolation and
+   contract tests.
+3. Continue live validation of optional SimBrief, SayIntentions, and GSX
+   behavior without making them mandatory for normal flows.
+4. Keep customer-facing diagnostics concise while retaining bounded flight
+   recordings for support.
 
 SayIntentions Copilot communication and departure ATC workflow acceptance was
 completed gate-to-gate for v0.9.3. Frequency tuning remains exclusively owned
 by SayIntentions.
 
-## Later enhancements
+## Post-1.0 enhancements
 
-1. GSX Pro ground-service integration using the official bidirectional Remote
-   Control SDK. See `GSX_INTEGRATION_FEASIBILITY.md`.
+1. GSX arrival services and deeper ground-service coordination. The optional
+   departure coordinator first released in v0.9.5 uses the official
+   bidirectional Remote Control SDK.
 2. Interactive checklist and crew-audio improvements.
 
 ## Post-1.0 features

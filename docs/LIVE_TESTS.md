@@ -1,5 +1,21 @@
 # Live test evidence
 
+## 2026-07-20 - v0.9.5 stabilization release
+
+The optional GSX Pro departure coordinator now uses the official
+bidirectional Remote Control protocol, protects ownership, requests boarding
+and departure services at their flow checkpoints, sequences Flow 4 behind
+pushback movement, and presents every secondary GSX menu to the pilot. Deeper
+parking-brake, engine-start, and arrival automation remains deferred pending
+additional live evidence.
+
+SayIntentions voice dispatch now observes all three intercom receiving states.
+First Officer callouts wait for an idle intercom and for preceding playback to
+finish; engine-start milestones remain ordered and stale operational calls are
+discarded instead of being spoken late over cabin-crew routines.
+
+Automated result: **176 tests passed in Release with no failures.**
+
 ## 2026-07-19 - SayIntentions gate-to-gate acceptance complete
 
 The SayIntentions completion branch passed a full iniBuilds A321LR flight from

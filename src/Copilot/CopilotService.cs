@@ -66,6 +66,7 @@ internal sealed class CopilotService : Form
     private bool _gsxDepartureRequestAccepted;
     private DateTime? _gsxDepartureRequestAcceptedUtc;
     private bool _gsxGoodEngineStartMenuRequested;
+    private bool _gsxGoodEngineStartPromptPending;
     private ProcedureDefinition? _pendingGsxEngineStartProcedure;
     private bool _gsxMenuOpen;
     private GsxMenuSnapshot _gsxMenu =
@@ -1502,24 +1503,48 @@ internal sealed class CopilotService : Form
             GsxPromptPolicy.RequiresGoodEngineStartMenu(_gsxTooltip);
         if (!needsConfirmation)
         {
-            _gsxGoodEngineStartMenuRequested = false;
+            ClearGsxGoodEngineStartPrompt();
             return;
         }
 
-        if (_gsxGoodEngineStartMenuRequested
-            || _gsxMenuOpen
-            || !_gsxOwnsRemoteControl
-            || !_gsxDepartureRequestAccepted)
+        if (!_gsxOwnsRemoteControl)
         {
+            if (_gsxRemoteControlActive)
+            {
+                AppLog.Write(
+                    "GSX is waiting for good-engine-start confirmation, but remote control is owned by another add-on.");
+                return;
+            }
+
+            SetGsxValue(Definition.GsxRemoteControl, 1);
+            _gsxOwnsRemoteControl = true;
+            _gsxRemoteControlActive = true;
+            _gsxOwnershipLease.MarkOwned(DateTime.UtcNow);
+            UpdateGsxStatus(true);
+        }
+
+        _gsxGoodEngineStartPromptPending = true;
+        if (_gsxMenuOpen)
+        {
+            TryAutoConfirmGsxGoodEngineStart();
             return;
         }
 
-        _gsxGoodEngineStartMenuRequested = true;
         SetGsxValue(Definition.GsxMenuOpen, 1);
-        AppendDashboardLog(
-            "GSX is waiting for good-engine-start confirmation; opening the response menu.");
-        AppLog.Write(
-            "Opened the GSX menu from its good-engine-start status prompt.");
+        if (!_gsxGoodEngineStartMenuRequested)
+        {
+            AppendDashboardLog(
+                "GSX is waiting for good-engine-start confirmation; the First Officer will respond when both engines are stable.");
+            AppLog.Write(
+                "Opened the GSX menu from its good-engine-start status prompt.");
+        }
+        _gsxGoodEngineStartMenuRequested = true;
+    }
+
+    private void ClearGsxGoodEngineStartPrompt()
+    {
+        _gsxGoodEngineStartMenuRequested = false;
+        _gsxGoodEngineStartPromptPending = false;
     }
 
     private void HandleGsxMenuEvent(uint eventData)
@@ -1541,6 +1566,10 @@ internal sealed class CopilotService : Form
                 TrySelectPendingGsxAction();
                 if (_gsxMenuOpen)
                 {
+                    if (TryAutoConfirmGsxGoodEngineStart())
+                    {
+                        break;
+                    }
                     ShowGsxChoiceDialog(_gsxMenu);
                 }
                 break;
@@ -1674,6 +1703,10 @@ internal sealed class CopilotService : Form
     {
         SetGsxValue(Definition.GsxMenuChoice, choice);
         _gsxMenuOpen = false;
+        if (_gsxGoodEngineStartPromptPending && choice >= 0)
+        {
+            ClearGsxGoodEngineStartPrompt();
+        }
         if (_pendingGsxAction.HasValue)
         {
             if (_pendingGsxAction.Value == GsxDepartureAction.PrepareForDeparture
@@ -1690,6 +1723,44 @@ internal sealed class CopilotService : Form
                 ? $"GSX selection sent: {label ?? $"option {choice + 1}"}."
                 : "GSX prompt cancelled.");
     }
+
+    private bool TryAutoConfirmGsxGoodEngineStart()
+    {
+        if (!_gsxMenuOpen
+            || _gsxMenu.IsEmpty
+            || _state == null)
+        {
+            return false;
+        }
+
+        var choice = GsxPromptPolicy.FindGoodEngineStartConfirmation(_gsxMenu);
+        if (!choice.HasValue)
+        {
+            return false;
+        }
+
+        _gsxGoodEngineStartPromptPending = true;
+        if (!BothEnginesStartStabilized(_state))
+        {
+            AppLog.Write(
+                "GSX good-engine-start prompt is open; waiting for both engines stabilized before responding.");
+            AppendDashboardLog(
+                "GSX is waiting for good engine start; First Officer will answer when both engines are stable.");
+            return true;
+        }
+
+        var label = _gsxMenu.Choices[choice.Value];
+        SendGsxMenuChoice(choice.Value, label);
+        CloseGsxChoiceDialog();
+        AppendDashboardLog(
+            "First Officer confirmed good engine start to GSX.");
+        AppLog.Write(
+            $"Auto-confirmed GSX good-engine-start response: {label}.");
+        return true;
+    }
+
+    private static bool BothEnginesStartStabilized(AircraftState state) =>
+        state.Engine1StartStabilized && state.Engine2StartStabilized;
 
     private void CloseGsxChoiceDialog()
     {
@@ -1850,6 +1921,7 @@ internal sealed class CopilotService : Form
         _gsxOwnershipLease.Clear();
         _pendingGsxAction = null;
         _pendingGsxActionDeadlineUtc = null;
+        ClearGsxGoodEngineStartPrompt();
     }
 
     private void RecoverGsxRemoteControl()
@@ -3384,6 +3456,7 @@ internal sealed class CopilotService : Form
 
         VerifyPendingBatteryProcedure();
         VerifyPendingFireTest();
+        TryAutoConfirmGsxGoodEngineStart();
         UpdateDashboard();
         TryExecuteOneShotCommand();
     }
@@ -5062,6 +5135,7 @@ internal sealed class CopilotService : Form
                     _pendingGsxEngineStartProcedure = null;
                     AppendDashboardLog("Cancelled the queued engine-start flow.");
                 }
+                ClearGsxGoodEngineStartPrompt();
                 _procedureRunner.Cancel();
                 FinishOneShot();
                 break;
@@ -6279,7 +6353,7 @@ internal sealed class CopilotService : Form
         _gsxDepartureRequestedThisFlight = false;
         _gsxDepartureRequestAccepted = false;
         _gsxDepartureRequestAcceptedUtc = null;
-        _gsxGoodEngineStartMenuRequested = false;
+        ClearGsxGoodEngineStartPrompt();
         _pendingGsxEngineStartProcedure = null;
         _pendingGsxAction = null;
         _pendingGsxActionDeadlineUtc = null;
@@ -6427,6 +6501,7 @@ internal sealed class CopilotService : Form
 
         var enabled = completedId switch
         {
+            "after-start-taxi" => _settings.AutoChainFlow5To6,
             "before-takeoff" => _settings.AutoChainFlow6To7,
             "approach-landing" => _settings.AutoChainFlow10To11,
             "after-landing-taxi" => _settings.AutoChainFlow11To12,
@@ -10792,7 +10867,7 @@ internal sealed class CopilotService : Form
 
         var featureSettingsButton = new Button
         {
-            Text = "Approach profile...",
+            Text = "Flight settings...",
             AutoSize = true,
             Margin = new Padding(8, 2, 8, 0)
         };
@@ -12972,7 +13047,7 @@ internal sealed class CopilotService : Form
     {
         using var dialog = new Form
         {
-            Text = "Aircraft approach profile and flow chaining",
+            Text = "Flight settings",
             Width = 590,
             Height = 720,
             StartPosition = FormStartPosition.CenterParent,
@@ -12992,6 +13067,22 @@ internal sealed class CopilotService : Form
         layout.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 60));
         dialog.Controls.Add(layout);
 
+        void AddSectionHeader(string text)
+        {
+            var row = layout.RowCount++;
+            layout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            var header = new Label
+            {
+                Text = text,
+                AutoSize = true,
+                Font = new System.Drawing.Font(Font.FontFamily, 10, System.Drawing.FontStyle.Bold),
+                ForeColor = System.Drawing.Color.FromArgb(30, 69, 110),
+                Margin = new Padding(0, 6, 0, 6)
+            };
+            layout.Controls.Add(header, 0, row);
+            layout.SetColumnSpan(header, 3);
+        }
+
         _settings.AircraftApproachOverrides ??= new List<AircraftApproachOverride>();
         var aircraftProfile = AircraftApproachProfiles.Resolve(_state?.Title);
         var savedOverride = _settings.AircraftApproachOverrides.LastOrDefault(item =>
@@ -12999,6 +13090,7 @@ internal sealed class CopilotService : Form
         var standardSchedule = aircraftProfile.StandardSchedule.Clone();
         var displayedSchedule = (savedOverride?.Schedule ?? standardSchedule).Clone();
 
+        AddSectionHeader("Approach profile");
         var profileRow = layout.RowCount++;
         var profileLabel = new Label
         {
@@ -13121,6 +13213,7 @@ internal sealed class CopilotService : Form
         useOverride.CheckedChanged += (_, _) => UpdateScheduleEditing();
         UpdateScheduleEditing();
 
+        AddSectionHeader("Flow chaining");
         CheckBox AddCheck(string text, bool value)
         {
             var row = layout.RowCount++;
@@ -13140,6 +13233,9 @@ internal sealed class CopilotService : Form
         var earlierChains = AddCheck(
             "Automatically chain other early flows",
             _settings.AutoChainEarlierFlows);
+        var flow5Chain = AddCheck(
+            "Automatically start Flow 6 after Flow 5",
+            _settings.AutoChainFlow5To6);
         var flow6Chain = AddCheck(
             "Automatically start Flow 7 after Flow 6",
             _settings.AutoChainFlow6To7);
@@ -13213,6 +13309,7 @@ internal sealed class CopilotService : Form
             });
         }
         _settings.AutoChainEarlierFlows = earlierChains.Checked;
+        _settings.AutoChainFlow5To6 = flow5Chain.Checked;
         _settings.AutoChainFlow6To7 = flow6Chain.Checked;
         _settings.AutoChainFlow10To11 = flow10Chain.Checked;
         _settings.AutoChainFlow11To12 = flow11Chain.Checked;

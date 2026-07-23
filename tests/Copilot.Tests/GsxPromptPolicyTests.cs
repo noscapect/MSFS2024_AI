@@ -20,4 +20,26 @@ public sealed class GsxPromptPolicyTests
         Assert.IsFalse(GsxPromptPolicy.RequiresGoodEngineStartMenu(
             new[] { "Pushback underway", "Release parking brakes" }));
     }
+
+    [DataTestMethod]
+    [DataRow("Confirm good engine start")]
+    [DataRow("Engine start is good")]
+    public void FindGoodEngineStartConfirmationSelectsPositiveResponse(string choiceText)
+    {
+        var menu = new GsxMenuSnapshot(
+            "Confirm",
+            new[] { "Cancel", choiceText });
+
+        Assert.AreEqual(1, GsxPromptPolicy.FindGoodEngineStartConfirmation(menu));
+    }
+
+    [TestMethod]
+    public void FindGoodEngineStartConfirmationDoesNotGuessUnrelatedChoices()
+    {
+        var menu = new GsxMenuSnapshot(
+            "Services",
+            new[] { "Request boarding", "Cancel pushback" });
+
+        Assert.IsNull(GsxPromptPolicy.FindGoodEngineStartConfirmation(menu));
+    }
 }

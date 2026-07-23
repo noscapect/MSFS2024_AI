@@ -314,7 +314,6 @@ internal static class A330ProcedureLibrary
             "6. Before Takeoff",
             new[]
             {
-                Automatic("fo-runway-turnoff-on", "Runway turnoff lights ON", state => state.RunwayTurnoffLightsOn, "runway-turnoff on"),
                 Manual("captain-briefing", "Takeoff briefing complete", "Captain: confirm the takeoff briefing is complete.", CrewRole.Captain),
                 Observe(
                     "fo-cabin-call",
@@ -333,6 +332,7 @@ internal static class A330ProcedureLibrary
                              && Math.Abs(state.TcasMode.Value - 2) < 0.1,
                     "tcas traffic tara"),
                 Manual("fo-engine-anti-ice", "Engine anti-ice set as required", "First Officer: configure engine anti-ice for conditions, then confirm.", CrewRole.FirstOfficer),
+                Manual("fo-takeoff-clearance", "Takeoff clearance received", "First Officer: while holding short, press Confirm now to report ready for departure and request takeoff clearance through SayIntentions.", CrewRole.FirstOfficer, state => !state.SayIntentionsAtcActive),
                 Automatic(
                     "fo-nose-light-takeoff",
                     "Nose light T.O.",
@@ -347,7 +347,7 @@ internal static class A330ProcedureLibrary
                              && Math.Abs(state.LeftLandingLightSelectorPosition.Value) < 0.1
                              && Math.Abs(state.RightLandingLightSelectorPosition.Value) < 0.1,
                     "landing-lights on"),
-                Manual("fo-takeoff-clearance", "Takeoff clearance received", "First Officer: while holding short, press Confirm now to report ready for departure and request takeoff clearance through SayIntentions.", CrewRole.FirstOfficer, state => !state.SayIntentionsAtcActive)
+                Automatic("fo-runway-turnoff-on", "Runway turnoff lights ON", state => state.RunwayTurnoffLightsOn, "runway-turnoff on")
             });
 
     public static ProcedureDefinition TakeoffAndClimb { get; } =
@@ -430,6 +430,11 @@ internal static class A330ProcedureLibrary
                     "10,000 feet passed",
                     state => state.IndicatedAltitudeFeet >= 10000,
                     CrewRole.FirstOfficer),
+                Automatic(
+                    "fo-runway-turnoff-off",
+                    "Runway turnoff lights OFF",
+                    state => !state.RunwayTurnoffLightsOn,
+                    "runway-turnoff off"),
                 Automatic(
                     "fo-landing-lights-off",
                     "Landing light OFF",

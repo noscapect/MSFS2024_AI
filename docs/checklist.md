@@ -139,28 +139,32 @@ Master ON steps complete.
 11. **Monitor:** Detect Captain commencing taxi when the parking brake is
     released and groundspeed exceeds 0.5 knots.
 
+By default, completing Flow 5 automatically starts Flow 6. This can be changed
+in **Flight settings** under flow chaining.
+
 ## 6. Before Takeoff
 
-1. **F/O automatic:** When cleared to line up, set runway turnoff lights ON.
-   The cockpit state is verified automatically; no confirmation is required.
-2. **Captain confirmation:** Takeoff briefing complete.
-3. **F/O callout:** “Cabin crew, prepare for takeoff.”
-4. **F/O automatic:** Set TCAS altitude reporting ON.
-5. **F/O automatic:** Set TCAS traffic mode to TA/RA.
-6. **F/O confirmation:** Configure engine anti-ice as required.
-7. **F/O automatic:** Set nose light to T.O. Strobes remain in AUTO from
-   Flow 1; the aircraft manages takeoff strobe behavior.
-8. **F/O automatic:** Set both landing lights ON.
-9. **F/O ATC:** With an active SayIntentions flight and while holding short,
+1. **Captain confirmation:** Takeoff briefing complete.
+2. **F/O callout:** "Cabin crew, prepare for takeoff."
+3. **F/O automatic:** Set TCAS altitude reporting ON.
+4. **F/O automatic:** Set TCAS traffic mode to TA/RA.
+5. **F/O confirmation:** Configure engine anti-ice as required.
+6. **F/O ATC:** With an active SayIntentions flight and while holding short,
    press **Confirm now** to reaffirm the Copilot handoff and delegate the
-   takeoff-ready call. SayIntentions decides
-   when to report ready for departure and manages Tower tuning and the
-   continuing exchange. Without SayIntentions, this step is
-   bypassed automatically and MSFS built-in ATC continues normally.
+   takeoff-ready call. SayIntentions decides when to report ready for
+   departure and manages Tower tuning and the continuing exchange. Without
+   SayIntentions, this step is bypassed automatically and MSFS built-in ATC
+   continues normally.
+7. **F/O automatic:** After takeoff clearance / line-up handoff, set nose
+   light to T.O. Strobes remain in AUTO from Flow 1; the aircraft manages
+   takeoff strobe behavior.
+8. **F/O automatic:** Set both landing lights ON.
+9. **F/O automatic:** Set runway turnoff lights ON. The cockpit state is
+   verified automatically; no confirmation is required.
 
-By default, completing Flow 6 automatically starts Flow 7. This keeps the
-before-takeoff and takeoff phases hands-off while the aircraft is entering the
-runway and beginning the takeoff roll.
+By default, completing Flow 6 automatically starts Flow 7. Flow 5-to-6 and
+Flow 6-to-7 chaining can both be changed in **Flight settings** under flow
+chaining.
 
 ## 7. Takeoff & Climb
 
@@ -186,7 +190,8 @@ This flow requires no app confirmations during takeoff.
 12. **F/O automatic:** Retract flaps to CLEAN. Airborne retraction is blocked
     only below 400 feet AGL.
 13. **Monitor:** Wait until indicated altitude reaches 10,000 feet.
-14. **F/O automatic:** Set both landing-light selectors to RETRACT.
+14. **F/O automatic:** Switch runway turnoff lights OFF above 10,000 feet.
+15. **F/O automatic:** Set both landing-light selectors to RETRACT.
 
 Altimeter STD selection is not operated or monitored by the app.
 

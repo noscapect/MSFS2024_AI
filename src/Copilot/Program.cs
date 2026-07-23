@@ -40,15 +40,16 @@ internal static class Program
         try
         {
             using var service = new CopilotService(oneShotCommand, showUi);
-            service.Connect();
             if (showUi)
             {
                 service.Show();
                 service.Activate();
+                service.BeginInvoke(new Action(service.Connect));
                 Application.Run();
             }
             else
             {
+                service.Connect();
                 Application.Run();
             }
         }

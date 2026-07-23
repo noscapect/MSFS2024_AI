@@ -29,6 +29,7 @@ public sealed class CopilotSettings
     public int ApproachLandingConfigSpeedKnots { get; set; } = 185;
     public List<AircraftApproachOverride> AircraftApproachOverrides { get; set; } = new();
     public bool AutoChainEarlierFlows { get; set; }
+    public bool AutoChainFlow5To6 { get; set; } = true;
     public bool AutoChainFlow6To7 { get; set; } = true;
     public bool AutoChainFlow10To11 { get; set; } = true;
     public bool AutoChainFlow11To12 { get; set; } = true;

@@ -144,6 +144,68 @@ public sealed class ProcedureCatalogTests
         Assert.IsTrue(step.IsComplete(state));
     }
 
+    [DataTestMethod]
+    [DataRow("A320neo V2")]
+    [DataRow("A321")]
+    [DataRow("A330-300 (GE)")]
+    [DataRow("FlyByWire A32NX")]
+    public void AirbusTakeoffLightsAreSetAfterTakeoffClearance(string title)
+    {
+        var beforeTakeoff = ProcedureCatalog.ForAircraft(new AircraftState { Title = title })
+            .Single(flow => flow.Id == "before-takeoff");
+        var takeoffClearanceIndex = beforeTakeoff.Steps
+            .Select((step, index) => new { step.Id, index })
+            .Single(item => item.Id == "fo-takeoff-clearance")
+            .index;
+        var lightIndexes = beforeTakeoff.Steps
+            .Select((step, index) => new { step.Id, index })
+            .Where(item => item.Id is "fo-nose-light-takeoff"
+                           or "fo-landing-lights-on"
+                           or "fo-runway-turnoff-on")
+            .Select(item => item.index)
+            .ToArray();
+
+        Assert.AreEqual(3, lightIndexes.Length);
+        Assert.IsTrue(lightIndexes.All(index => index > takeoffClearanceIndex));
+    }
+
+    [DataTestMethod]
+    [DataRow("A320neo V2")]
+    [DataRow("A321")]
+    [DataRow("A330-300 (GE)")]
+    [DataRow("FlyByWire A32NX")]
+    public void AirbusRunwayTurnoffLightsAreSwitchedOffAboveTenThousandFeet(string title)
+    {
+        var takeoffClimb = ProcedureCatalog.ForAircraft(new AircraftState { Title = title })
+            .Single(flow => flow.Id == "takeoff-climb");
+        var aboveTenThousandIndex = takeoffClimb.Steps
+            .Select((step, index) => new { step.Id, index })
+            .Single(item => item.Id == "above-ten-thousand")
+            .index;
+        var runwayTurnoffOff = takeoffClimb.Steps
+            .Select((step, index) => new { Step = step, index })
+            .Single(item => item.Step.Id == "fo-runway-turnoff-off");
+
+        Assert.IsTrue(runwayTurnoffOff.index > aboveTenThousandIndex);
+        Assert.AreEqual(ProcedureStepKind.AutomaticAction, runwayTurnoffOff.Step.Kind);
+        Assert.AreEqual(CrewRole.FirstOfficer, runwayTurnoffOff.Step.AssignedRole);
+        Assert.AreEqual(
+            title.Contains("A330", StringComparison.OrdinalIgnoreCase)
+                ? "a330 runway-turnoff off"
+                : "runway-turnoff off",
+            runwayTurnoffOff.Step.Command);
+        Assert.IsFalse(runwayTurnoffOff.Step.IsComplete(new AircraftState
+        {
+            Title = title,
+            RunwayTurnoffLightsOn = true
+        }));
+        Assert.IsTrue(runwayTurnoffOff.Step.IsComplete(new AircraftState
+        {
+            Title = title,
+            RunwayTurnoffLightsOn = false
+        }));
+    }
+
     [TestMethod]
     public void IniBuildsEngineModeReadbackPrefersNativeIgnitionKnob()
     {

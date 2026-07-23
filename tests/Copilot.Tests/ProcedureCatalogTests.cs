@@ -1,3 +1,4 @@
+using System.Reflection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Msfs2024Ai.Copilot.Checklists;
 using Msfs2024Ai.Copilot.Domain;
@@ -141,6 +142,34 @@ public sealed class ProcedureCatalogTests
         Assert.IsFalse(step.IsComplete(state));
         state.EngineModeSelectorPosition = 2;
         Assert.IsTrue(step.IsComplete(state));
+    }
+
+    [TestMethod]
+    public void IniBuildsEngineModeReadbackPrefersNativeIgnitionKnob()
+    {
+        var resolver = typeof(CopilotService).GetMethod(
+            "ResolveEngineModeSelectorPosition",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.IsNotNull(resolver);
+
+        var resolved = (double?)resolver!.Invoke(null, new object[] { null!, 2f, 0d, 0d });
+
+        Assert.AreEqual(2d, resolved);
+    }
+
+    [TestMethod]
+    public void IniBuildsEngineModeReadbackPrefersDirectLVar()
+    {
+        var resolver = typeof(CopilotService).GetMethod(
+            "ResolveEngineModeSelectorPosition",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.IsNotNull(resolver);
+
+        var resolved = (double?)resolver!.Invoke(null, new object[] { 2d, 0f, 0d, 0d });
+
+        Assert.AreEqual(2d, resolved);
     }
 
     [TestMethod]

@@ -51,4 +51,44 @@ public sealed class GsxDepartureCoordinatorTests
         Assert.IsFalse(GsxDepartureCoordinator.IsPushbackUnderway(false, false, 20));
         Assert.IsTrue(GsxDepartureCoordinator.IsPushbackUnderway(true, false, 0.1));
     }
+
+    [DataTestMethod]
+    [DataRow(true, false, false, false, false, false, false)]
+    [DataRow(false, true, false, false, false, false, false)]
+    [DataRow(false, false, true, false, false, false, false)]
+    [DataRow(false, false, false, true, false, false, false)]
+    [DataRow(false, false, false, false, true, false, false)]
+    [DataRow(false, false, false, false, false, true, false)]
+    [DataRow(false, false, false, false, false, false, true)]
+    public void EngineStartPhaseStartedAcceptsAnyEngineStartEvidence(
+        bool engineModeIgnStart,
+        bool engine1StarterActive,
+        bool engine2StarterActive,
+        bool engine1FuelFlowDetected,
+        bool engine2FuelFlowDetected,
+        bool engine1Running,
+        bool engine2Running)
+    {
+        Assert.IsTrue(GsxDepartureCoordinator.EngineStartPhaseStarted(
+            engineModeIgnStart,
+            engine1StarterActive,
+            engine2StarterActive,
+            engine1FuelFlowDetected,
+            engine2FuelFlowDetected,
+            engine1Running,
+            engine2Running));
+    }
+
+    [TestMethod]
+    public void EngineStartPhaseStartedRejectsColdAircraft()
+    {
+        Assert.IsFalse(GsxDepartureCoordinator.EngineStartPhaseStarted(
+            false,
+            false,
+            false,
+            false,
+            false,
+            false,
+            false));
+    }
 }

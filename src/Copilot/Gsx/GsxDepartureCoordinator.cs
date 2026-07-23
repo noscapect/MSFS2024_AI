@@ -14,6 +14,22 @@ internal static class GsxDepartureCoordinator
         double groundSpeedKnots) =>
         onGround && !parkingBrakeSet && groundSpeedKnots >= 0.1;
 
+    public static bool EngineStartPhaseStarted(
+        bool engineModeIgnStart,
+        bool engine1StarterActive,
+        bool engine2StarterActive,
+        bool engine1FuelFlowDetected,
+        bool engine2FuelFlowDetected,
+        bool engine1Running,
+        bool engine2Running) =>
+        engineModeIgnStart
+        || engine1StarterActive
+        || engine2StarterActive
+        || engine1FuelFlowDetected
+        || engine2FuelFlowDetected
+        || engine1Running
+        || engine2Running;
+
     public static int? FindChoice(
         GsxMenuSnapshot menu,
         GsxDepartureAction action)

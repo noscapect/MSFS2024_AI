@@ -200,6 +200,8 @@ internal sealed class CopilotService : Form
     private bool? _fbwA380ExternalPower4OnTyped;
     private double? _lastLoggedA380ExternalPowerDirectSignature;
     private double? _lastLoggedA380AcPowerSignature;
+    private double? _lastLoggedIniBuildsIgnitionKnob;
+    private double? _lastLoggedIniBuildsTurnoffLightSwitch;
     private bool? _fbwApuMasterSwitch;
     private bool? _fbwApuStartButton;
     private bool? _fbwApuStartAvailable;
@@ -302,6 +304,8 @@ internal sealed class CopilotService : Form
     private float? _nativeNoseLightSelector;
     private float? _nativeLeftLandingLightSelector;
     private float? _nativeRightLandingLightSelector;
+    private float? _nativeEngineModeSelector;
+    private float? _nativeA320RunwayTurnoffSelector;
     private float? _nativeTransponderAtcState;
     private float? _nativeTcasMode;
     private float? _nativeTransponderStandby;
@@ -500,6 +504,8 @@ internal sealed class CopilotService : Form
         NativeNoseLightSelector = 154,
         NativeLeftLandingLightSelector = 155,
         NativeRightLandingLightSelector = 156,
+        NativeEngineModeSelector = 209,
+        NativeA320RunwayTurnoffSelector = 210,
         FbwBattery1Auto = 157,
         FbwBattery2Auto = 158,
         FbwBattery1Potential = 159,
@@ -647,6 +653,8 @@ internal sealed class CopilotService : Form
         NativeNoseLightSelector = 154,
         NativeLeftLandingLightSelector = 155,
         NativeRightLandingLightSelector = 156,
+        NativeEngineModeSelector = 209,
+        NativeA320RunwayTurnoffSelector = 210,
         FbwBattery1Auto = 157,
         FbwBattery2Auto = 158,
         FbwBattery1Potential = 159,
@@ -900,6 +908,8 @@ internal sealed class CopilotService : Form
         public double SayIntentionsIntercom3Receiving;
         public double GsxCouatlStarted;
         public double GsxRemoteControl;
+        public double IniBuildsIgnitionKnob;
+        public double IniBuildsTurnoffLightSwitch;
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -1314,6 +1324,8 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "L:SIAI_INTERCOM3_RECEIVING", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "L:FSDT_GSX_COUATL_STARTED", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "L:FSDT_GSX_SET_REMOTECONTROL", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:INI_IGNITION_KNOB", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:INI_TURNOFF_LIGHT_SWITCH", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.RegisterDataDefineStruct<AircraftData>(Definition.AircraftState);
         sender.MapClientEventToSimEvent(CopilotEvent.SetExternalPower, "SET_EXTERNAL_POWER");
         sender.MapClientEventToSimEvent(CopilotEvent.SetBeacon, "BEACON_LIGHTS_SET");
@@ -2596,6 +2608,23 @@ internal sealed class CopilotService : Form
                     case Request.NativeRightLandingLightSelector:
                         _nativeRightLandingLightSelector = value;
                         break;
+                    case Request.NativeEngineModeSelector:
+                        if (!_nativeEngineModeSelector.HasValue
+                            || Math.Abs(_nativeEngineModeSelector.Value - value) >= 0.01)
+                        {
+                            AppLog.Write($"Native INI_IGNITION_KNOB changed to {value:F0}.");
+                        }
+                        _nativeEngineModeSelector = value;
+                        break;
+                    case Request.NativeA320RunwayTurnoffSelector:
+                        if (!_nativeA320RunwayTurnoffSelector.HasValue
+                            || Math.Abs(_nativeA320RunwayTurnoffSelector.Value - value) >= 0.01)
+                        {
+                            AppLog.Write(
+                                $"Native {A320RunwayTurnoffProfile.ReadbackLVar} changed to {value:F0}.");
+                        }
+                        _nativeA320RunwayTurnoffSelector = value;
+                        break;
                 }
             }
 
@@ -2794,6 +2823,8 @@ internal sealed class CopilotService : Form
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwA380ExternalPower3OnTyped, Request.FbwA380ExternalPower3OnTyped, 95 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwA380ExternalPower4AvailableTyped, Request.FbwA380ExternalPower4AvailableTyped, 96 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwA380ExternalPower4OnTyped, Request.FbwA380ExternalPower4OnTyped, 97 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.NativeEngineModeSelector, Request.NativeEngineModeSelector, 98 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.NativeA320RunwayTurnoffSelector, Request.NativeA320RunwayTurnoffSelector, 99 * sizeof(float));
         _mobiFlightRuntimeReady = true;
         _mobiFlightRuntimeInitializedUtc = DateTime.UtcNow;
         SendMobiFlightRuntimeCommand("MF.SimVars.Clear");
@@ -2949,6 +2980,8 @@ internal sealed class CopilotService : Form
             "MF.SimVars.Add.(L:A32NX_EXT_PWR_AVAIL:4, Bool)");
         SendMobiFlightRuntimeCommand(
             "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_EXT_PWR_4_PB_IS_ON, Bool)");
+        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_IGNITION_KNOB)");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A320RunwayTurnoffProfile.ReadbackLVar})");
         SendMobiFlightRuntimeCommand("MF.DummyCmd");
         AppLog.Write("FBW runtime offsets registered: ADIRS 1/2/3=56/57/58, typed=59/60/61, crew oxygen=63/64, NAV/LOGO=65/66, strobe=67/68.");
         AppendDashboardLog("iniBuilds native state monitoring connected.");
@@ -3420,6 +3453,20 @@ internal sealed class CopilotService : Form
         var isFlyByWireAirbus = isFlyByWireA320Neo || isFlyByWireA380X;
         var isPmdg737 = aircraftVariant == AircraftVariant.Pmdg737800;
         var pmdg = _pmdgNg3State;
+        if (isIniBuildsAirbusFamily)
+        {
+            LogChangedFloat(
+                "iniBuilds direct INI_IGNITION_KNOB",
+                raw.IniBuildsIgnitionKnob,
+                ref _lastLoggedIniBuildsIgnitionKnob);
+        }
+        if (aircraftVariant == AircraftVariant.IniBuildsA320NeoV2)
+        {
+            LogChangedFloat(
+                "iniBuilds A320 direct INI_TURNOFF_LIGHT_SWITCH",
+                raw.IniBuildsTurnoffLightSwitch,
+                ref _lastLoggedIniBuildsTurnoffLightSwitch);
+        }
         if (isFlyByWireAirbus)
         {
             LogChangedVoltage("FBW generic BAT 1 voltage", raw.Battery1Voltage, ref _lastLoggedBattery1Voltage);
@@ -3567,6 +3614,10 @@ internal sealed class CopilotService : Form
             Engine1FuelFlowPph = raw.Engine1FuelFlow,
             Engine2FuelFlowPph = raw.Engine2FuelFlow,
             EngineModeSelectorPosition = ResolveEngineModeSelectorPosition(
+                aircraftVariant == AircraftVariant.IniBuildsA320NeoV2
+                    ? raw.IniBuildsIgnitionKnob
+                    : null,
+                isIniBuildsAirbusFamily ? _nativeEngineModeSelector : null,
                 raw.Engine1IgnitionSwitch,
                 raw.Engine2IgnitionSwitch),
             FbwEngine1State = _fbwEngine1State,
@@ -4101,6 +4152,8 @@ internal sealed class CopilotService : Form
                 : _nativeRightLandingLightSelector,
             RunwayTurnoffLightsOn = isPmdg737 && pmdg != null
                 ? pmdg.LeftRunwayTurnoffLight && pmdg.RightRunwayTurnoffLight
+                : aircraftVariant == AircraftVariant.IniBuildsA320NeoV2
+                    ? raw.IniBuildsTurnoffLightSwitch != 0
                 : raw.LeftRunwayTurnoffLightCircuit != 0
                   && raw.RightRunwayTurnoffLightCircuit != 0,
             TcasAltitudeReportingOn = isFlyByWireAirbus
@@ -4510,9 +4563,29 @@ internal sealed class CopilotService : Form
     }
 
     private static double? ResolveEngineModeSelectorPosition(
+        double? directIniBuildsEngineModeSelector,
+        float? nativeIniBuildsEngineModeSelector,
         double engine1IgnitionSwitch,
         double engine2IgnitionSwitch)
     {
+        if (directIniBuildsEngineModeSelector.HasValue)
+        {
+            var directPosition = (int)Math.Round(directIniBuildsEngineModeSelector.Value);
+            if (directPosition >= 0 && directPosition <= 2)
+            {
+                return directPosition;
+            }
+        }
+
+        if (nativeIniBuildsEngineModeSelector.HasValue)
+        {
+            var nativePosition = (int)Math.Round(nativeIniBuildsEngineModeSelector.Value);
+            if (nativePosition >= 0 && nativePosition <= 2)
+            {
+                return nativePosition;
+            }
+        }
+
         if (Math.Abs(engine1IgnitionSwitch - engine2IgnitionSwitch) > 0.1)
         {
             return null;
@@ -5414,7 +5487,8 @@ internal sealed class CopilotService : Form
                 definition.Id,
                 "engine-start-sequence",
                 StringComparison.OrdinalIgnoreCase)
-            && ShouldCoordinateGsxDeparture())
+            && ShouldCoordinateGsxDeparture()
+            && !IsEngineStartPhaseStarted(_state))
         {
             if (!_gsxDepartureRequestedThisFlight)
             {
@@ -5457,12 +5531,28 @@ internal sealed class CopilotService : Form
             state.ParkingBrakeSet,
             state.GroundSpeedKnots);
 
+    private static bool IsEngineStartPhaseStarted(AircraftState state) =>
+        GsxDepartureCoordinator.EngineStartPhaseStarted(
+            state.EngineModeIgnStart,
+            state.Engine1StarterActive,
+            state.Engine2StarterActive,
+            state.Engine1FuelFlowDetected,
+            state.Engine2FuelFlowDetected,
+            state.Engine1Running,
+            state.Engine2Running);
+
     private void TryStartPendingGsxEngineFlow()
     {
         if (_pendingGsxEngineStartProcedure == null
             || _state == null
-            || !IsPushbackUnderway(_state)
             || IsProcedureActive(_procedureRunner.Status))
+        {
+            return;
+        }
+
+        var pushbackUnderway = IsPushbackUnderway(_state);
+        var engineStartPhaseStarted = IsEngineStartPhaseStarted(_state);
+        if (!pushbackUnderway && !engineStartPhaseStarted)
         {
             return;
         }
@@ -5471,7 +5561,9 @@ internal sealed class CopilotService : Form
         _pendingGsxEngineStartProcedure = null;
         _gsxDepartureRequestAcceptedUtc = null;
         AppendDashboardLog(
-            "GSX pushback is underway; starting the engine-start flow.");
+            pushbackUnderway
+                ? "GSX pushback is underway; starting the engine-start flow."
+                : "Engine-start phase already detected after resume; continuing Flow 4 without a new GSX pushback request.");
         StartProcedure(definition);
     }
 
@@ -14499,6 +14591,8 @@ internal sealed class CopilotService : Form
         _nativeNoseLightSelector = null;
         _nativeLeftLandingLightSelector = null;
         _nativeRightLandingLightSelector = null;
+        _nativeEngineModeSelector = null;
+        _nativeA320RunwayTurnoffSelector = null;
         _nativeTransponderAtcState = null;
         _nativeTcasMode = null;
         _nativeTransponderStandby = null;

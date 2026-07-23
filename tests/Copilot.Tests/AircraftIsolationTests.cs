@@ -16,9 +16,11 @@ public sealed class AircraftIsolationTests
     [DataRow("FlyByWire A32NX", (int)AircraftVariant.FlyByWireA320Neo)]
     [DataRow("737-800 PAX BW TC", (int)AircraftVariant.Pmdg737800)]
     [DataRow("PMDG 737-800", (int)AircraftVariant.Pmdg737800)]
+    [DataRow("737 Max 8 Passengers", (int)AircraftVariant.Asobo737Max8)]
+    [DataRow("Boeing 737 MAX 8", (int)AircraftVariant.Asobo737Max8)]
+    [DataRow("B38M", (int)AircraftVariant.Asobo737Max8)]
     [DataRow("FlyByWire A380X", (int)AircraftVariant.Unsupported)]
     [DataRow("Fenix A320", (int)AircraftVariant.Unsupported)]
-    [DataRow("Boeing 737 MAX 8", (int)AircraftVariant.Unsupported)]
     [DataRow("Headwind A330-900neo", (int)AircraftVariant.Unsupported)]
     [DataRow("Generic A330", (int)AircraftVariant.Unsupported)]
     public void ResolverSelectsExactlyOneImplementation(
@@ -36,7 +38,8 @@ public sealed class AircraftIsolationTests
             state.IsIniBuildsA330,
             state.IsFlyByWireA320Neo,
             state.IsFlyByWireA380X,
-            state.IsPmdg737800
+            state.IsPmdg737800,
+            state.IsAsobo737Max8
         }.Count(flag => flag);
 
         Assert.AreEqual(
@@ -53,6 +56,7 @@ public sealed class AircraftIsolationTests
         AssertDedicatedLibrary("A330-300 (GE)", A330ProcedureLibrary.GateToGate);
         AssertDedicatedLibrary("FlyByWire A32NX", FbwA320ProcedureLibrary.GateToGate);
         AssertDedicatedLibrary("PMDG 737-800", B737ProcedureLibrary.GateToGate);
+        AssertDedicatedLibrary("737 Max 8 Passengers", Asobo737MaxProcedureLibrary.GateToGate);
     }
 
     [TestMethod]
@@ -64,7 +68,8 @@ public sealed class AircraftIsolationTests
             A321ProcedureLibrary.GateToGate,
             A330ProcedureLibrary.GateToGate,
             FbwA320ProcedureLibrary.GateToGate,
-            B737ProcedureLibrary.GateToGate
+            B737ProcedureLibrary.GateToGate,
+            Asobo737MaxProcedureLibrary.GateToGate
         };
 
         for (var left = 0; left < libraries.Length; left++)

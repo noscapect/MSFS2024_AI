@@ -29,6 +29,8 @@ public sealed class SimBriefOperationalContextTests
     {
         Assert.AreEqual(5, SimBriefOperationalContext.TakeoffFlapSetting(
             new ImportedFlightPlan { TakeoffFlaps = "Flaps 5" }, AircraftVariant.Pmdg737800));
+        Assert.AreEqual(5, SimBriefOperationalContext.TakeoffFlapSetting(
+            new ImportedFlightPlan { TakeoffFlaps = "Flaps 5" }, AircraftVariant.Asobo737Max8));
         Assert.AreEqual(1, SimBriefOperationalContext.TakeoffFlapSetting(
             new ImportedFlightPlan { TakeoffFlaps = "1+F" }, AircraftVariant.IniBuildsA320NeoV2));
         Assert.AreEqual(2, SimBriefOperationalContext.TakeoffFlapSetting(

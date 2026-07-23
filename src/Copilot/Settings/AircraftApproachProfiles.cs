@@ -59,6 +59,9 @@ internal static class AircraftApproachProfiles
     private static readonly AircraftApproachProfile Pmdg737 = Profile(
         "pmdg-737-800", "PMDG 737-800",
         15, 10000, 230, 12, 4000, 190, 7, 2500, 200, 5, 1800, 190, 190);
+    private static readonly AircraftApproachProfile Asobo737Max = Profile(
+        "asobo-737-max-8", "Asobo 737 MAX 8",
+        15, 10000, 230, 12, 4000, 190, 7, 2500, 200, 5, 1800, 190, 190);
     private static readonly AircraftApproachProfile Generic = Profile(
         "generic", "Generic standard",
         15, 10000, 230, 10, 4000, 200, 7, 2500, 210, 5, 1800, 185, 185);
@@ -70,6 +73,9 @@ internal static class AircraftApproachProfiles
         if (title.IndexOf("A330", StringComparison.OrdinalIgnoreCase) >= 0) return IniA330;
         if (title.IndexOf("737-800", StringComparison.OrdinalIgnoreCase) >= 0
             || title.IndexOf("738", StringComparison.OrdinalIgnoreCase) >= 0) return Pmdg737;
+        if (title.IndexOf("737 Max", StringComparison.OrdinalIgnoreCase) >= 0
+            || title.IndexOf("737 MAX", StringComparison.OrdinalIgnoreCase) >= 0
+            || title.IndexOf("B38M", StringComparison.OrdinalIgnoreCase) >= 0) return Asobo737Max;
         if (title.IndexOf("A32NX", StringComparison.OrdinalIgnoreCase) >= 0
             || title.IndexOf("FlyByWire", StringComparison.OrdinalIgnoreCase) >= 0
             && title.IndexOf("A320", StringComparison.OrdinalIgnoreCase) >= 0) return FbwA320;

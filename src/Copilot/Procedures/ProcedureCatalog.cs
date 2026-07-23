@@ -28,6 +28,11 @@ internal static class ProcedureCatalog
                     B737ProcedureLibrary.GateToGate,
                     B737ProcedureLibrary.Find,
                     B737ChecklistLibrary.FindForProcedure);
+            case AircraftVariant.Asobo737Max8:
+                return new AircraftProcedureLibrary(
+                    Asobo737MaxProcedureLibrary.GateToGate,
+                    Asobo737MaxProcedureLibrary.Find,
+                    Asobo737MaxChecklistLibrary.FindForProcedure);
             case AircraftVariant.IniBuildsA330:
                 return new AircraftProcedureLibrary(
                 A330ProcedureLibrary.GateToGate,

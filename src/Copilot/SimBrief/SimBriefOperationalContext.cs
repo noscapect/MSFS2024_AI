@@ -11,6 +11,7 @@ internal static class SimBriefOperationalContext
         variant switch
         {
             AircraftVariant.Pmdg737800 => new[] { "B738" },
+            AircraftVariant.Asobo737Max8 => new[] { "B38M", "B737" },
             AircraftVariant.IniBuildsA321Lr => new[] { "A21N", "A321" },
             AircraftVariant.IniBuildsA330 => new[] { "A333" },
             AircraftVariant.IniBuildsA320NeoV2 or AircraftVariant.FlyByWireA320Neo =>
@@ -86,7 +87,7 @@ internal static class SimBriefOperationalContext
             return null;
         }
 
-        if (variant == AircraftVariant.Pmdg737800)
+        if (variant is AircraftVariant.Pmdg737800 or AircraftVariant.Asobo737Max8)
         {
             var digits = new string(value!.Where(char.IsDigit).ToArray());
             if (int.TryParse(digits, out var boeingFlaps)

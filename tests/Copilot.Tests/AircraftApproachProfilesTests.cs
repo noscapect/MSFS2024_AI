@@ -14,6 +14,7 @@ public sealed class AircraftApproachProfilesTests
         Assert.AreEqual("inibuilds-a321lr", AircraftApproachProfiles.Resolve("iniBuilds A321LR").Key);
         Assert.AreEqual("inibuilds-a330", AircraftApproachProfiles.Resolve("A330-300 (GE)").Key);
         Assert.AreEqual("pmdg-737-800", AircraftApproachProfiles.Resolve("737-800 PAX BW TC").Key);
+        Assert.AreEqual("asobo-737-max-8", AircraftApproachProfiles.Resolve("737 Max 8 Passengers").Key);
     }
 
     [TestMethod]

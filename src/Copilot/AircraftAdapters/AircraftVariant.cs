@@ -13,7 +13,8 @@ internal enum AircraftVariant
     IniBuildsA330,
     FlyByWireA320Neo,
     FlyByWireA380XExperimental,
-    Pmdg737800
+    Pmdg737800,
+    Asobo737Max8
 }
 
 internal static class AircraftVariantResolver
@@ -49,6 +50,14 @@ internal static class AircraftVariantResolver
                 || value.IndexOf("738", StringComparison.OrdinalIgnoreCase) >= 0))
         {
             return AircraftVariant.Pmdg737800;
+        }
+
+        if ((value.IndexOf("737 Max", StringComparison.OrdinalIgnoreCase) >= 0
+                || value.IndexOf("737 MAX", StringComparison.OrdinalIgnoreCase) >= 0
+                || value.IndexOf("B38M", StringComparison.OrdinalIgnoreCase) >= 0)
+            && value.IndexOf("PMDG", StringComparison.OrdinalIgnoreCase) < 0)
+        {
+            return AircraftVariant.Asobo737Max8;
         }
 
         if (value.IndexOf("A330-300 (GE)", StringComparison.OrdinalIgnoreCase) >= 0

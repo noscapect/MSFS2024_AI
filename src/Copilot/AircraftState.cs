@@ -270,14 +270,18 @@ internal sealed class AircraftState
 
     public bool IsPmdg737800 => Variant == AircraftVariant.Pmdg737800;
 
-    public bool IsSupportedBoeing737 => IsPmdg737800;
+    public bool IsAsobo737Max8 => Variant == AircraftVariant.Asobo737Max8;
+
+    public bool IsSupportedBoeing737 => IsPmdg737800 || IsAsobo737Max8;
 
     public bool IsSupportedAircraft =>
         IsSupportedA320 || IsSupportedBoeing737;
 
     public string AircraftFamilyLabel =>
         IsSupportedBoeing737
-            ? "PMDG 737-800"
+            ? IsAsobo737Max8
+                ? "Asobo 737 MAX 8"
+                : "PMDG 737-800"
             : IsIniBuildsA330
                 ? "iniBuilds A330"
             : IsFlyByWireA380X

@@ -68,6 +68,7 @@ internal sealed class CopilotService : Form
     private DateTime? _gsxDepartureRequestAcceptedUtc;
     private bool _gsxGoodEngineStartMenuRequested;
     private bool _gsxGoodEngineStartPromptPending;
+    private bool _gsxGoodEngineStartWaitingLogged;
     private ProcedureDefinition? _pendingGsxEngineStartProcedure;
     private bool _gsxMenuOpen;
     private GsxMenuSnapshot _gsxMenu =
@@ -1546,6 +1547,7 @@ internal sealed class CopilotService : Form
     {
         _gsxGoodEngineStartMenuRequested = false;
         _gsxGoodEngineStartPromptPending = false;
+        _gsxGoodEngineStartWaitingLogged = false;
     }
 
     private void HandleGsxMenuEvent(uint eventData)
@@ -1745,8 +1747,12 @@ internal sealed class CopilotService : Form
         {
             AppLog.Write(
                 "GSX good-engine-start prompt is open; waiting for both engines stabilized before responding.");
-            AppendDashboardLog(
-                "GSX is waiting for good engine start; First Officer will answer when both engines are stable.");
+            if (!_gsxGoodEngineStartWaitingLogged)
+            {
+                AppendDashboardLog(
+                    "GSX is waiting for good engine start; First Officer will answer when both engines are stable.");
+                _gsxGoodEngineStartWaitingLogged = true;
+            }
             return true;
         }
 

@@ -3,7 +3,8 @@ namespace Msfs2024Ai.Copilot.Gsx;
 internal enum GsxDepartureAction
 {
     Boarding,
-    PrepareForDeparture
+    PrepareForDeparture,
+    Deboarding
 }
 
 internal static class GsxDepartureCoordinator
@@ -49,6 +50,11 @@ internal static class GsxDepartureCoordinator
                     value.Contains("prepare")
                     && value.Contains("departure")
                     && value.Contains("pushback"),
+                GsxDepartureAction.Deboarding =>
+                    (value.Contains("deboarding") || value.Contains("deboard"))
+                    && (value.Contains("request")
+                        || value.Contains("start")
+                        || value.Contains("deboard")),
                 _ => false
             };
 

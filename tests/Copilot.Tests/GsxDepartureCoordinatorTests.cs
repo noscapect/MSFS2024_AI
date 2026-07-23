@@ -19,6 +19,30 @@ public sealed class GsxDepartureCoordinatorTests
     }
 
     [TestMethod]
+    public void FindChoice_SelectsDeboarding()
+    {
+        var menu = new GsxMenuSnapshot(
+            "Services",
+            new[] { "Request Boarding", "Request Deboarding", "Request Catering" });
+
+        Assert.AreEqual(
+            1,
+            GsxDepartureCoordinator.FindChoice(menu, GsxDepartureAction.Deboarding));
+    }
+
+    [TestMethod]
+    public void FindChoice_AcceptsStartDeboarding()
+    {
+        var menu = new GsxMenuSnapshot(
+            "Arrival",
+            new[] { "Operate Jetway", "Start Deboarding" });
+
+        Assert.AreEqual(
+            1,
+            GsxDepartureCoordinator.FindChoice(menu, GsxDepartureAction.Deboarding));
+    }
+
+    [TestMethod]
     public void FindChoice_AcceptsPushBackSpelling()
     {
         var menu = new GsxMenuSnapshot(

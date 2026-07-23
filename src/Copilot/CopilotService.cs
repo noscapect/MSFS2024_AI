@@ -63,6 +63,7 @@ internal sealed class CopilotService : Form
     private DateTime? _pendingGsxActionDeadlineUtc;
     private bool _gsxBoardingRequestedThisFlight;
     private bool _gsxDepartureRequestedThisFlight;
+    private bool _gsxDeboardingRequestedThisFlight;
     private bool _gsxDepartureRequestAccepted;
     private DateTime? _gsxDepartureRequestAcceptedUtc;
     private bool _gsxGoodEngineStartMenuRequested;
@@ -1828,9 +1829,12 @@ internal sealed class CopilotService : Form
         _nativePulseTimers.Add(timer);
         timer.Start();
         AppendDashboardLog(
-            action == GsxDepartureAction.Boarding
-                ? "Requesting boarding through GSX."
-                : "Requesting GSX preparation for pushback and departure.");
+            action switch
+            {
+                GsxDepartureAction.Boarding => "Requesting boarding through GSX.",
+                GsxDepartureAction.Deboarding => "Requesting deboarding through GSX.",
+                _ => "Requesting GSX preparation for pushback and departure."
+            });
         return true;
     }
 
@@ -1873,9 +1877,12 @@ internal sealed class CopilotService : Form
             _gsxDepartureRequestAcceptedUtc = DateTime.UtcNow;
         }
         AppendDashboardLog(
-            action == GsxDepartureAction.Boarding
-                ? "GSX boarding request accepted."
-                : "GSX departure preparation request accepted.");
+            action switch
+            {
+                GsxDepartureAction.Boarding => "GSX boarding request accepted.",
+                GsxDepartureAction.Deboarding => "GSX deboarding request accepted.",
+                _ => "GSX departure preparation request accepted."
+            });
     }
 
     private void SetGsxValue(Definition definition, double value)
@@ -6351,6 +6358,7 @@ internal sealed class CopilotService : Form
         _completedProcedureIds.Clear();
         _gsxBoardingRequestedThisFlight = false;
         _gsxDepartureRequestedThisFlight = false;
+        _gsxDeboardingRequestedThisFlight = false;
         _gsxDepartureRequestAccepted = false;
         _gsxDepartureRequestAcceptedUtc = null;
         ClearGsxGoodEngineStartPrompt();
@@ -6592,6 +6600,8 @@ internal sealed class CopilotService : Form
 
     private void OnProcedureStepCompleted(ProcedureStep step)
     {
+        TryRequestGsxDeboardingAtGate();
+
         if (_gsxDepartureRequestedThisFlight
             || !_settings.GsxAutomaticallyPrepareDeparture
             || !string.Equals(
@@ -6604,6 +6614,29 @@ internal sealed class CopilotService : Form
 
         _gsxDepartureRequestedThisFlight =
             BeginGsxAction(GsxDepartureAction.PrepareForDeparture);
+    }
+
+    private void TryRequestGsxDeboardingAtGate()
+    {
+        if (_gsxDeboardingRequestedThisFlight
+            || !_settings.EnableGsxIntegration
+            || !_settings.GsxAutomaticallyRequestDeboarding
+            || _state == null
+            || !string.Equals(
+                _procedureRunner.Definition?.Id,
+                "parking-shutdown",
+                StringComparison.OrdinalIgnoreCase)
+            || !_state.OnGround
+            || _state.GroundSpeedKnots > 0.5
+            || !_state.ParkingBrakeSet
+            || !_state.EnginesOff
+            || !(_state.ApuAvailable || _state.ExternalPowerOn))
+        {
+            return;
+        }
+
+        _gsxDeboardingRequestedThisFlight =
+            BeginGsxAction(GsxDepartureAction.Deboarding);
     }
 
     private void SaveProcedureSession()
@@ -11731,7 +11764,8 @@ internal sealed class CopilotService : Form
 
     private string GsxConfigurationSummary() =>
         $"Boarding {(_settings.GsxAutomaticallyRequestBoarding ? "ON" : "OFF")} | "
-        + $"Departure preparation {(_settings.GsxAutomaticallyPrepareDeparture ? "ON" : "OFF")}";
+        + $"Departure preparation {(_settings.GsxAutomaticallyPrepareDeparture ? "ON" : "OFF")} | "
+        + $"Deboarding {(_settings.GsxAutomaticallyRequestDeboarding ? "ON" : "OFF")}";
 
     private void UpdateGsxStatus(bool couatlStarted)
     {
@@ -11802,7 +11836,7 @@ internal sealed class CopilotService : Form
         });
         layout.Controls.Add(new Label
         {
-            Text = "GSX keeps control of passenger, fuel, cargo, catering, door and timing settings. The First Officer only coordinates boarding and departure milestones.",
+            Text = "GSX keeps control of passenger, fuel, cargo, catering, door and timing settings. The First Officer only coordinates boarding, departure and arrival deboarding milestones.",
             AutoSize = true,
             MaximumSize = new System.Drawing.Size(620, 0),
             ForeColor = System.Drawing.Color.DimGray,
@@ -11827,12 +11861,19 @@ internal sealed class CopilotService : Form
             Checked = _settings.GsxAutomaticallyPrepareDeparture,
             AutoSize = true
         };
+        var deboarding = new CheckBox
+        {
+            Text = "Automatically request GSX deboarding after parking at the gate",
+            Checked = _settings.GsxAutomaticallyRequestDeboarding,
+            AutoSize = true
+        };
         layout.Controls.Add(enabled);
         layout.Controls.Add(boarding);
         layout.Controls.Add(departure);
+        layout.Controls.Add(deboarding);
         layout.Controls.Add(new Label
         {
-            Text = "These options are independent. Disable boarding for cargo, positioning, or other flights without passengers while keeping GSX pushback coordination enabled.",
+            Text = "These options are independent. Disable boarding/deboarding for cargo, positioning, or other flights without passengers while keeping GSX pushback coordination enabled.",
             AutoSize = true,
             MaximumSize = new System.Drawing.Size(620, 0),
             ForeColor = System.Drawing.Color.DimGray,
@@ -11842,6 +11883,7 @@ internal sealed class CopilotService : Form
         {
             boarding.Enabled = enabled.Checked;
             departure.Enabled = enabled.Checked;
+            deboarding.Enabled = enabled.Checked;
         }
         enabled.CheckedChanged += (_, _) => UpdateGsxOptionAvailability();
         UpdateGsxOptionAvailability();
@@ -11884,6 +11926,12 @@ internal sealed class CopilotService : Form
             AutoSize = true,
             Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted
         };
+        var requestDeboarding = new Button
+        {
+            Text = "Request deboarding now",
+            AutoSize = true,
+            Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted
+        };
         var recoverControl = new Button
         {
             Text = "Recover VFO GSX control",
@@ -11893,6 +11941,7 @@ internal sealed class CopilotService : Form
         };
         requestBoarding.Click += (_, _) => BeginGsxAction(GsxDepartureAction.Boarding);
         prepareDeparture.Click += (_, _) => BeginGsxAction(GsxDepartureAction.PrepareForDeparture);
+        requestDeboarding.Click += (_, _) => BeginGsxAction(GsxDepartureAction.Deboarding);
         recoverControl.Click += (_, _) =>
         {
             var result = MessageBox.Show(
@@ -11915,6 +11964,7 @@ internal sealed class CopilotService : Form
         };
         testControls.Controls.Add(requestBoarding);
         testControls.Controls.Add(prepareDeparture);
+        testControls.Controls.Add(requestDeboarding);
         testControls.Controls.Add(recoverControl);
         layout.Controls.Add(testControls);
 
@@ -11956,6 +12006,7 @@ internal sealed class CopilotService : Form
             _settings.EnableGsxIntegration = enabled.Checked;
             _settings.GsxAutomaticallyRequestBoarding = boarding.Checked;
             _settings.GsxAutomaticallyPrepareDeparture = departure.Checked;
+            _settings.GsxAutomaticallyRequestDeboarding = deboarding.Checked;
             SettingsStore.Save(_settings);
             if (!_settings.EnableGsxIntegration)
             {
@@ -11964,6 +12015,7 @@ internal sealed class CopilotService : Form
             UpdateGsxStatus(_gsxCouatlStarted);
             requestBoarding.Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted;
             prepareDeparture.Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted;
+            requestDeboarding.Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted;
             recoverControl.Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted;
             RefreshObservedState();
         };

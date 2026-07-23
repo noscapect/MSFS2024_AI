@@ -195,6 +195,12 @@ The protocol proof should be a modest task. A polished, reliable gate-to-gate
 integration is a larger feature because the difficult part is coordinating
 dynamic services and aircraft state, not sending the initial GSX command.
 
+Implemented baseline: VFO can request boarding, prepare departure/pushback,
+and request deboarding after Flow 12 detects the aircraft parked at the gate
+with parking brake set, engines off, and APU or external power available. Each
+automation is optional in the GSX integration settings so cargo or positioning
+flights can keep GSX services manual.
+
 ## Sources
 
 - [FSDreamTeam GSX Pro product and feature documentation](https://www.fsdreamteam.com/products_gsxpro.html)

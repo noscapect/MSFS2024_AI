@@ -41,4 +41,5 @@ public sealed class CopilotSettings
     public bool EnableGsxIntegration { get; set; } = true;
     public bool GsxAutomaticallyRequestBoarding { get; set; } = true;
     public bool GsxAutomaticallyPrepareDeparture { get; set; } = true;
+    public bool GsxAutomaticallyRequestDeboarding { get; set; } = true;
 }

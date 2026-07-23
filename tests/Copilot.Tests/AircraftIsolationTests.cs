@@ -112,6 +112,7 @@ public sealed class AircraftIsolationTests
                 A320ProcedureLibrary.GateToGate,
                 A321ProcedureLibrary.GateToGate,
                 FbwA320ProcedureLibrary.GateToGate,
+                Asobo737MaxProcedureLibrary.GateToGate,
                 B737ProcedureLibrary.GateToGate
             }
             .SelectMany(library => library)
@@ -123,6 +124,40 @@ public sealed class AircraftIsolationTests
         Assert.IsFalse(
             commands.Any(otherAircraftCommands.Contains),
             "An A330 automatic command is shared with another aircraft profile.");
+    }
+
+    [TestMethod]
+    public void Asobo737MaxAutomaticActionsUseOnlyDedicatedCommandNamespace()
+    {
+        var commands = Asobo737MaxProcedureLibrary.GateToGate
+            .SelectMany(procedure => procedure.Steps)
+            .Where(step => step.Kind == ProcedureStepKind.AutomaticAction)
+            .Select(step => step.Command)
+            .Where(command => !string.IsNullOrWhiteSpace(command))
+            .ToArray();
+
+        Assert.IsTrue(commands.Length > 0, "The Asobo 737 MAX profile must contain automatic actions.");
+        Assert.IsTrue(
+            commands.All(command => command!.StartsWith("asobo737max ", StringComparison.Ordinal)),
+            "An Asobo 737 MAX automatic action escaped the dedicated 'asobo737max' command namespace.");
+
+        var otherAircraftCommands = new[]
+            {
+                A320ProcedureLibrary.GateToGate,
+                A321ProcedureLibrary.GateToGate,
+                A330ProcedureLibrary.GateToGate,
+                FbwA320ProcedureLibrary.GateToGate,
+                B737ProcedureLibrary.GateToGate
+            }
+            .SelectMany(library => library)
+            .SelectMany(procedure => procedure.Steps)
+            .Select(step => step.Command)
+            .Where(command => !string.IsNullOrWhiteSpace(command))
+            .ToHashSet(StringComparer.Ordinal);
+
+        Assert.IsFalse(
+            commands.Any(otherAircraftCommands.Contains),
+            "An Asobo 737 MAX automatic command is shared with another aircraft profile.");
     }
 
     [TestMethod]
@@ -144,7 +179,9 @@ public sealed class AircraftIsolationTests
             {
                 A320ProcedureLibrary.GateToGate,
                 A321ProcedureLibrary.GateToGate,
-                FbwA320ProcedureLibrary.GateToGate
+                A330ProcedureLibrary.GateToGate,
+                FbwA320ProcedureLibrary.GateToGate,
+                Asobo737MaxProcedureLibrary.GateToGate
             }
             .SelectMany(library => library)
             .SelectMany(procedure => procedure.Steps)

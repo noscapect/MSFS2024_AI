@@ -9,15 +9,18 @@ internal static class Asobo737MaxChecklistLibrary
                 new ChecklistItem("Battery", "ON", state => state.Battery1On),
                 new ChecklistItem("Ground power", "ON", state => state.ExternalPowerOn),
                 Unknown("Fire tests", "COMPLETE"),
-                Unknown("IRS", "NAV"),
-                Unknown("Logo / position", "SET"),
-                Unknown("Emergency lights", "ARMED")),
+                new ChecklistItem("IRS", "NAV", state => state.Adirs1SelectorState >= 2 && state.Adirs2SelectorState >= 2),
+                new ChecklistItem("Logo / position", "SET", state => state.LogoLightsOn && state.NavigationLightsOn),
+                new ChecklistItem("Emergency lights", "ARMED", state => state.EmergencyExitSelectorPosition.HasValue && Math.Abs(state.EmergencyExitSelectorPosition.Value - 1) < 0.1)),
             Checklist("flight-computer-preflight", "737 MAX FMC & Pre-Flight Verification",
                 new ChecklistItem("Parking brake", "ON", state => state.ParkingBrakeSet),
-                Unknown("Fuel pumps", "ON AS REQUIRED"),
+                new ChecklistItem("Fuel pumps", "ON AS REQUIRED", state => state.FuelPumpsConfigured),
                 Unknown("FMC TAKEOFF REF", "COMPLETE"),
                 Unknown("IFR clearance", "RECEIVED"),
-                Unknown("Signs", "SET")),
+                new ChecklistItem("Signs", "SET", state => state.SeatbeltSelectorPosition.HasValue
+                                                           && Math.Abs(state.SeatbeltSelectorPosition.Value - 1) < 0.1
+                                                           && state.NoSmokingSelectorPosition.HasValue
+                                                           && Math.Abs(state.NoSmokingSelectorPosition.Value - 1) < 0.1)),
             Checklist("apu-start-pushback", "737 MAX APU & Pushback Verification",
                 new ChecklistItem("APU", "AVAILABLE", state => state.ApuAvailable),
                 new ChecklistItem("APU bleed", "ON", state => state.ApuBleedOn),

@@ -64,6 +64,49 @@ public sealed class ProcedureCatalogTests
     }
 
     [TestMethod]
+    public void Asobo737MaxPowerUpUsesAutomaticFireTests()
+    {
+        var step = Asobo737MaxProcedureLibrary.PowerUpAndInitialSetup.Steps
+            .Single(item => item.Id == "fo-fire-tests");
+
+        Assert.AreEqual(ProcedureStepKind.AutomaticAction, step.Kind);
+        Assert.AreEqual(CrewRole.FirstOfficer, step.AssignedRole);
+        Assert.AreEqual("asobo737max fire-tests", step.Command);
+        Assert.IsFalse(step.IsComplete(new AircraftState
+        {
+            Title = "737 Max 8 Passengers",
+            ApuFireTestCompleted = true,
+            Engine1FireTestCompleted = false,
+            Engine2FireTestCompleted = true
+        }));
+        Assert.IsTrue(step.IsComplete(new AircraftState
+        {
+            Title = "737 Max 8 Passengers",
+            ApuFireTestCompleted = true,
+            Engine1FireTestCompleted = true,
+            Engine2FireTestCompleted = true
+        }));
+    }
+
+    [TestMethod]
+    public void Asobo737MaxPowerUpUsesAutomaticIrsNav()
+    {
+        var left = Asobo737MaxProcedureLibrary.PowerUpAndInitialSetup.Steps
+            .Single(item => item.Id == "fo-irs-left");
+        var right = Asobo737MaxProcedureLibrary.PowerUpAndInitialSetup.Steps
+            .Single(item => item.Id == "fo-irs-right");
+
+        Assert.AreEqual(ProcedureStepKind.AutomaticAction, left.Kind);
+        Assert.AreEqual(ProcedureStepKind.AutomaticAction, right.Kind);
+        Assert.AreEqual("asobo737max irs left nav", left.Command);
+        Assert.AreEqual("asobo737max irs right nav", right.Command);
+        Assert.IsFalse(left.IsComplete(new AircraftState { Title = "737 Max 8 Passengers", Adirs1SelectorState = 1 }));
+        Assert.IsFalse(right.IsComplete(new AircraftState { Title = "737 Max 8 Passengers", Adirs2SelectorState = 1 }));
+        Assert.IsTrue(left.IsComplete(new AircraftState { Title = "737 Max 8 Passengers", Adirs1SelectorState = 2 }));
+        Assert.IsTrue(right.IsComplete(new AircraftState { Title = "737 Max 8 Passengers", Adirs2SelectorState = 2 }));
+    }
+
+    [TestMethod]
     public void Pmdg737FlapsFiveRequiresPositionAndScheduledSpeed()
     {
         var flow = B737ProcedureLibrary.ApproachAndLanding;

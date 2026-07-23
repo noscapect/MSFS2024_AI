@@ -69,6 +69,24 @@ internal static class Asobo737MaxProcedureLibrary
             manualInstruction: instruction,
             isCompleteWhenRecovering: recoveryComplete);
 
+    private static ProcedureStep Automatic(
+        string id,
+        string label,
+        Func<AircraftState, bool> complete,
+        string command,
+        CrewRole role = CrewRole.FirstOfficer,
+        Func<AircraftState, bool>? recoveryComplete = null,
+        bool requireCommandExecution = true) =>
+        new(
+            id,
+            label,
+            ProcedureStepKind.AutomaticAction,
+            complete,
+            role,
+            command,
+            isCompleteWhenRecovering: recoveryComplete,
+            requireCommandExecution: requireCommandExecution);
+
     private static bool ApproachDistanceReached(AircraftState state, int maximumDistanceNm) =>
         state.ApproachDistanceToTouchdownNm.HasValue
         && state.ApproachDistanceToTouchdownNm.Value > 0
@@ -87,11 +105,18 @@ internal static class Asobo737MaxProcedureLibrary
                 Manual("captain-standby-power", "STANDBY POWER AUTO", "Captain: verify STANDBY POWER is AUTO.", CrewRole.Captain),
                 Manual("captain-ground-power-available", "Ground power available", "Captain: connect ground power if GRD POWER AVAILABLE is not shown.", CrewRole.Captain, state => state.ExternalPowerAvailable),
                 Manual("captain-external-power", "Ground power ON", "Captain: switch GRD POWER ON and verify the aircraft is powered.", CrewRole.Captain, state => state.ExternalPowerOn),
-                Manual("fo-fire-tests", "Fire tests complete", "First Officer: complete the 737 MAX fire detection/extinguisher tests, then confirm.", CrewRole.FirstOfficer),
-                Manual("fo-irs-left", "Left IRS selector NAV", "First Officer: set the left IRS selector to NAV.", CrewRole.FirstOfficer),
-                Manual("fo-irs-right", "Right IRS selector NAV", "First Officer: set the right IRS selector to NAV.", CrewRole.FirstOfficer),
-                Manual("fo-logo-position", "Logo and position lights set", "First Officer: set logo and position lights for cockpit preparation.", CrewRole.FirstOfficer),
-                Manual("fo-emergency-lights-armed", "Emergency exit lights ARMED", "First Officer: arm the emergency exit lights.", CrewRole.FirstOfficer)
+                Automatic(
+                    "fo-fire-tests",
+                    "Fire detection/extinguisher tests",
+                    state => state.ApuFireTestCompleted
+                             && state.Engine1FireTestCompleted
+                             && state.Engine2FireTestCompleted,
+                    "asobo737max fire-tests"),
+                Automatic("fo-irs-left", "Left IRS selector NAV", state => state.Adirs1SelectorState >= 2, "asobo737max irs left nav"),
+                Automatic("fo-irs-right", "Right IRS selector NAV", state => state.Adirs2SelectorState >= 2, "asobo737max irs right nav"),
+                Automatic("fo-position", "Position lights STEADY", state => state.NavigationLightsOn, "asobo737max position steady"),
+                Automatic("fo-logo", "Logo light ON", state => state.LogoLightsOn, "asobo737max logo on"),
+                Automatic("fo-emergency-lights-armed", "Emergency exit lights ARMED", state => state.EmergencyExitSelectorPosition.HasValue && Math.Abs(state.EmergencyExitSelectorPosition.Value - 1) < 0.1, "asobo737max emergency-exit arm")
             });
 
     public static ProcedureDefinition FlightComputerAndPreFlight { get; } =
@@ -108,10 +133,10 @@ internal static class Asobo737MaxProcedureLibrary
                 Manual("fmc-route", "FMC route complete", "Captain: enter route, departure, arrival and performance data.", CrewRole.Captain),
                 Manual("fmc-perf", "FMC TAKEOFF REF complete", "Captain: enter takeoff performance, V-speeds and takeoff flaps.", CrewRole.Captain),
                 Manual("captain-ifr-clearance", "IFR clearance received", "Pilot: after completing FMC setup, request and acknowledge IFR clearance.", CrewRole.Captain, state => state.AtcClearedIfr),
-                Manual("fo-fuel-pumps", "Fuel pumps ON as required", "First Officer: set fuel pumps ON as required for fuel loaded.", CrewRole.FirstOfficer),
-                Manual("fo-seatbelts-auto", "Fasten belts AUTO/ON", "First Officer: set fasten belts according to the aircraft option/SOP.", CrewRole.FirstOfficer),
-                Manual("fo-no-smoking-auto", "No smoking AUTO/ON", "First Officer: set no smoking according to the aircraft option/SOP.", CrewRole.FirstOfficer),
-                Manual("irs-aligned", "IRS alignment complete", "Captain: verify IRS alignment is complete.", CrewRole.Captain)
+                Automatic("fo-fuel-pumps", "Fuel pumps ON as required", state => state.FuelPumpsConfigured, "asobo737max fuel-pumps on"),
+                Automatic("fo-seatbelts-auto", "Fasten belts AUTO/ON", state => state.SeatbeltSelectorPosition.HasValue && Math.Abs(state.SeatbeltSelectorPosition.Value - 1) < 0.1, "asobo737max seatbelts set"),
+                Automatic("fo-no-smoking-auto", "No smoking AUTO/ON", state => state.NoSmokingSelectorPosition.HasValue && Math.Abs(state.NoSmokingSelectorPosition.Value - 1) < 0.1, "asobo737max no-smoking set"),
+                Manual("irs-aligned", "FMC POS INIT / IRS alignment verified", "Captain: verify the FMC present position is set and IRS alignment is complete with no unexpected IRS messages.", CrewRole.Captain)
             });
 
     public static ProcedureDefinition ApuStartAndPushback { get; } =

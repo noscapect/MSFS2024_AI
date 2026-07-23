@@ -313,6 +313,43 @@ internal sealed class CopilotService : Form
     private float? _nativeTcasMode;
     private float? _nativeTransponderStandby;
     private bool? _a330ApuBatteryInputEventOn;
+    private bool? _asobo737MaxBatteryInputEventOn;
+    private bool? _asobo737MaxBatteryCoverInputEventOn;
+    private ulong? _asobo737MaxBatteryInputEventHash;
+    private ulong? _asobo737MaxBatteryCoverInputEventHash;
+    private ulong? _asobo737MaxLeftIrsInputEventHash;
+    private ulong? _asobo737MaxRightIrsInputEventHash;
+    private ulong? _asobo737MaxPositionLightInputEventHash;
+    private ulong? _asobo737MaxLogoLightInputEventHash;
+    private ulong? _asobo737MaxEmergencyExitInputEventHash;
+    private ulong? _asobo737MaxEmergencyExitCoverInputEventHash;
+    private ulong? _asobo737MaxSeatbeltsInputEventHash;
+    private ulong? _asobo737MaxNoSmokingInputEventHash;
+    private readonly ulong?[] _asobo737MaxFuelPumpInputEventHashes = new ulong?[6];
+    private double? _asobo737MaxLeftIrsInputState;
+    private double? _asobo737MaxRightIrsInputState;
+    private double? _asobo737MaxCommandedLeftIrsState;
+    private double? _asobo737MaxCommandedRightIrsState;
+    private DateTime? _asobo737MaxCommandedLeftIrsUtc;
+    private DateTime? _asobo737MaxCommandedRightIrsUtc;
+    private double? _asobo737MaxPositionLightInputState;
+    private double? _asobo737MaxLogoLightInputState;
+    private double? _asobo737MaxEmergencyExitInputState;
+    private double? _asobo737MaxEmergencyExitCoverInputState;
+    private double? _asobo737MaxSeatbeltsInputState;
+    private double? _asobo737MaxNoSmokingInputState;
+    private readonly double?[] _asobo737MaxFuelPumpInputStates = new double?[6];
+    private bool _asobo737MaxInputEventsEnumerated;
+    private bool _asobo737MaxFireTestsInProgress;
+    private static readonly string[] Asobo737MaxFuelPumpInputEventNames =
+    {
+        "FUEL_PUMP_AFT_1",
+        "FUEL_PUMP_FWD_1",
+        "FUEL_PUMP_CTR_L",
+        "FUEL_PUMP_CTR_R",
+        "FUEL_PUMP_FWD_2",
+        "FUEL_PUMP_AFT_2"
+    };
     private static readonly ulong[] A330FuelPumpInputEventHashes =
     {
         17160241956476466648UL, // AIRLINER_FUEL_ENG1_L1
@@ -373,6 +410,10 @@ internal sealed class CopilotService : Form
     private double? _a330TcasTrafficInputState;
     private const ulong A330TcasAltitudeInputEventHash = 8240611082898456697UL;
     private double? _a330TcasAltitudeInputState;
+    private const ulong Asobo737MaxOverheatDetectorTestInputEventHash = 13636199590092324351UL;
+    private const ulong Asobo737MaxExtinguisherTestInputEventHash = 12566998620356730068UL;
+    private const ulong Asobo737MaxProcedureFireWarningInputEventHash = 9944065992900094384UL;
+    private const ulong Asobo737MaxCargoFireTestInputEventHash = 2235982354068596994UL;
     private bool _apuFireTestCompleted;
     private bool _engine1FireTestCompleted;
     private bool _engine2FireTestCompleted;
@@ -591,6 +632,23 @@ internal sealed class CopilotService : Form
         A330TcasTrafficInputEvent = 237,
         A330TcasAltitudeInputEvent = 238,
         A330LandingLightInputEvent = 239,
+        Asobo737MaxEnumerateInputEvents = 240,
+        Asobo737MaxBatteryInputEvent = 241,
+        Asobo737MaxBatteryCoverInputEvent = 242,
+        Asobo737MaxLeftIrsInputEvent = 243,
+        Asobo737MaxRightIrsInputEvent = 244,
+        Asobo737MaxPositionLightInputEvent = 245,
+        Asobo737MaxLogoLightInputEvent = 246,
+        Asobo737MaxEmergencyExitInputEvent = 247,
+        Asobo737MaxEmergencyExitCoverInputEvent = 248,
+        Asobo737MaxFuelPump1InputEvent = 249,
+        Asobo737MaxFuelPump2InputEvent = 250,
+        Asobo737MaxFuelPump3InputEvent = 251,
+        Asobo737MaxFuelPump4InputEvent = 252,
+        Asobo737MaxFuelPump5InputEvent = 253,
+        Asobo737MaxFuelPump6InputEvent = 254,
+        Asobo737MaxSeatbeltsInputEvent = 255,
+        Asobo737MaxNoSmokingInputEvent = 256,
         PmdgNg3Data = 300,
         PmdgNg3Control = 301
     }
@@ -1150,6 +1208,7 @@ internal sealed class CopilotService : Form
             _simConnect.OnRecvException += OnException;
             _simConnect.OnRecvSimobjectData += OnAircraftData;
             _simConnect.OnRecvClientData += OnClientData;
+            _simConnect.OnRecvEnumerateInputEvents += OnEnumerateInputEvents;
             _simConnect.OnRecvGetInputEvent += OnGetInputEvent;
             _simConnect.OnRecvEvent += OnGsxEvent;
         }
@@ -1368,6 +1427,92 @@ internal sealed class CopilotService : Form
         _a330InputEventPollingTimer = new System.Windows.Forms.Timer { Interval = 250 };
         _a330InputEventPollingTimer.Tick += (_, _) =>
         {
+            if (_state?.IsAsobo737Max8 == true)
+            {
+                try
+                {
+                    if (_asobo737MaxBatteryCoverInputEventHash.HasValue)
+                    {
+                        sender.GetInputEvent(
+                            Request.Asobo737MaxBatteryCoverInputEvent,
+                            _asobo737MaxBatteryCoverInputEventHash.Value);
+                    }
+                    if (_asobo737MaxBatteryInputEventHash.HasValue)
+                    {
+                        sender.GetInputEvent(
+                            Request.Asobo737MaxBatteryInputEvent,
+                            _asobo737MaxBatteryInputEventHash.Value);
+                    }
+                    if (_asobo737MaxLeftIrsInputEventHash.HasValue)
+                    {
+                        sender.GetInputEvent(
+                            Request.Asobo737MaxLeftIrsInputEvent,
+                            _asobo737MaxLeftIrsInputEventHash.Value);
+                    }
+                    if (_asobo737MaxRightIrsInputEventHash.HasValue)
+                    {
+                        sender.GetInputEvent(
+                            Request.Asobo737MaxRightIrsInputEvent,
+                            _asobo737MaxRightIrsInputEventHash.Value);
+                    }
+                    if (_asobo737MaxPositionLightInputEventHash.HasValue)
+                    {
+                        sender.GetInputEvent(
+                            Request.Asobo737MaxPositionLightInputEvent,
+                            _asobo737MaxPositionLightInputEventHash.Value);
+                    }
+                    if (_asobo737MaxLogoLightInputEventHash.HasValue)
+                    {
+                        sender.GetInputEvent(
+                            Request.Asobo737MaxLogoLightInputEvent,
+                            _asobo737MaxLogoLightInputEventHash.Value);
+                    }
+                    if (_asobo737MaxEmergencyExitInputEventHash.HasValue)
+                    {
+                        sender.GetInputEvent(
+                            Request.Asobo737MaxEmergencyExitInputEvent,
+                            _asobo737MaxEmergencyExitInputEventHash.Value);
+                    }
+                    if (_asobo737MaxEmergencyExitCoverInputEventHash.HasValue)
+                    {
+                        sender.GetInputEvent(
+                            Request.Asobo737MaxEmergencyExitCoverInputEvent,
+                            _asobo737MaxEmergencyExitCoverInputEventHash.Value);
+                    }
+                    if (_asobo737MaxSeatbeltsInputEventHash.HasValue)
+                    {
+                        sender.GetInputEvent(
+                            Request.Asobo737MaxSeatbeltsInputEvent,
+                            _asobo737MaxSeatbeltsInputEventHash.Value);
+                    }
+                    if (_asobo737MaxNoSmokingInputEventHash.HasValue)
+                    {
+                        sender.GetInputEvent(
+                            Request.Asobo737MaxNoSmokingInputEvent,
+                            _asobo737MaxNoSmokingInputEventHash.Value);
+                    }
+                    for (var index = 0; index < _asobo737MaxFuelPumpInputEventHashes.Length; index++)
+                    {
+                        if (_asobo737MaxFuelPumpInputEventHashes[index].HasValue)
+                        {
+                            sender.GetInputEvent(
+                                (Request)((int)Request.Asobo737MaxFuelPump1InputEvent + index),
+                                _asobo737MaxFuelPumpInputEventHashes[index]!.Value);
+                        }
+                    }
+                    if (!_asobo737MaxInputEventsEnumerated)
+                    {
+                        sender.EnumerateInputEvents(Request.Asobo737MaxEnumerateInputEvents);
+                    }
+                }
+                catch (Exception exception)
+                {
+                    AppLog.Write($"Asobo 737 MAX InputEvent poll failed: {exception.Message}");
+                }
+
+                return;
+            }
+
             if (_state?.IsIniBuildsA330 != true)
             {
                 return;
@@ -2281,6 +2426,158 @@ internal sealed class CopilotService : Form
             return;
         }
 
+        if (request == Request.Asobo737MaxBatteryInputEvent)
+        {
+            var maxBatteryOn = numericValue.Value >= 0.5;
+            if (_asobo737MaxBatteryInputEventOn != maxBatteryOn)
+            {
+                _asobo737MaxBatteryInputEventOn = maxBatteryOn;
+                AppLog.Write($"Asobo 737 MAX ELECTRICAL_BATTERY InputEvent={numericValue.Value:0.###} ({maxBatteryOn.ToOnOff()}).");
+            }
+            else
+            {
+                _asobo737MaxBatteryInputEventOn = maxBatteryOn;
+            }
+
+            ApplyNativeAircraftState();
+            return;
+        }
+
+        if (request == Request.Asobo737MaxBatteryCoverInputEvent)
+        {
+            var maxBatteryCoverOn = numericValue.Value < 0.5;
+            if (_asobo737MaxBatteryCoverInputEventOn != maxBatteryCoverOn)
+            {
+                _asobo737MaxBatteryCoverInputEventOn = maxBatteryCoverOn;
+                AppLog.Write($"Asobo 737 MAX COMMON_ELECTRICAL_BATTERY_COVER InputEvent={numericValue.Value:0.###} (battery {maxBatteryCoverOn.ToOnOff()}).");
+            }
+            else
+            {
+                _asobo737MaxBatteryCoverInputEventOn = maxBatteryCoverOn;
+            }
+
+            ApplyNativeAircraftState();
+            return;
+        }
+
+        if (request == Request.Asobo737MaxLeftIrsInputEvent
+            || request == Request.Asobo737MaxRightIrsInputEvent)
+        {
+            var previous = request == Request.Asobo737MaxLeftIrsInputEvent
+                ? _asobo737MaxLeftIrsInputState
+                : _asobo737MaxRightIrsInputState;
+            if (request == Request.Asobo737MaxLeftIrsInputEvent)
+            {
+                _asobo737MaxLeftIrsInputState = numericValue.Value;
+            }
+            else
+            {
+                _asobo737MaxRightIrsInputState = numericValue.Value;
+            }
+
+            if (!previous.HasValue || Math.Abs(previous.Value - numericValue.Value) >= 0.01)
+            {
+                AppLog.Write(
+                    $"Asobo 737 MAX {(request == Request.Asobo737MaxLeftIrsInputEvent ? "left" : "right")} IRS InputEvent={numericValue.Value:0.###}.");
+            }
+
+            ApplyNativeAircraftState();
+            return;
+        }
+
+        if (request == Request.Asobo737MaxPositionLightInputEvent
+            || request == Request.Asobo737MaxLogoLightInputEvent)
+        {
+            var isPositionLight = request == Request.Asobo737MaxPositionLightInputEvent;
+            var previous = isPositionLight
+                ? _asobo737MaxPositionLightInputState
+                : _asobo737MaxLogoLightInputState;
+            if (isPositionLight)
+            {
+                _asobo737MaxPositionLightInputState = numericValue.Value;
+            }
+            else
+            {
+                _asobo737MaxLogoLightInputState = numericValue.Value;
+            }
+
+            if (!previous.HasValue || Math.Abs(previous.Value - numericValue.Value) >= 0.01)
+            {
+                AppLog.Write(
+                    $"Asobo 737 MAX {(isPositionLight ? "position" : "logo")} light InputEvent={numericValue.Value:0.###}.");
+            }
+
+            ApplyNativeAircraftState();
+            return;
+        }
+
+        if (request == Request.Asobo737MaxEmergencyExitInputEvent
+            || request == Request.Asobo737MaxEmergencyExitCoverInputEvent)
+        {
+            var isCover = request == Request.Asobo737MaxEmergencyExitCoverInputEvent;
+            var previous = isCover
+                ? _asobo737MaxEmergencyExitCoverInputState
+                : _asobo737MaxEmergencyExitInputState;
+            if (isCover)
+            {
+                _asobo737MaxEmergencyExitCoverInputState = numericValue.Value;
+            }
+            else
+            {
+                _asobo737MaxEmergencyExitInputState = numericValue.Value;
+            }
+
+            if (!previous.HasValue || Math.Abs(previous.Value - numericValue.Value) >= 0.01)
+            {
+                AppLog.Write(
+                    $"Asobo 737 MAX emergency exit {(isCover ? "cover" : "switch")} InputEvent={numericValue.Value:0.###}.");
+            }
+
+            ApplyNativeAircraftState();
+            return;
+        }
+
+        if (request == Request.Asobo737MaxSeatbeltsInputEvent
+            || request == Request.Asobo737MaxNoSmokingInputEvent)
+        {
+            var isSeatbelts = request == Request.Asobo737MaxSeatbeltsInputEvent;
+            var previous = isSeatbelts
+                ? _asobo737MaxSeatbeltsInputState
+                : _asobo737MaxNoSmokingInputState;
+            if (isSeatbelts)
+            {
+                _asobo737MaxSeatbeltsInputState = numericValue.Value;
+            }
+            else
+            {
+                _asobo737MaxNoSmokingInputState = numericValue.Value;
+            }
+
+            if (!previous.HasValue || Math.Abs(previous.Value - numericValue.Value) >= 0.01)
+            {
+                AppLog.Write(
+                    $"Asobo 737 MAX {(isSeatbelts ? "seatbelts" : "no-smoking")} InputEvent={numericValue.Value:0.###}.");
+            }
+
+            ApplyNativeAircraftState();
+            return;
+        }
+
+        if (request is >= Request.Asobo737MaxFuelPump1InputEvent and <= Request.Asobo737MaxFuelPump6InputEvent)
+        {
+            var pumpIndex = (int)request - (int)Request.Asobo737MaxFuelPump1InputEvent;
+            var previous = _asobo737MaxFuelPumpInputStates[pumpIndex];
+            _asobo737MaxFuelPumpInputStates[pumpIndex] = numericValue.Value;
+            if (!previous.HasValue || Math.Abs(previous.Value - numericValue.Value) >= 0.01)
+            {
+                AppLog.Write(
+                    $"Asobo 737 MAX fuel pump {pumpIndex + 1} InputEvent={numericValue.Value:0.###}.");
+            }
+
+            ApplyNativeAircraftState();
+            return;
+        }
+
         if (request != Request.A330ApuBatteryInputEvent)
         {
             return;
@@ -2299,6 +2596,132 @@ internal sealed class CopilotService : Form
 
         ApplyNativeAircraftState();
     }
+
+    private void OnEnumerateInputEvents(SimConnect sender, SIMCONNECT_RECV_ENUMERATE_INPUT_EVENTS data)
+    {
+        var request = (Request)data.dwRequestID;
+        if (request != Request.Asobo737MaxEnumerateInputEvents)
+        {
+            return;
+        }
+
+        _asobo737MaxInputEventsEnumerated = true;
+        foreach (var item in data.rgData ?? Array.Empty<object>())
+        {
+            if (item is not SIMCONNECT_INPUT_EVENT_DESCRIPTOR descriptor)
+            {
+                continue;
+            }
+
+            var name = descriptor.Name ?? string.Empty;
+            if (IsAsobo737MaxFireInputEventName(name))
+            {
+                AppLog.Write($"Asobo 737 MAX fire input event candidate: {name} hash={descriptor.Hash}.");
+            }
+
+            if (string.Equals(name, "AFT_OVHD_L_IRS", StringComparison.OrdinalIgnoreCase))
+            {
+                _asobo737MaxLeftIrsInputEventHash = descriptor.Hash;
+                AppLog.Write($"Asobo 737 MAX left IRS readback bound to InputEvent hash {descriptor.Hash}.");
+            }
+            else if (string.Equals(name, "AFT_OVHD_R_IRS", StringComparison.OrdinalIgnoreCase))
+            {
+                _asobo737MaxRightIrsInputEventHash = descriptor.Hash;
+                AppLog.Write($"Asobo 737 MAX right IRS readback bound to InputEvent hash {descriptor.Hash}.");
+            }
+            else if (string.Equals(name, "LIGHTING_POSITION_LIGHT", StringComparison.OrdinalIgnoreCase))
+            {
+                _asobo737MaxPositionLightInputEventHash = descriptor.Hash;
+                AppLog.Write($"Asobo 737 MAX position light readback bound to InputEvent hash {descriptor.Hash}.");
+            }
+            else if (string.Equals(name, "LIGHTING_LOGO_LIGHT", StringComparison.OrdinalIgnoreCase))
+            {
+                _asobo737MaxLogoLightInputEventHash = descriptor.Hash;
+                AppLog.Write($"Asobo 737 MAX logo light readback bound to InputEvent hash {descriptor.Hash}.");
+            }
+            else if (string.Equals(name, "PASSENGER_EXIT_LIGHTS", StringComparison.OrdinalIgnoreCase))
+            {
+                _asobo737MaxEmergencyExitInputEventHash = descriptor.Hash;
+                AppLog.Write($"Asobo 737 MAX emergency exit light readback bound to InputEvent hash {descriptor.Hash}.");
+            }
+            else if (string.Equals(name, "COMMON_PASSENGER_EXIT_LIGHTS_COVER", StringComparison.OrdinalIgnoreCase))
+            {
+                _asobo737MaxEmergencyExitCoverInputEventHash = descriptor.Hash;
+                AppLog.Write($"Asobo 737 MAX emergency exit cover readback bound to InputEvent hash {descriptor.Hash}.");
+            }
+            else if (string.Equals(name, "PASSENGER_FASTEN_BELTS", StringComparison.OrdinalIgnoreCase))
+            {
+                _asobo737MaxSeatbeltsInputEventHash = descriptor.Hash;
+                AppLog.Write($"Asobo 737 MAX seatbelts readback bound to InputEvent hash {descriptor.Hash}.");
+            }
+            else if (string.Equals(name, "PASSENGER_NO_SMOKING", StringComparison.OrdinalIgnoreCase))
+            {
+                _asobo737MaxNoSmokingInputEventHash = descriptor.Hash;
+                AppLog.Write($"Asobo 737 MAX no-smoking readback bound to InputEvent hash {descriptor.Hash}.");
+            }
+            else
+            {
+                var fuelPumpIndex = Array.FindIndex(
+                    Asobo737MaxFuelPumpInputEventNames,
+                    candidate => string.Equals(candidate, name, StringComparison.OrdinalIgnoreCase));
+                if (fuelPumpIndex >= 0)
+                {
+                    _asobo737MaxFuelPumpInputEventHashes[fuelPumpIndex] = descriptor.Hash;
+                    AppLog.Write(
+                        $"Asobo 737 MAX fuel pump {fuelPumpIndex + 1} readback bound to InputEvent {name} hash {descriptor.Hash}.");
+                }
+            }
+
+            if (name.IndexOf("ELECTRICAL_BATTERY", StringComparison.OrdinalIgnoreCase) < 0)
+            {
+                continue;
+            }
+
+            AppLog.Write($"Asobo 737 MAX input event discovered: {name} hash={descriptor.Hash}.");
+            if (string.Equals(name, "COMMON_ELECTRICAL_BATTERY_COVER", StringComparison.OrdinalIgnoreCase))
+            {
+                _asobo737MaxBatteryCoverInputEventHash = descriptor.Hash;
+                continue;
+            }
+
+            if (string.Equals(name, "ELECTRICAL_BATTERY", StringComparison.OrdinalIgnoreCase))
+            {
+                _asobo737MaxBatteryInputEventHash = descriptor.Hash;
+            }
+        }
+
+        if (_asobo737MaxBatteryCoverInputEventHash.HasValue)
+        {
+            AppLog.Write($"Asobo 737 MAX battery cover readback bound to InputEvent hash {_asobo737MaxBatteryCoverInputEventHash.Value}.");
+            sender.GetInputEvent(
+                Request.Asobo737MaxBatteryCoverInputEvent,
+                _asobo737MaxBatteryCoverInputEventHash.Value);
+        }
+        else
+        {
+            AppLog.Write("Asobo 737 MAX battery cover InputEvent was not found during enumeration.");
+        }
+
+        if (_asobo737MaxBatteryInputEventHash.HasValue)
+        {
+            AppLog.Write($"Asobo 737 MAX battery readback bound to InputEvent hash {_asobo737MaxBatteryInputEventHash.Value}.");
+            sender.GetInputEvent(
+                Request.Asobo737MaxBatteryInputEvent,
+                _asobo737MaxBatteryInputEventHash.Value);
+        }
+        else
+        {
+            AppLog.Write("Asobo 737 MAX battery InputEvent was not found during enumeration.");
+        }
+    }
+
+    private static bool IsAsobo737MaxFireInputEventName(string name) =>
+        name.IndexOf("FIRE", StringComparison.OrdinalIgnoreCase) >= 0
+        || name.IndexOf("EXTING", StringComparison.OrdinalIgnoreCase) >= 0
+        || name.IndexOf("OVERHEAT", StringComparison.OrdinalIgnoreCase) >= 0
+        || name.IndexOf("OVHT", StringComparison.OrdinalIgnoreCase) >= 0
+        || name.IndexOf("FAULT", StringComparison.OrdinalIgnoreCase) >= 0
+        || name.IndexOf("INOP", StringComparison.OrdinalIgnoreCase) >= 0;
 
     private static double? TryReadInputEventNumber(object? value)
     {
@@ -3356,6 +3779,57 @@ internal sealed class CopilotService : Form
                 _state.Adirs3SelectorState = _a330AdirsInputStates[2]!.Value;
             }
         }
+        if (_state.IsAsobo737Max8)
+        {
+            if (_asobo737MaxLeftIrsInputState.HasValue)
+            {
+                _state.Adirs1SelectorState = _asobo737MaxLeftIrsInputState.Value;
+            }
+            else if (_asobo737MaxCommandedLeftIrsState.HasValue
+                     && _asobo737MaxCommandedLeftIrsUtc.HasValue
+                     && DateTime.UtcNow - _asobo737MaxCommandedLeftIrsUtc.Value < TimeSpan.FromSeconds(15))
+            {
+                _state.Adirs1SelectorState = _asobo737MaxCommandedLeftIrsState.Value;
+            }
+            if (_asobo737MaxRightIrsInputState.HasValue)
+            {
+                _state.Adirs2SelectorState = _asobo737MaxRightIrsInputState.Value;
+            }
+            else if (_asobo737MaxCommandedRightIrsState.HasValue
+                     && _asobo737MaxCommandedRightIrsUtc.HasValue
+                     && DateTime.UtcNow - _asobo737MaxCommandedRightIrsUtc.Value < TimeSpan.FromSeconds(15))
+            {
+                _state.Adirs2SelectorState = _asobo737MaxCommandedRightIrsState.Value;
+            }
+            if (_asobo737MaxPositionLightInputState.HasValue)
+            {
+                _state.NavigationLightsOn = Math.Abs(_asobo737MaxPositionLightInputState.Value) < 0.1
+                    || Math.Abs(_asobo737MaxPositionLightInputState.Value - 2) < 0.1;
+            }
+            if (_asobo737MaxLogoLightInputState.HasValue)
+            {
+                _state.LogoLightsOn = Math.Abs(_asobo737MaxLogoLightInputState.Value) < 0.1;
+            }
+            if (_asobo737MaxEmergencyExitInputState.HasValue
+                && _asobo737MaxEmergencyExitCoverInputState.HasValue)
+            {
+                _state.EmergencyExitSelectorPosition =
+                    Math.Abs(_asobo737MaxEmergencyExitInputState.Value - 1) < 0.1
+                    && Math.Abs(_asobo737MaxEmergencyExitCoverInputState.Value) < 0.1
+                        ? 1
+                        : _asobo737MaxEmergencyExitInputState.Value;
+            }
+            if (Asobo737MaxFuelPumpInputEventsReady())
+            {
+                _state.FuelPump1State = Asobo737MaxFuelPumpIsOn(_asobo737MaxFuelPumpInputStates[0]!.Value) ? 1 : 0;
+                _state.FuelPump2State = Asobo737MaxFuelPumpIsOn(_asobo737MaxFuelPumpInputStates[1]!.Value) ? 1 : 0;
+                _state.FuelPump3State = Asobo737MaxFuelPumpIsOn(_asobo737MaxFuelPumpInputStates[2]!.Value) ? 1 : 0;
+                _state.FuelPump4State = Asobo737MaxFuelPumpIsOn(_asobo737MaxFuelPumpInputStates[3]!.Value) ? 1 : 0;
+                _state.FuelPump5State = Asobo737MaxFuelPumpIsOn(_asobo737MaxFuelPumpInputStates[4]!.Value) ? 1 : 0;
+                _state.FuelPump6State = Asobo737MaxFuelPumpIsOn(_asobo737MaxFuelPumpInputStates[5]!.Value) ? 1 : 0;
+                _state.FuelPumpsConfigured = Asobo737MaxFuelPumpsConfigured();
+            }
+        }
         if (_nativeAdirsOnBattery.HasValue)
         {
             _state.AdirsOnBattery = _nativeAdirsOnBattery.Value != 0;
@@ -3397,6 +3871,19 @@ internal sealed class CopilotService : Form
             _state.NoSmokingSelectorPosition = _a330SignInputStates[1];
             _state.NoSmokingSignsOn = _a330SignInputStates[1] >= 0.5;
             _state.EmergencyExitSelectorPosition = _a330SignInputStates[2];
+        }
+        if (_state.IsAsobo737Max8)
+        {
+            if (_asobo737MaxSeatbeltsInputState.HasValue)
+            {
+                _state.SeatbeltSelectorPosition = _asobo737MaxSeatbeltsInputState.Value;
+                _state.SeatbeltSignsOn = Math.Abs(_asobo737MaxSeatbeltsInputState.Value - 1) < 0.1;
+            }
+            if (_asobo737MaxNoSmokingInputState.HasValue)
+            {
+                _state.NoSmokingSelectorPosition = _asobo737MaxNoSmokingInputState.Value;
+                _state.NoSmokingSignsOn = Math.Abs(_asobo737MaxNoSmokingInputState.Value - 1) < 0.1;
+            }
         }
         if (_state.IsIniBuildsA330)
         {
@@ -3538,6 +4025,7 @@ internal sealed class CopilotService : Form
             aircraftVariant == AircraftVariant.FlyByWireA320Neo;
         var isFlyByWireAirbus = isFlyByWireA320Neo || isFlyByWireA380X;
         var isPmdg737 = aircraftVariant == AircraftVariant.Pmdg737800;
+        var isAsobo737Max = aircraftVariant == AircraftVariant.Asobo737Max8;
         var pmdg = _pmdgNg3State;
         if (isIniBuildsAirbusFamily)
         {
@@ -3718,6 +4206,8 @@ internal sealed class CopilotService : Form
                         raw.Battery1)
                 : isPmdg737
                     ? pmdg != null && pmdg.BatterySelector != 0
+                : isAsobo737Max
+                    ? _asobo737MaxBatteryCoverInputEventOn == true
                 : raw.Battery1 != 0,
             Battery2On = isIniBuildsAirbusFamily
                 ? _nativeBattery2On ?? raw.Battery2 != 0
@@ -3729,6 +4219,8 @@ internal sealed class CopilotService : Form
                         raw.Battery2)
                 : isPmdg737
                     ? pmdg != null && pmdg.BatterySelector != 0
+                : isAsobo737Max
+                    ? _asobo737MaxBatteryCoverInputEventOn == true
                 : raw.Battery2 != 0,
             Battery1Voltage = raw.Battery1Voltage,
             Battery2Voltage = raw.Battery2Voltage,
@@ -3937,18 +4429,20 @@ internal sealed class CopilotService : Form
                           || pmdg.LeftCenterFuelPump && pmdg.RightCenterFuelPump)
                 : isIniBuildsA330 && A330FuelPumpInputEventsReady()
                     ? A330FuelPumpsConfigured()
+                : isAsobo737Max && Asobo737MaxFuelPumpInputEventsReady()
+                    ? Asobo737MaxFuelPumpsConfigured()
                 : (_nativeFuelPump1 ?? (float)raw.FuelPump1) != 0
                   && (_nativeFuelPump2 ?? (float)raw.FuelPump2) != 0
                   && (_nativeFuelPump3 ?? (float)raw.FuelPump3) != 0
                   && (_nativeFuelPump4 ?? (float)raw.FuelPump4) != 0
                   && (_nativeFuelPump5 ?? 0) != 0
                   && (_nativeFuelPump6 ?? 0) != 0,
-            FuelPump1State = isFlyByWireAirbus ? raw.FuelPump2 : isPmdg737 && pmdg != null ? (pmdg.LeftAftFuelPump ? 1 : 0) : isIniBuildsA330 && A330FuelPumpInputEventsReady() ? _a330FuelPumpInputStates[0]!.Value : _nativeFuelPump1 ?? raw.FuelPump1,
-            FuelPump2State = isFlyByWireAirbus ? raw.FbwFuelPump5 : isPmdg737 && pmdg != null ? (pmdg.LeftForwardFuelPump ? 1 : 0) : isIniBuildsA330 && A330FuelPumpInputEventsReady() ? _a330FuelPumpInputStates[1]!.Value : _nativeFuelPump2 ?? raw.FuelPump2,
-            FuelPump3State = isFlyByWireAirbus ? raw.FbwFuelValve9 : isPmdg737 && pmdg != null ? (pmdg.RightForwardFuelPump ? 1 : 0) : isIniBuildsA330 && A330FuelPumpInputEventsReady() ? _a330FuelPumpInputStates[2]!.Value : _nativeFuelPump3 ?? raw.FuelPump3,
-            FuelPump4State = isFlyByWireAirbus ? raw.FbwFuelValve10 : isPmdg737 && pmdg != null ? (pmdg.RightAftFuelPump ? 1 : 0) : isIniBuildsA330 && A330FuelPumpInputEventsReady() ? _a330FuelPumpInputStates[3]!.Value : _nativeFuelPump4 ?? raw.FuelPump4,
-            FuelPump5State = isFlyByWireAirbus ? raw.FuelPump3 : isPmdg737 && pmdg != null ? (pmdg.LeftCenterFuelPump ? 1 : 0) : isIniBuildsA330 && A330FuelPumpInputEventsReady() ? _a330FuelPumpInputStates[4]!.Value : _nativeFuelPump5 ?? 0,
-            FuelPump6State = isFlyByWireAirbus ? raw.FbwFuelPump6 : isPmdg737 && pmdg != null ? (pmdg.RightCenterFuelPump ? 1 : 0) : isIniBuildsA330 && A330FuelPumpInputEventsReady() ? _a330FuelPumpInputStates[5]!.Value : _nativeFuelPump6 ?? 0,
+            FuelPump1State = isFlyByWireAirbus ? raw.FuelPump2 : isPmdg737 && pmdg != null ? (pmdg.LeftAftFuelPump ? 1 : 0) : isIniBuildsA330 && A330FuelPumpInputEventsReady() ? _a330FuelPumpInputStates[0]!.Value : isAsobo737Max && Asobo737MaxFuelPumpInputEventsReady() ? Asobo737MaxFuelPumpIsOn(_asobo737MaxFuelPumpInputStates[0]!.Value) ? 1 : 0 : _nativeFuelPump1 ?? raw.FuelPump1,
+            FuelPump2State = isFlyByWireAirbus ? raw.FbwFuelPump5 : isPmdg737 && pmdg != null ? (pmdg.LeftForwardFuelPump ? 1 : 0) : isIniBuildsA330 && A330FuelPumpInputEventsReady() ? _a330FuelPumpInputStates[1]!.Value : isAsobo737Max && Asobo737MaxFuelPumpInputEventsReady() ? Asobo737MaxFuelPumpIsOn(_asobo737MaxFuelPumpInputStates[1]!.Value) ? 1 : 0 : _nativeFuelPump2 ?? raw.FuelPump2,
+            FuelPump3State = isFlyByWireAirbus ? raw.FbwFuelValve9 : isPmdg737 && pmdg != null ? (pmdg.RightForwardFuelPump ? 1 : 0) : isIniBuildsA330 && A330FuelPumpInputEventsReady() ? _a330FuelPumpInputStates[2]!.Value : isAsobo737Max && Asobo737MaxFuelPumpInputEventsReady() ? Asobo737MaxFuelPumpIsOn(_asobo737MaxFuelPumpInputStates[2]!.Value) ? 1 : 0 : _nativeFuelPump3 ?? raw.FuelPump3,
+            FuelPump4State = isFlyByWireAirbus ? raw.FbwFuelValve10 : isPmdg737 && pmdg != null ? (pmdg.RightAftFuelPump ? 1 : 0) : isIniBuildsA330 && A330FuelPumpInputEventsReady() ? _a330FuelPumpInputStates[3]!.Value : isAsobo737Max && Asobo737MaxFuelPumpInputEventsReady() ? Asobo737MaxFuelPumpIsOn(_asobo737MaxFuelPumpInputStates[3]!.Value) ? 1 : 0 : _nativeFuelPump4 ?? raw.FuelPump4,
+            FuelPump5State = isFlyByWireAirbus ? raw.FuelPump3 : isPmdg737 && pmdg != null ? (pmdg.LeftCenterFuelPump ? 1 : 0) : isIniBuildsA330 && A330FuelPumpInputEventsReady() ? _a330FuelPumpInputStates[4]!.Value : isAsobo737Max && Asobo737MaxFuelPumpInputEventsReady() ? Asobo737MaxFuelPumpIsOn(_asobo737MaxFuelPumpInputStates[4]!.Value) ? 1 : 0 : _nativeFuelPump5 ?? 0,
+            FuelPump6State = isFlyByWireAirbus ? raw.FbwFuelPump6 : isPmdg737 && pmdg != null ? (pmdg.RightCenterFuelPump ? 1 : 0) : isIniBuildsA330 && A330FuelPumpInputEventsReady() ? _a330FuelPumpInputStates[5]!.Value : isAsobo737Max && Asobo737MaxFuelPumpInputEventsReady() ? Asobo737MaxFuelPumpIsOn(_asobo737MaxFuelPumpInputStates[5]!.Value) ? 1 : 0 : _nativeFuelPump6 ?? 0,
             AltitudeAboveGroundFeet = raw.AltitudeAboveGround,
             IndicatedAltitudeFeet = raw.IndicatedAltitude,
             TransitionAltitudeFeet = _settings.TransitionAltitudeFeet,
@@ -4134,6 +4628,8 @@ internal sealed class CopilotService : Form
                     ? pmdg.FastenBeltsSelector
                 : isIniBuildsA330 && A330SignInputEventsReady()
                     ? A330ControlProfile.NormalizeSignPosition(_a330SignInputStates[0])
+                : isAsobo737Max && _asobo737MaxSeatbeltsInputState.HasValue
+                    ? _asobo737MaxSeatbeltsInputState.Value
                 : _nativeSeatbeltSelector,
             SeatbeltSignsOn = isFlyByWireAirbus
                 ? raw.CabinSeatbeltsAlert != 0
@@ -4141,6 +4637,8 @@ internal sealed class CopilotService : Form
                     ? pmdg.FastenBeltsSelector == 2
                 : isIniBuildsA330 && A330SignInputEventsReady()
                     ? _a330SignInputStates[0] >= 1.5
+                : isAsobo737Max && _asobo737MaxSeatbeltsInputState.HasValue
+                    ? Math.Abs(_asobo737MaxSeatbeltsInputState.Value - 1) < 0.1
                 : _nativeSeatbeltSignsOn.HasValue && _nativeSeatbeltSignsOn.Value != 0,
             NoSmokingSelectorPosition = isFlyByWireAirbus
                 ? _fbwNoSmokingSelector
@@ -4148,6 +4646,8 @@ internal sealed class CopilotService : Form
                     ? pmdg.NoSmokingSelector
                 : isIniBuildsA330 && A330SignInputEventsReady()
                     ? A330ControlProfile.NormalizeSignPosition(_a330SignInputStates[1])
+                : isAsobo737Max && _asobo737MaxNoSmokingInputState.HasValue
+                    ? _asobo737MaxNoSmokingInputState.Value
                 : _nativeNoSmokingSelector,
             NoSmokingSignsOn = isFlyByWireAirbus
                 ? _fbwNoSmokingSelector.HasValue && Math.Abs(_fbwNoSmokingSelector.Value) < 0.1
@@ -4155,6 +4655,8 @@ internal sealed class CopilotService : Form
                     ? pmdg.NoSmokingSelector == 2
                 : isIniBuildsA330 && A330SignInputEventsReady()
                     ? _a330SignInputStates[1] >= 0.5
+                : isAsobo737Max && _asobo737MaxNoSmokingInputState.HasValue
+                    ? Math.Abs(_asobo737MaxNoSmokingInputState.Value - 1) < 0.1
                 : _nativeNoSmokingSignsOn.HasValue && _nativeNoSmokingSignsOn.Value != 0,
             EmergencyExitSelectorPosition = isFlyByWireAirbus
                 ? _fbwEmergencyExitSelector
@@ -4947,7 +5449,8 @@ internal sealed class CopilotService : Form
             || _oneShotCommand.StartsWith("wxr-pws ", StringComparison.OrdinalIgnoreCase)
             || _oneShotCommand.StartsWith("nose-light ", StringComparison.OrdinalIgnoreCase)
             || _oneShotCommand.StartsWith("landing-lights ", StringComparison.OrdinalIgnoreCase)
-            || _oneShotCommand.StartsWith("tcas-mode ", StringComparison.OrdinalIgnoreCase);
+            || _oneShotCommand.StartsWith("tcas-mode ", StringComparison.OrdinalIgnoreCase)
+            || _oneShotCommand.StartsWith("asobo737max ", StringComparison.OrdinalIgnoreCase);
         if (requiresAircraftAdapter && !_mobiFlightReady)
         {
             return;
@@ -4991,6 +5494,8 @@ internal sealed class CopilotService : Form
                 _state?.IsFlyByWireAirbus == true || _nativeEngine1FireTest.HasValue,
             var command when command == "fire-test engine-2" =>
                 _state?.IsFlyByWireAirbus == true || _nativeEngine2FireTest.HasValue,
+            var command when command == "asobo737max fire-tests" =>
+                _state?.IsAsobo737Max8 == true,
             var command when command.StartsWith("seatbelts ") =>
                 _state?.IsFlyByWireAirbus == true
                     ? _mobiFlightRuntimeReady
@@ -5087,6 +5592,16 @@ internal sealed class CopilotService : Form
             }
 
             normalized = normalized.Substring("a330 ".Length);
+        }
+        if (normalized.StartsWith("asobo737max ", StringComparison.Ordinal))
+        {
+            if (_state?.IsAsobo737Max8 != true)
+            {
+                AppendDashboardLog("Blocked Asobo 737 MAX cockpit command: a different aircraft profile is active.");
+                AppLog.Write($"Blocked Asobo 737 MAX command outside its aircraft profile: {normalized}.");
+                FinishOneShot(2);
+                return;
+            }
         }
         if (_replayActive
             && !normalized.StartsWith("procedure ", StringComparison.Ordinal)
@@ -5388,6 +5903,36 @@ internal sealed class CopilotService : Form
                 break;
             case "pmdg fire-test extinguisher-2":
                 RunPmdgFireTest(715, 2, "extinguisher 2", 3000);
+                break;
+            case "asobo737max fire-tests":
+                RunAsobo737MaxFireTests();
+                break;
+            case "asobo737max irs left nav":
+                SetAsobo737MaxIrsSelector(left: true, 2);
+                break;
+            case "asobo737max irs right nav":
+                SetAsobo737MaxIrsSelector(left: false, 2);
+                break;
+            case "asobo737max position steady":
+                SetAsobo737MaxPositionLightSteady();
+                break;
+            case "asobo737max logo on":
+                SetAsobo737MaxLogoLight(true);
+                break;
+            case "asobo737max emergency-exit arm":
+                SetAsobo737MaxEmergencyExitLightsArmed();
+                break;
+            case "asobo737max fuel-pumps on":
+                SetAsobo737MaxFuelPumps(true);
+                break;
+            case "asobo737max fuel-pumps off":
+                SetAsobo737MaxFuelPumps(false);
+                break;
+            case "asobo737max seatbelts set":
+                SetAsobo737MaxPassengerSign("seatbelts", _asobo737MaxSeatbeltsInputEventHash, () => _asobo737MaxSeatbeltsInputState);
+                break;
+            case "asobo737max no-smoking set":
+                SetAsobo737MaxPassengerSign("no-smoking", _asobo737MaxNoSmokingInputEventHash, () => _asobo737MaxNoSmokingInputState);
                 break;
             case "pmdg logo on":
                 SetPmdgLogoLight(true);
@@ -6411,6 +6956,482 @@ internal sealed class CopilotService : Form
         FinishOneShot();
     }
 
+    private void RunAsobo737MaxFireTests()
+    {
+        if (_simConnect == null || _state?.IsAsobo737Max8 != true)
+        {
+            AppendDashboardLog("737 MAX fire tests blocked: Asobo 737 MAX profile is not active.");
+            FinishOneShot(3);
+            return;
+        }
+
+        if (_asobo737MaxFireTestsInProgress)
+        {
+            return;
+        }
+
+        _asobo737MaxFireTestsInProgress = true;
+        _apuFireTestCompleted = false;
+        _engine1FireTestCompleted = false;
+        _engine2FireTestCompleted = false;
+        if (_state != null)
+        {
+            _state.ApuFireTestCompleted = false;
+            _state.Engine1FireTestCompleted = false;
+            _state.Engine2FireTestCompleted = false;
+        }
+
+        AppendDashboardLog("737 MAX fire tests running.");
+        AppLog.Write(
+            "Executing Asobo 737 MAX fire tests via dedicated fire-test B-events and extinguisher InputEvents.");
+
+        var steps = new Queue<(ulong? Hash, double Position, string? CalculatorCode, string Label, int HoldMs, bool Repeat)>(new (ulong? Hash, double Position, string? CalculatorCode, string Label, int HoldMs, bool Repeat)[]
+        {
+            (null, 0.0, "(>B:FIRE_CONTROL_OVHT_DET_TEST_OVHT_FIRE)", "OVHT/FIRE detection", 5000, true),
+            (Asobo737MaxProcedureFireWarningInputEventHash, 1.0, null, "fire warning bell", 1500, true),
+            (Asobo737MaxProcedureFireWarningInputEventHash, 0.0, null, "fire warning bell release", 500, false),
+            (null, 0.0, "(>B:FIRE_CONTROL_OVHT_DET_TEST_NEUTRAL)", "fire detection neutral", 500, false),
+            (null, 0.0, "(>B:FIRE_CONTROL_OVHT_DET_TEST_FAULT_INOP)", "FAULT/INOP detection", 3000, true),
+            (null, 0.0, "(>B:FIRE_CONTROL_OVHT_DET_TEST_NEUTRAL)", "fire detection neutral", 500, false),
+            (Asobo737MaxExtinguisherTestInputEventHash, 0.0, null, "extinguisher test 1", 3000, true),
+            (Asobo737MaxExtinguisherTestInputEventHash, 1.0, null, "extinguisher test neutral", 500, false),
+            (Asobo737MaxExtinguisherTestInputEventHash, 2.0, null, "extinguisher test 2", 3000, true),
+            (Asobo737MaxExtinguisherTestInputEventHash, 1.0, null, "extinguisher test neutral", 500, false),
+            (null, 0.0, "1 (>B:CARGO_FIRE_TEST_Inc)", "cargo fire test", 5000, true),
+            (null, 0.0, "(>B:CARGO_FIRE_TEST_Neutral)", "cargo fire test neutral", 500, false)
+        });
+
+        System.Windows.Forms.Timer? timer = null;
+        DateTime stepDeadlineUtc = DateTime.MinValue;
+        bool stepStarted = false;
+        bool stepSent = false;
+        (ulong? Hash, double Position, string? CalculatorCode, string Label, int HoldMs, bool Repeat) currentStep = default;
+        void ContinueSequence()
+        {
+            if (_simConnect == null)
+            {
+                _asobo737MaxFireTestsInProgress = false;
+                timer?.Stop();
+                if (timer != null)
+                {
+                    _nativePulseTimers.Remove(timer);
+                    timer.Dispose();
+                }
+                AppendDashboardLog("737 MAX fire tests stopped: simulator connection lost.");
+                FinishOneShot(4);
+                return;
+            }
+
+            if (!stepStarted)
+            {
+                if (steps.Count == 0)
+                {
+                    _apuFireTestCompleted = true;
+                    _engine1FireTestCompleted = true;
+                    _engine2FireTestCompleted = true;
+                    if (_state != null)
+                    {
+                        _state.ApuFireTestCompleted = true;
+                        _state.Engine1FireTestCompleted = true;
+                        _state.Engine2FireTestCompleted = true;
+                    }
+
+                    _asobo737MaxFireTestsInProgress = false;
+                    timer?.Stop();
+                    if (timer != null)
+                    {
+                        _nativePulseTimers.Remove(timer);
+                        timer.Dispose();
+                    }
+                    AppendDashboardLog("737 MAX fire tests completed.");
+                    FinishOneShot();
+                    return;
+                }
+
+                currentStep = steps.Dequeue();
+                stepDeadlineUtc = DateTime.UtcNow.AddMilliseconds(currentStep.HoldMs);
+                stepStarted = true;
+                stepSent = false;
+                AppLog.Write(
+                    currentStep.CalculatorCode != null
+                        ? $"Asobo 737 MAX fire test step started: {currentStep.Label}; calculator {currentStep.CalculatorCode}; repeat={currentStep.Repeat}."
+                        : $"Asobo 737 MAX fire test step started: {currentStep.Label}; InputEvent {currentStep.Hash} -> {currentStep.Position:0.#}; repeat={currentStep.Repeat}.");
+            }
+
+            try
+            {
+                if (currentStep.Repeat || !stepSent)
+                {
+                    if (!string.IsNullOrWhiteSpace(currentStep.CalculatorCode))
+                    {
+                        SendMobiFlightCommand($"MF.SimVars.Set.{currentStep.CalculatorCode}");
+                        SendMobiFlightCommand("MF.DummyCmd");
+                    }
+                    else if (currentStep.Hash.HasValue)
+                    {
+                        _simConnect.SetInputEvent(currentStep.Hash.Value, currentStep.Position);
+                    }
+
+                    stepSent = true;
+                }
+            }
+            catch (Exception ex) when (ex is COMException or InvalidOperationException)
+            {
+                _asobo737MaxFireTestsInProgress = false;
+                timer?.Stop();
+                if (timer != null)
+                {
+                    _nativePulseTimers.Remove(timer);
+                    timer.Dispose();
+                }
+                AppendDashboardLog($"737 MAX fire tests failed: {ex.Message}");
+                FinishOneShot(4);
+                return;
+            }
+
+            if (DateTime.UtcNow >= stepDeadlineUtc)
+            {
+                stepStarted = false;
+            }
+
+            if (timer != null)
+            {
+                timer.Interval = stepStarted
+                    ? currentStep.Repeat ? 150 : Math.Max(1, (int)Math.Min(150, (stepDeadlineUtc - DateTime.UtcNow).TotalMilliseconds))
+                    : 1;
+                timer.Start();
+            }
+        }
+
+        timer = new System.Windows.Forms.Timer { Interval = 1 };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            ContinueSequence();
+        };
+        _nativePulseTimers.Add(timer);
+        ContinueSequence();
+    }
+
+    private void SetAsobo737MaxIrsSelector(bool left, int position)
+    {
+        if (_simConnect == null || _state?.IsAsobo737Max8 != true)
+        {
+            AppendDashboardLog("737 MAX IRS command blocked: Asobo 737 MAX profile is not active.");
+            FinishOneShot(3);
+            return;
+        }
+
+        var selectorName = left ? "left" : "right";
+        double? ReadDirectInputEventState() =>
+            left ? _asobo737MaxLeftIrsInputState : _asobo737MaxRightIrsInputState;
+
+        double? ReadCommandedState() =>
+            left ? _asobo737MaxCommandedLeftIrsState : _asobo737MaxCommandedRightIrsState;
+
+        DateTime? ReadCommandedUtc() =>
+            left ? _asobo737MaxCommandedLeftIrsUtc : _asobo737MaxCommandedRightIrsUtc;
+
+        double ReadState(AircraftState state) =>
+            left ? state.Adirs1SelectorState : state.Adirs2SelectorState;
+
+        bool Verify(AircraftState state)
+        {
+            var directInputEventState = ReadDirectInputEventState();
+            if (directInputEventState.HasValue)
+            {
+                if (left)
+                {
+                    state.Adirs1SelectorState = directInputEventState.Value;
+                }
+                else
+                {
+                    state.Adirs2SelectorState = directInputEventState.Value;
+                }
+
+                return directInputEventState.Value >= position;
+            }
+
+            var commandedState = ReadCommandedState();
+            var commandedUtc = ReadCommandedUtc();
+            if (commandedState.HasValue
+                && commandedUtc.HasValue
+                && DateTime.UtcNow - commandedUtc.Value < TimeSpan.FromSeconds(15))
+            {
+                if (left)
+                {
+                    state.Adirs1SelectorState = commandedState.Value;
+                }
+                else
+                {
+                    state.Adirs2SelectorState = commandedState.Value;
+                }
+
+                return commandedState.Value >= position;
+            }
+
+            return ReadState(state) >= position;
+        }
+
+        if (Verify(_state))
+        {
+            AppendDashboardLog($"737 MAX {selectorName} IRS selector already NAV.");
+            FinishOneShot();
+            return;
+        }
+
+        try
+        {
+            var navEvent = left
+                ? "AFT_OVHD_L_IRS_NAV"
+                : "AFT_OVHD_R_IRS_NAV";
+            SendMobiFlightCommand($"MF.SimVars.Set.(>B:{navEvent})");
+            SendMobiFlightCommand("MF.DummyCmd");
+            if (left)
+            {
+                _asobo737MaxCommandedLeftIrsState = position;
+                _asobo737MaxCommandedLeftIrsUtc = DateTime.UtcNow;
+            }
+            else
+            {
+                _asobo737MaxCommandedRightIrsState = position;
+                _asobo737MaxCommandedRightIrsUtc = DateTime.UtcNow;
+            }
+
+            var readbackHash = left ? _asobo737MaxLeftIrsInputEventHash : _asobo737MaxRightIrsInputEventHash;
+            if (readbackHash.HasValue)
+            {
+                _simConnect.GetInputEvent(
+                    left ? Request.Asobo737MaxLeftIrsInputEvent : Request.Asobo737MaxRightIrsInputEvent,
+                    readbackHash.Value);
+            }
+
+            AppLog.Write(
+                $"Asobo 737 MAX {selectorName} IRS NAV command sent: {navEvent}.");
+        }
+        catch (Exception ex) when (ex is COMException or InvalidOperationException)
+        {
+            AppendDashboardLog($"737 MAX {selectorName} IRS command failed: {ex.Message}");
+            FinishOneShot(4);
+            return;
+        }
+
+        BeginNativeAction(
+            $"737 MAX {selectorName} IRS selector",
+            Verify,
+            true,
+            TimeSpan.FromSeconds(10));
+    }
+
+    private void SetAsobo737MaxPositionLightSteady()
+    {
+        SetAsobo737MaxLightingInputEvent(
+            "position light",
+            _asobo737MaxPositionLightInputEventHash,
+            () => _asobo737MaxPositionLightInputState,
+            0,
+            state => state.NavigationLightsOn,
+            state => state.NavigationLightsOn = true);
+    }
+
+    private void SetAsobo737MaxLogoLight(bool on)
+    {
+        SetAsobo737MaxLightingInputEvent(
+            "logo light",
+            _asobo737MaxLogoLightInputEventHash,
+            () => _asobo737MaxLogoLightInputState,
+            on ? 0 : 1,
+            state => on ? state.LogoLightsOn : !state.LogoLightsOn,
+            state => state.LogoLightsOn = on);
+    }
+
+    private void SetAsobo737MaxEmergencyExitLightsArmed()
+    {
+        if (_simConnect == null || _state?.IsAsobo737Max8 != true)
+        {
+            AppendDashboardLog("737 MAX emergency-exit lights command blocked: Asobo 737 MAX profile is not active.");
+            FinishOneShot(3);
+            return;
+        }
+
+        bool Verify(AircraftState state)
+        {
+            if (_asobo737MaxEmergencyExitInputState.HasValue
+                && _asobo737MaxEmergencyExitCoverInputState.HasValue)
+            {
+                var armed =
+                    Math.Abs(_asobo737MaxEmergencyExitInputState.Value - 1) < 0.1
+                    && Math.Abs(_asobo737MaxEmergencyExitCoverInputState.Value) < 0.1;
+                if (armed)
+                {
+                    state.EmergencyExitSelectorPosition = 1;
+                }
+
+                return armed;
+            }
+
+            return state.EmergencyExitSelectorPosition.HasValue
+                   && Math.Abs(state.EmergencyExitSelectorPosition.Value - 1) < 0.1;
+        }
+
+        if (Verify(_state))
+        {
+            AppendDashboardLog("737 MAX emergency-exit lights already ARMED.");
+            FinishOneShot();
+            return;
+        }
+
+        if (!_asobo737MaxEmergencyExitCoverInputEventHash.HasValue)
+        {
+            AppendDashboardLog("737 MAX emergency-exit lights blocked: cover InputEvent readback is not bound yet.");
+            FinishOneShot(3);
+            return;
+        }
+
+        try
+        {
+            _simConnect.SetInputEvent(_asobo737MaxEmergencyExitCoverInputEventHash.Value, 0d);
+            if (_asobo737MaxEmergencyExitInputEventHash.HasValue)
+            {
+                _simConnect.SetInputEvent(_asobo737MaxEmergencyExitInputEventHash.Value, 1d);
+            }
+
+            AppLog.Write("Asobo 737 MAX emergency-exit lights command sent: cover closed, switch armed.");
+        }
+        catch (Exception ex) when (ex is COMException or InvalidOperationException)
+        {
+            AppendDashboardLog($"737 MAX emergency-exit lights command failed: {ex.Message}");
+            FinishOneShot(4);
+            return;
+        }
+
+        BeginNativeAction(
+            "737 MAX emergency-exit lights",
+            Verify,
+            true,
+            TimeSpan.FromSeconds(5),
+            "ARMED");
+    }
+
+    private void SetAsobo737MaxPassengerSign(
+        string name,
+        ulong? inputEventHash,
+        Func<double?> readDirectInputEventState)
+    {
+        if (_simConnect == null || _state?.IsAsobo737Max8 != true)
+        {
+            AppendDashboardLog($"737 MAX {name} command blocked: Asobo 737 MAX profile is not active.");
+            FinishOneShot(3);
+            return;
+        }
+
+        const double desiredPosition = 1d;
+        bool Verify(AircraftState state)
+        {
+            var direct = readDirectInputEventState();
+            return direct.HasValue && Math.Abs(direct.Value - desiredPosition) < 0.1;
+        }
+
+        if (Verify(_state))
+        {
+            AppendDashboardLog($"737 MAX {name} already set.");
+            FinishOneShot();
+            return;
+        }
+
+        if (!inputEventHash.HasValue)
+        {
+            AppendDashboardLog($"737 MAX {name} blocked: InputEvent readback is not bound yet.");
+            FinishOneShot(3);
+            return;
+        }
+
+        try
+        {
+            _simConnect.SetInputEvent(inputEventHash.Value, desiredPosition);
+            AppLog.Write($"Asobo 737 MAX {name} InputEvent command sent: {desiredPosition:0.###}.");
+        }
+        catch (Exception ex) when (ex is COMException or InvalidOperationException)
+        {
+            AppendDashboardLog($"737 MAX {name} command failed: {ex.Message}");
+            FinishOneShot(4);
+            return;
+        }
+
+        BeginNativeAction(
+            $"737 MAX {name}",
+            Verify,
+            true,
+            TimeSpan.FromSeconds(5),
+            "SET");
+    }
+
+    private void SetAsobo737MaxLightingInputEvent(
+        string name,
+        ulong? inputEventHash,
+        Func<double?> readDirectInputEventState,
+        double desiredInputEventValue,
+        Func<AircraftState, bool> fallbackVerify,
+        Action<AircraftState> applyVerifiedState)
+    {
+        if (_simConnect == null || _state?.IsAsobo737Max8 != true)
+        {
+            AppendDashboardLog($"737 MAX {name} command blocked: Asobo 737 MAX profile is not active.");
+            FinishOneShot(3);
+            return;
+        }
+
+        bool Verify(AircraftState state)
+        {
+            var directInputEventState = readDirectInputEventState();
+            if (directInputEventState.HasValue)
+            {
+                if (Math.Abs(directInputEventState.Value - desiredInputEventValue) < 0.1)
+                {
+                    applyVerifiedState(state);
+                    return true;
+                }
+
+                return false;
+            }
+
+            return fallbackVerify(state);
+        }
+
+        if (Verify(_state))
+        {
+            AppendDashboardLog($"737 MAX {name} already set.");
+            FinishOneShot();
+            return;
+        }
+
+        if (!inputEventHash.HasValue)
+        {
+            AppendDashboardLog($"737 MAX {name} command blocked: InputEvent readback is not bound yet.");
+            FinishOneShot(3);
+            return;
+        }
+
+        try
+        {
+            _simConnect.SetInputEvent(inputEventHash.Value, desiredInputEventValue);
+            AppLog.Write(
+                $"Asobo 737 MAX {name} InputEvent command sent: {desiredInputEventValue:0.###}.");
+        }
+        catch (Exception ex) when (ex is COMException or InvalidOperationException)
+        {
+            AppendDashboardLog($"737 MAX {name} command failed: {ex.Message}");
+            FinishOneShot(4);
+            return;
+        }
+
+        BeginNativeAction(
+            $"737 MAX {name}",
+            Verify,
+            true,
+            TimeSpan.FromSeconds(5));
+    }
+
     private void ObservePmdgFireTests(PmdgNg3State state)
     {
         var fullOverheatFirePattern = state.FireHandle1Illuminated
@@ -7426,6 +8447,11 @@ internal sealed class CopilotService : Form
 
     private void SetFuelPumps(bool desiredOn)
     {
+        if (_state?.IsAsobo737Max8 == true)
+        {
+            SetAsobo737MaxFuelPumps(desiredOn);
+            return;
+        }
         if (_state?.IsA320NeoV2 == true)
         {
             SetIniBuildsA320FuelPumps(desiredOn);
@@ -7499,6 +8525,60 @@ internal sealed class CopilotService : Form
                     index + 1,
                     $"(L:{selectors[index]}) ! (>L:{selectors[index]}) " +
                     $"(L:{pressStates[index]}) ! (>L:{pressStates[index]})"));
+        }
+
+        _pendingFuelPumpSequence = new PendingFuelPumpSequence(toggles, desiredOn);
+        _fuelPumpSequenceTimer?.Dispose();
+        _fuelPumpSequenceTimer = new System.Windows.Forms.Timer { Interval = 1000 };
+        _fuelPumpSequenceTimer.Tick += (_, _) => ExecuteNextFuelPumpToggle();
+        ExecuteNextFuelPumpToggle();
+    }
+
+    private void SetAsobo737MaxFuelPumps(bool desiredOn)
+    {
+        if (_state?.IsAsobo737Max8 != true)
+        {
+            AppendDashboardLog("737 MAX fuel pumps blocked: the loaded aircraft is not the Asobo 737 MAX.");
+            FinishOneShot(3);
+            return;
+        }
+        if (_simConnect == null)
+        {
+            AppendDashboardLog("737 MAX fuel pumps blocked: SimConnect is unavailable.");
+            FinishOneShot(3);
+            return;
+        }
+        if (!Asobo737MaxFuelPumpInputEventsReady())
+        {
+            AppendDashboardLog("737 MAX fuel pumps blocked: fuel pump InputEvent readbacks are not bound yet.");
+            FinishOneShot(3);
+            return;
+        }
+
+        var alreadyDesired = desiredOn
+            ? Asobo737MaxFuelPumpsConfigured()
+            : _asobo737MaxFuelPumpInputStates.All(state => state.HasValue && !Asobo737MaxFuelPumpIsOn(state.Value));
+        if (alreadyDesired)
+        {
+            AppendDashboardLog($"737 MAX fuel pumps already {(desiredOn ? "ON" : "OFF")}.");
+            FinishOneShot();
+            return;
+        }
+
+        var toggles = new Queue<FuelPumpToggle>();
+        for (var index = 0; index < _asobo737MaxFuelPumpInputStates.Length; index++)
+        {
+                var currentOn = Asobo737MaxFuelPumpIsOn(_asobo737MaxFuelPumpInputStates[index]!.Value);
+                if (currentOn == desiredOn)
+                {
+                    continue;
+                }
+
+            toggles.Enqueue(
+                new FuelPumpToggle(
+                    index + 1,
+                    _asobo737MaxFuelPumpInputEventHashes[index]!.Value,
+                    desiredOn ? 0.0 : 1.0));
         }
 
         _pendingFuelPumpSequence = new PendingFuelPumpSequence(toggles, desiredOn);
@@ -7709,7 +8789,7 @@ internal sealed class CopilotService : Form
         {
             _simConnect!.SetInputEvent(
                 toggle.InputEventHash.Value,
-                _pendingFuelPumpSequence.DesiredOn ? 1.0 : 0.0);
+                toggle.InputEventValue ?? (_pendingFuelPumpSequence.DesiredOn ? 1.0 : 0.0));
         }
         else
         {
@@ -7784,6 +8864,17 @@ internal sealed class CopilotService : Form
     private bool A330FuelPumpsConfigured() =>
         A330FuelPumpInputEventsReady()
         && _a330FuelPumpInputStates.All(state => state!.Value >= 0.5);
+
+    private bool Asobo737MaxFuelPumpInputEventsReady() =>
+        _asobo737MaxFuelPumpInputEventHashes.All(hash => hash.HasValue)
+        && _asobo737MaxFuelPumpInputStates.All(state => state.HasValue);
+
+    private bool Asobo737MaxFuelPumpsConfigured() =>
+        Asobo737MaxFuelPumpInputEventsReady()
+        && _asobo737MaxFuelPumpInputStates.All(state => Asobo737MaxFuelPumpIsOn(state!.Value));
+
+    private static bool Asobo737MaxFuelPumpIsOn(double value) =>
+        Math.Abs(value) < 0.1;
 
     private bool A330SignInputEventsReady() =>
         _a330SignInputStates.All(state => state.HasValue);
@@ -13741,21 +14832,27 @@ internal sealed class CopilotService : Form
                     ? "FBW A32NX"
                     : _state.IsPmdg737800
                     ? "PMDG 737-800"
+                    : _state.IsAsobo737Max8
+                    ? "Asobo 737 MAX 8"
                     : "AIRCRAFT UNSUPPORTED",
             _state.IsSupportedAircraft
                 ? System.Drawing.Color.FromArgb(39, 130, 87)
                 : System.Drawing.Color.FromArgb(172, 113, 37));
         SetStatusBadge(
             _adapterBadgeLabel,
-            _state.IsSupportedBoeing737
+            _state.IsPmdg737800
                 ? _pmdgNg3DataReady
                     ? "PMDG SDK OK"
                     : "PMDG SDK WAITING"
+                : _state.IsAsobo737Max8
+                    ? "MSFS/ASOBO OK"
                 : _mobiFlightReady ? "MOBIFLIGHT OK" : "ADAPTER OFFLINE",
-            _state.IsSupportedBoeing737
+            _state.IsPmdg737800
                 ? _pmdgNg3DataReady
                     ? System.Drawing.Color.FromArgb(39, 130, 87)
                     : System.Drawing.Color.FromArgb(172, 113, 37)
+                : _state.IsAsobo737Max8
+                    ? System.Drawing.Color.FromArgb(39, 130, 87)
                 : _mobiFlightReady
                 ? System.Drawing.Color.FromArgb(39, 130, 87)
                 : System.Drawing.Color.FromArgb(150, 48, 48));
@@ -13766,17 +14863,21 @@ internal sealed class CopilotService : Form
             $"Beacon {_state.BeaconOn.ToOnOff()} | NAV&LOGO " +
             $"{(_state.NavLogoSelectorPosition.HasValue ? FormatNavLogoPosition((int)Math.Round(_state.NavLogoSelectorPosition.Value)) : "UNKNOWN")} | " +
             $"APU {_state.ApuMasterSwitchOn.ToOnOff()}/{_state.ApuRpmPercent:F0}%";
-        _adapterLabel!.Text = _state.IsSupportedBoeing737
+        _adapterLabel!.Text = _state.IsPmdg737800
             ? _pmdgNg3DataReady
                 ? "PMDG NG3 SDK data connected"
                 : "PMDG NG3 SDK waiting - enable [SDK] EnableDataBroadcast=1 in 737_Options.ini"
+            : _state.IsAsobo737Max8
+                ? "Asobo 737 MAX profile active; using MSFS/SimConnect telemetry while switch mappings are developed."
             : _mobiFlightReady
                 ? "MobiFlight connected"
                 : "MobiFlight not connected - aircraft controls unavailable";
-        _adapterLabel.ForeColor = _state.IsSupportedBoeing737
+        _adapterLabel.ForeColor = _state.IsPmdg737800
             ? _pmdgNg3DataReady
                 ? System.Drawing.Color.DarkGreen
                 : System.Drawing.Color.DarkOrange
+            : _state.IsAsobo737Max8
+                ? System.Drawing.Color.DarkGreen
             : _mobiFlightReady
             ? System.Drawing.Color.DarkGreen
             : System.Drawing.Color.DarkRed;
@@ -14654,6 +15755,7 @@ internal sealed class CopilotService : Form
             || _pendingNativeAction != null
             || _pendingFireTest != null
             || _pendingFlyByWireFireTest.HasValue
+            || _asobo737MaxFireTestsInProgress
             || _pendingFuelPumpSequence != null)
         {
             return;
@@ -14753,6 +15855,16 @@ internal sealed class CopilotService : Form
         _nativeTransponderAtcState = null;
         _nativeTcasMode = null;
         _nativeTransponderStandby = null;
+        _asobo737MaxBatteryInputEventOn = null;
+        _asobo737MaxBatteryCoverInputEventOn = null;
+        _asobo737MaxBatteryInputEventHash = null;
+        _asobo737MaxBatteryCoverInputEventHash = null;
+        _asobo737MaxLeftIrsInputEventHash = null;
+        _asobo737MaxRightIrsInputEventHash = null;
+        _asobo737MaxLeftIrsInputState = null;
+        _asobo737MaxRightIrsInputState = null;
+        _asobo737MaxInputEventsEnumerated = false;
+        _asobo737MaxFireTestsInProgress = false;
 
         AppLog.Write(
             "MobiFlight runtime state cleared; full native readback registration required after reconnect.");
@@ -14780,6 +15892,7 @@ internal sealed class CopilotService : Form
                 SetFlyByWireFireTestPressed(_pendingFlyByWireFireTest.Value, false);
                 _pendingFlyByWireFireTest = null;
             }
+            _asobo737MaxFireTestsInProgress = false;
             _reconnectTimer?.Dispose();
             _sayIntentionsTimer?.Stop();
             _sayIntentionsTimer?.Dispose();
@@ -14998,9 +16111,19 @@ internal sealed class CopilotService : Form
             CalculatorCode = string.Empty;
         }
 
+        public FuelPumpToggle(
+            int number,
+            ulong inputEventHash,
+            double inputEventValue)
+            : this(number, inputEventHash)
+        {
+            InputEventValue = inputEventValue;
+        }
+
         public int Number { get; }
         public string CalculatorCode { get; }
         public ulong? InputEventHash { get; }
+        public double? InputEventValue { get; }
     }
 
     private sealed class ProcedureListItem

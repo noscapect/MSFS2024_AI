@@ -13843,11 +13843,13 @@ internal sealed class CopilotService : Form
             _state,
             _completedProcedureIds);
         _recommendationLabel!.Text =
-            $"{recommendation.Procedure.Name} - {recommendation.Reason}";
+            recommendation.Procedure == null
+                ? recommendation.Reason
+                : $"{recommendation.Procedure.Name} - {recommendation.Reason}";
         _recommendationLabel.ForeColor = recommendation.Overdue
             ? System.Drawing.Color.DarkRed
             : System.Drawing.Color.DarkBlue;
-        RefreshFlowList(recommendation.Procedure.Id, definition?.Id);
+        RefreshFlowList(recommendation.Procedure?.Id, definition?.Id);
     }
 
     private void UpdateAircraftCard(AircraftState state)
@@ -14597,7 +14599,7 @@ internal sealed class CopilotService : Form
         }
     }
 
-    private void RefreshFlowList(string recommendedId, string? activeId)
+    private void RefreshFlowList(string? recommendedId, string? activeId)
     {
         if (_flowList == null)
         {

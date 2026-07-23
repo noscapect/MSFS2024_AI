@@ -4,14 +4,14 @@ namespace Msfs2024Ai.Copilot.Procedures;
 
 internal sealed class FlowRecommendation
 {
-    public FlowRecommendation(ProcedureDefinition procedure, bool overdue, string reason)
+    public FlowRecommendation(ProcedureDefinition? procedure, bool overdue, string reason)
     {
         Procedure = procedure;
         Overdue = overdue;
         Reason = reason;
     }
 
-    public ProcedureDefinition Procedure { get; }
+    public ProcedureDefinition? Procedure { get; }
     public bool Overdue { get; }
     public string Reason { get; }
 }
@@ -23,6 +23,15 @@ internal static class FlowRecommendationEngine
         IReadOnlyCollection<string> completedProcedureIds)
     {
         var phase = OperationalPhaseDetector.Detect(state);
+        var procedures = ProcedureCatalog.ForAircraft(state);
+        if (procedures.Count == 0)
+        {
+            return new FlowRecommendation(
+                null,
+                overdue: false,
+                "No supported flow catalog is available for this aircraft yet.");
+        }
+
         var recommendedId = phase switch
         {
             OperationalPhase.ColdAndDark => "power-up-initial-setup",
@@ -47,12 +56,12 @@ internal static class FlowRecommendationEngine
             _ => "power-up-initial-setup"
         };
 
-        var firstIncomplete = ProcedureCatalog.ForAircraft(state)
+        var firstIncomplete = procedures
             .FirstOrDefault(procedure => !completedProcedureIds.Contains(procedure.Id))
-            ?? ProcedureCatalog.ForAircraft(state).Last();
+            ?? procedures[procedures.Count - 1];
         var phaseProcedure = ProcedureCatalog.Find(state, recommendedId) ?? firstIncomplete;
-        var firstIncompleteIndex = ProcedureCatalog.ForAircraft(state).IndexOf(firstIncomplete);
-        var phaseIndex = ProcedureCatalog.ForAircraft(state).IndexOf(phaseProcedure);
+        var firstIncompleteIndex = procedures.IndexOf(firstIncomplete);
+        var phaseIndex = procedures.IndexOf(phaseProcedure);
         var overdue = firstIncompleteIndex < phaseIndex;
 
         return new FlowRecommendation(

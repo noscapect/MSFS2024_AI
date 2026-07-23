@@ -163,6 +163,20 @@ public sealed class AircraftIsolationTests
     }
 
     [TestMethod]
+    public void UnsupportedAircraftRecommendationDoesNotCrash()
+    {
+        var state = new AircraftState { Title = "Future aircraft not yet implemented" };
+
+        var recommendation = FlowRecommendationEngine.Recommend(
+            state,
+            Array.Empty<string>());
+
+        Assert.IsNull(recommendation.Procedure);
+        Assert.IsFalse(recommendation.Overdue);
+        StringAssert.Contains(recommendation.Reason, "No supported flow catalog");
+    }
+
+    [TestMethod]
     public void EveryAircraftRequestsIfrClearanceAfterFlightComputerProgramming()
     {
         var profiles = new[]

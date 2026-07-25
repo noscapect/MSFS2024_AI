@@ -50,6 +50,8 @@ internal static class Program
             arg => string.Equals(arg, "inspect-before-start", StringComparison.OrdinalIgnoreCase));
         var monitorBeforeStart = args.Any(
             arg => string.Equals(arg, "monitor-before-start", StringComparison.OrdinalIgnoreCase));
+        var monitorAsobo737Max = args.Any(
+            arg => string.Equals(arg, "monitor-asobo737max", StringComparison.OrdinalIgnoreCase));
         var listLVars = args.Any(
             arg => string.Equals(arg, "list-lvars", StringComparison.OrdinalIgnoreCase));
         var bridgeCommand = args
@@ -83,6 +85,7 @@ internal static class Program
             monitorA330Batteries,
             inspectBeforeStart || monitorBeforeStart,
             monitorBeforeStart,
+            monitorAsobo737Max,
             listLVars,
             bridgeCommand,
             actionName,
@@ -92,7 +95,7 @@ internal static class Program
 
         var timeout = new System.Windows.Forms.Timer
         {
-            Interval = monitor || monitorA330Batteries || monitorBeforeStart || monitorInputHash.HasValue ? 900_000 : 15_000
+            Interval = monitor || monitorA330Batteries || monitorBeforeStart || monitorAsobo737Max || monitorInputHash.HasValue ? 900_000 : 15_000
         };
         timeout.Tick += (_, _) =>
         {
@@ -127,6 +130,7 @@ internal sealed class SimConnectWindow : Form
     private readonly bool _monitorA330BatteriesRequested;
     private readonly bool _inspectBeforeStartRequested;
     private readonly bool _monitorBeforeStartRequested;
+    private readonly bool _monitorAsobo737MaxRequested;
     private readonly bool _listLVarsRequested;
     private readonly string? _bridgeCommand;
     private readonly string? _actionName;
@@ -200,6 +204,51 @@ internal sealed class SimConnectWindow : Form
             [17604810245581348556UL] = "AIRLINER_FUEL_ENG2_R2",
             [1712305263919831311UL] = "AIRLINER_SPOILER_LEVER"
         };
+    private static readonly Dictionary<ulong, string> Asobo737MaxCaptureInputEvents =
+        new Dictionary<ulong, string>
+        {
+            [17005795894937917385UL] = "COMMON_ELECTRICAL_BATTERY_COVER",
+            [5325545861509299375UL] = "ELECTRICAL_BATTERY",
+            [17675137477440585756UL] = "AFT_OVHD_L_IRS",
+            [306679871899530736UL] = "AFT_OVHD_R_IRS",
+            [17390165378275050959UL] = "LIGHTING_POSITION_LIGHT",
+            [10224104020835988627UL] = "LIGHTING_LOGO_LIGHT",
+            [11468064997947908547UL] = "PASSENGER_EXIT_LIGHTS",
+            [9190187104592343710UL] = "COMMON_PASSENGER_EXIT_LIGHTS_COVER",
+            [194257609297170466UL] = "PASSENGER_FASTEN_BELTS",
+            [17692133279043784411UL] = "PASSENGER_NO_SMOKING",
+            [1816025293673147039UL] = "FUEL_PUMP_AFT_1",
+            [5122417304718526614UL] = "FUEL_PUMP_FWD_1",
+            [10692915981694482285UL] = "FUEL_PUMP_CTR_L",
+            [12460843932865915589UL] = "FUEL_PUMP_CTR_R",
+            [9225440608618910499UL] = "FUEL_PUMP_FWD_2",
+            [16006623614954467626UL] = "FUEL_PUMP_AFT_2",
+            [12092368677864388409UL] = "ENGINE_APU",
+            [3265585210280484711UL] = "ELECTRICAL_APU_GENERATOR_1",
+            [16879652269517685970UL] = "ELECTRICAL_APU_GENERATOR_2",
+            [12724114040502922703UL] = "PNEUMATICS_APU_BLEED",
+            [9471077644541106401UL] = "PNEUMATICS_ENGINE_BLEED_1",
+            [4927259929824871252UL] = "PNEUMATICS_ENGINE_BLEED_2",
+            [8444549763148178477UL] = "PNEUMATICS_L_PACK",
+            [13421230506292110701UL] = "PNEUMATICS_R_PACK",
+            [16328424800018055689UL] = "PNEUMATICS_ISOLATION_VALVE",
+            [1520419289578202539UL] = "ELECTRICAL_GENERATOR_1",
+            [15134557057728626206UL] = "ELECTRICAL_GENERATOR_2",
+            [8722400555850582198UL] = "HYD_ELEC_1_PUMP",
+            [2874449211756725945UL] = "HYD_ELEC_2_PUMP",
+            [9930758760928589672UL] = "HYD_ENG_1_PUMP",
+            [15508441334463773031UL] = "HYD_ENG_2_PUMP",
+            [15622846362031305197UL] = "LIGHTING_ANTI_COLLISION_LIGHT",
+            [15095974817856027149UL] = "LIGHTING_LANDING_LIGHT_FIXED_L",
+            [16858870040215037861UL] = "LIGHTING_LANDING_LIGHT_FIXED_R",
+            [5474553189875403266UL] = "LIGHTING_RUNWAY_TURNOFF_LIGHT_L",
+            [8318312309918504874UL] = "LIGHTING_RUNWAY_TURNOFF_LIGHT_R",
+            [4631196187589075821UL] = "LIGHTING_TAXI_LIGHT_GEAR",
+            [14953483344251198707UL] = "LIGHTING_TAXI_LIGHT_WHEEL_WELL",
+            [13218612563291304081UL] = "LANDING_GEARS",
+            [13998713293320135111UL] = "HANDLING_FLAPS",
+            [7142783048944440595UL] = "FWD_PDSTL_AUTOBRAKE"
+        };
     private readonly Dictionary<Request, string> _inspectionRequests =
         new Dictionary<Request, string>();
     private readonly HashSet<ulong> _inspectionParamsReceived = new HashSet<ulong>();
@@ -208,6 +257,12 @@ internal sealed class SimConnectWindow : Form
     private StreamWriter? _beforeStartMonitorWriter;
     private System.Windows.Forms.Timer? _beforeStartPollingTimer;
     private readonly Dictionary<string, string> _lastPolledBeforeStartValues =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
+    private StreamWriter? _asobo737MaxMonitorWriter;
+    private System.Windows.Forms.Timer? _asobo737MaxPollingTimer;
+    private readonly Dictionary<Request, string> _asobo737MaxMonitorRequests =
+        new Dictionary<Request, string>();
+    private readonly Dictionary<string, string> _lastPolledAsobo737MaxValues =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _lVarNames = new List<string>();
     private bool _mobiFlightReady;
@@ -338,6 +393,7 @@ internal sealed class SimConnectWindow : Form
         bool monitorA330BatteriesRequested,
         bool inspectBeforeStartRequested,
         bool monitorBeforeStartRequested,
+        bool monitorAsobo737MaxRequested,
         bool listLVarsRequested,
         string? bridgeCommand,
         string? actionName,
@@ -350,6 +406,7 @@ internal sealed class SimConnectWindow : Form
         _monitorA330BatteriesRequested = monitorA330BatteriesRequested;
         _inspectBeforeStartRequested = inspectBeforeStartRequested;
         _monitorBeforeStartRequested = monitorBeforeStartRequested;
+        _monitorAsobo737MaxRequested = monitorAsobo737MaxRequested;
         _listLVarsRequested = listLVarsRequested;
         _bridgeCommand = bridgeCommand;
         _actionName = actionName;
@@ -529,6 +586,43 @@ internal sealed class SimConnectWindow : Form
             _beforeStartPollingTimer.Start();
             Console.WriteLine(
                 "BEFORE START MONITOR READY: operate the APU, ADIRS, seat-belt, and fuel-pump controls manually.");
+            Console.WriteLine("Subscriptions active; 250 ms read-only polling fallback active.");
+            Console.WriteLine($"Monitor capture: {outputPath}");
+        }
+        if (_monitorAsobo737MaxRequested)
+        {
+            var outputDirectory = Path.Combine(AppDomain.CurrentDomain.BaseDirectory, "artifacts");
+            Directory.CreateDirectory(outputDirectory);
+            var outputPath = Path.Combine(outputDirectory, "asobo737max-switch-capture.tsv");
+            _asobo737MaxMonitorWriter = new StreamWriter(outputPath, false, Encoding.UTF8)
+            {
+                AutoFlush = true
+            };
+            _asobo737MaxMonitorWriter.WriteLine("TimestampUtc\tSource\tName\tHash\tType\tValue");
+
+            var index = 0;
+            foreach (var inputEvent in Asobo737MaxCaptureInputEvents)
+            {
+                var request = (Request)(2000 + index++);
+                _asobo737MaxMonitorRequests[request] = inputEvent.Value;
+                sender.SubscribeInputEvent(inputEvent.Key);
+                sender.GetInputEvent(request, inputEvent.Key);
+                sender.EnumerateInputEventParams(inputEvent.Key);
+            }
+
+            _asobo737MaxPollingTimer = new System.Windows.Forms.Timer { Interval = 250 };
+            _asobo737MaxPollingTimer.Tick += (_, _) =>
+            {
+                foreach (var inputEvent in Asobo737MaxCaptureInputEvents)
+                {
+                    var request = _asobo737MaxMonitorRequests.First(item => item.Value == inputEvent.Value).Key;
+                    sender.GetInputEvent(request, inputEvent.Key);
+                }
+            };
+            _asobo737MaxPollingTimer.Start();
+            Console.WriteLine(
+                $"ASOBO 737 MAX MONITOR READY: tracking {Asobo737MaxCaptureInputEvents.Count} InputEvents.");
+            Console.WriteLine("Operate the requested controls manually, in order, with a short pause between detents.");
             Console.WriteLine("Subscriptions active; 250 ms read-only polling fallback active.");
             Console.WriteLine($"Monitor capture: {outputPath}");
         }
@@ -743,6 +837,24 @@ internal sealed class SimConnectWindow : Form
             ExitWhenComplete();
             return;
         }
+        if (_asobo737MaxMonitorRequests.TryGetValue(request, out var asobo737MaxName))
+        {
+            var value = FormatValue(data.Value);
+            var isChangedPoll = !_lastPolledAsobo737MaxValues.TryGetValue(
+                                    asobo737MaxName,
+                                    out var previousValue)
+                                || !string.Equals(previousValue, value, StringComparison.Ordinal);
+            _lastPolledAsobo737MaxValues[asobo737MaxName] = value;
+            if (isChangedPoll)
+            {
+                Console.WriteLine(
+                    $"MAX POLL EVENT: {asobo737MaxName} ({data.eType}) => {value}");
+                _asobo737MaxMonitorWriter?.WriteLine(
+                    $"{DateTime.UtcNow:O}\tpoll\t{EscapeTsv(asobo737MaxName)}\t" +
+                    $"{FindInputEventHash(asobo737MaxName)}\t{data.eType}\t{EscapeTsv(value)}");
+            }
+            return;
+        }
         if (request == Request.GenericInputMonitor && _monitorInputHash.HasValue)
         {
             var name = FindInputEventName(_monitorInputHash.Value);
@@ -798,6 +910,12 @@ internal sealed class SimConnectWindow : Form
                 $"{DateTime.UtcNow:O}\tsubscription\t{EscapeTsv(name)}\t" +
                 $"{data.Hash}\t{data.eType}\t{EscapeTsv(value)}");
         }
+        if (_asobo737MaxMonitorWriter != null && Asobo737MaxCaptureInputEvents.ContainsKey(data.Hash))
+        {
+            _asobo737MaxMonitorWriter.WriteLine(
+                $"{DateTime.UtcNow:O}\tsubscription\t{EscapeTsv(name)}\t" +
+                $"{data.Hash}\t{data.eType}\t{EscapeTsv(value)}");
+        }
     }
 
     private string FindInputEventName(ulong hash)
@@ -815,11 +933,31 @@ internal sealed class SimConnectWindow : Form
 
         return BeforeStartInputEvents.TryGetValue(hash, out var beforeStartName)
             ? beforeStartName
-            : hash.ToString();
+            : Asobo737MaxCaptureInputEvents.TryGetValue(hash, out var asobo737MaxName)
+                ? asobo737MaxName
+                : hash.ToString();
     }
 
-    private static ulong FindInputEventHash(string name) =>
-        BeforeStartInputEvents.First(item => item.Value == name).Key;
+    private static ulong FindInputEventHash(string name)
+    {
+        var keyInput = KeyInputEvents.FirstOrDefault(item =>
+            string.Equals(item.Value, name, StringComparison.OrdinalIgnoreCase));
+        if (keyInput.Value != null)
+        {
+            return keyInput.Key;
+        }
+
+        var beforeStart = BeforeStartInputEvents.FirstOrDefault(item =>
+            string.Equals(item.Value, name, StringComparison.OrdinalIgnoreCase));
+        if (beforeStart.Value != null)
+        {
+            return beforeStart.Key;
+        }
+
+        var asobo737Max = Asobo737MaxCaptureInputEvents.FirstOrDefault(item =>
+            string.Equals(item.Value, name, StringComparison.OrdinalIgnoreCase));
+        return asobo737Max.Key;
+    }
 
     private static string EscapeTsv(string? value) =>
         (value ?? string.Empty).Replace("\t", " ").Replace("\r", " ").Replace("\n", " ");
@@ -1199,6 +1337,7 @@ internal sealed class SimConnectWindow : Form
     {
         if (_monitorRequested
             || _monitorBeforeStartRequested
+            || _monitorAsobo737MaxRequested
             || _monitorInputHash.HasValue)
         {
             return;

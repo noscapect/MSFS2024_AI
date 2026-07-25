@@ -337,19 +337,19 @@ internal sealed class AircraftState
         IsolationValvePosition.HasValue
         && Math.Abs(IsolationValvePosition.Value - 1) < 0.1;
     public bool EngineStartAirAvailable =>
-        !IsPmdg737
+        !IsSupportedBoeing737
         || ApuBleedOn
         && IsolationValveOpen
         && LeftDuctPressurePsi >= 10
         && RightDuctPressurePsi >= 10;
     public bool BoeingTakeoffFlapsSet =>
-        !IsPmdg737
+        !IsSupportedBoeing737
         || FlapsAtBoeingSetting(BoeingTakeoffFlaps.GetValueOrDefault(5));
     public bool BoeingLandingFlapsSet =>
-        !IsPmdg737
+        !IsSupportedBoeing737
         || FlapsAtBoeingSetting(BoeingLandingFlaps.GetValueOrDefault(30));
     public bool BoeingLandingDataSet =>
-        !IsPmdg737
+        !IsSupportedBoeing737
         || BoeingLandingFlaps.GetValueOrDefault() > 0
         && BoeingLandingVrefKnots.GetValueOrDefault() > 0;
     public int EffectiveBoeingApproachTargetSpeedKnots =>
@@ -357,11 +357,11 @@ internal sealed class AircraftState
             ? BoeingLandingVrefKnots.GetValueOrDefault() + 5
             : ApproachLandingConfigSpeedKnots;
     public bool BoeingLandingSpeedStable =>
-        !IsPmdg737
+        !IsSupportedBoeing737
         || IndicatedAirspeedKnots > 0
         && IndicatedAirspeedKnots <= EffectiveBoeingApproachTargetSpeedKnots + 10;
     public bool BoeingApproachStable =>
-        !IsPmdg737
+        !IsSupportedBoeing737
         || BoeingLandingDataSet
         && GearHandleDown
         && BoeingLandingFlapsSet

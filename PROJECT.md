@@ -1,9 +1,11 @@
 # MSFS 2024 Virtual First Officer - Project Status and Handoff
 
-This file is the primary technical handoff for continuing development. It
-describes the state of the project at public release **v0.9.5** on July 20,
-2026. The flows implemented in the application are authoritative; supporting
-documents must follow the application when they differ.
+This file is the primary technical handoff for continuing development. The
+latest public release remains **v0.9.5** from July 20, 2026. Unreleased
+development on `main` additionally contains the Asobo 737 MAX profile, and
+`feature/ux-redesign` is the active development branch. The flows implemented
+in the application are authoritative; supporting documents must follow the
+application when they differ.
 
 Suggested opening prompt for a new development chat:
 
@@ -45,6 +47,10 @@ dotnet test .\tests\Copilot.Tests\Copilot.Tests.csproj -c Release --no-restore
 The v0.9.5 release was built with no warnings or errors and passed the full
 176-test release suite.
 
+No newer public release has been built. The Asobo 737 MAX merge is source-only
+and must complete its remaining safety instrumentation and gate-to-gate live
+validation before release consideration.
+
 ## Supported aircraft
 
 | Aircraft | Status | Runtime interface |
@@ -54,6 +60,7 @@ The v0.9.5 release was built with no warnings or errors and passed the full
 | FlyByWire A32NX for MSFS 2024 | Gate-to-gate live validated | SimConnect and MobiFlight WASM |
 | PMDG 737-800 | Gate-to-gate live validated | SimConnect and PMDG SDK data broadcast |
 | iniBuilds A330-300 (GE) | Gate-to-gate implemented and live tested; continue field validation | SimConnect and MobiFlight WASM |
+| Asobo 737 MAX 8 | Development beta; Flows 1–6 iteratively live tested, Flow 7 not cleared | SimConnect Input Events, SimVars, and MobiFlight WASM |
 
 Unsupported aircraft are identified but never controlled with guessed generic
 commands. FlyByWire A380X research code is deliberately dormant and hidden
@@ -62,6 +69,13 @@ from users; it is not a supported profile.
 The PMDG aircraft requires `EnableDataBroadcast=1` in its SDK options. Airbus
 profiles require the MobiFlight WASM module. Release packages include both
 required SimConnect client DLLs, so end users do not need the MSFS SDK.
+
+The Asobo 737 MAX is not a PMDG fallback and never uses PMDG commands. Its
+dedicated procedure, checklist, control-profile, and native Input Event paths
+are documented in `docs/ASOBO_737_MAX_SUPPORT_STATUS.md`. It currently lacks
+verified FMC takeoff-flap, stabilizer-trim, elevator-position, pilot
+control-input, STS, and MCAS telemetry. The generic takeoff-configuration
+completion callout must not be treated as proof that those items are correct.
 
 ## Gate-to-gate flow
 
@@ -274,6 +288,9 @@ Important layers and files:
 - `src/Copilot/Procedures/FbwA320ProcedureLibrary.cs` - FlyByWire A32NX
 - `src/Copilot/Procedures/A330ProcedureLibrary.cs` - iniBuilds A330
 - `src/Copilot/Procedures/B737ProcedureLibrary.cs` - PMDG 737-800
+- `src/Copilot/Procedures/Asobo737MaxProcedureLibrary.cs` - Asobo 737 MAX 8
+- `src/Copilot/AircraftAdapters/Asobo737Max/Asobo737MaxControlProfile.cs` -
+  live-derived MAX selector values and normalization
 - Matching aircraft-specific libraries under `src/Copilot/Checklists`
 - `docs/ARCHITECTURE.md` - detailed adapter and regression boundaries
 - `docs/NATIVE_CONTROL_STRATEGY.md` - required command/readback discipline
@@ -321,9 +338,14 @@ Never restart the app during an active user flight unless explicitly asked.
 When a debug/probe build is required, say so clearly; the user normally tests
 the Release build and the UI does not identify Debug versus Release.
 
-## Stabilization work through v1.0
+## Current development
 
-- Fix verified bugs and regressions without expanding product scope.
+- `feature/ux-redesign` owns the dashboard and GSX progress redesign described
+  in `docs/ROADMAP.md`; no UX implementation has been committed yet.
+- Fix verified bugs and regressions without weakening aircraft-specific
+  verification.
+- Keep Asobo 737 MAX Flow 7 out of unattended operation until takeoff trim,
+  elevator response, and configuration warnings are observable and live tested.
 - Continue regression validation of aircraft profiles, SayIntentions, GSX,
   SimBrief, and voice behavior after simulator or add-on updates.
 - Improve diagnostics and documentation only where they help resolve defects.
@@ -342,6 +364,8 @@ autoland-assist experiment are not current product features.
 - `README.md` - customer-facing installation and use
 - `docs/checklist.md` - detailed implemented flow content
 - `docs/LIVE_TESTS.md` - aircraft and flow validation evidence
+- `docs/ASOBO_737_MAX_SUPPORT_STATUS.md` - MAX implementation, limitations,
+  incident findings, and release gates
 - `docs/ARCHITECTURE.md` - contributor architecture and isolation rules
 - `docs/NATIVE_CONTROL_STRATEGY.md` - cockpit command/readback standard
 - `docs/SIMBRIEF_INTEGRATION_PLAN.md` - SimBrief design and status

@@ -4,21 +4,32 @@ This roadmap records intentionally deferred product work. It is not a promise
 that experimental features belong in the next public release. Stable aircraft
 profiles remain protected by their aircraft-specific regression tests.
 
-## Current development: v0.9.5 to v1.0
+## Current development: UX redesign and MAX stabilization
 
-Development is restricted to bug fixing and stabilization until the public
-v1.0 release. Do not add new aircraft, integrations, procedure branches, or
-major UX features during this phase.
+The latest public release remains v0.9.5. The Asobo 737 MAX development
+profile has been merged to `main` without publishing a new release. Active
+work continues on `feature/ux-redesign`.
 
 Priorities are:
 
-1. Fix reproducible defects and regressions.
-2. Protect completed aircraft profiles with their existing isolation and
+1. Redesign the dashboard around a prominent current-action card, a
+   gate-to-gate progress stepper, and a dedicated GSX ground-services card.
+2. Surface existing GSX passenger count, percentage, active services,
+   action-required prompt, and freshness information without inventing an ETA.
+3. Move raw telemetry and activity diagnostics into collapsible secondary
+   panels and simplify routine controls to one contextual primary action.
+4. Add the MAX takeoff instrumentation and safety gates listed in
+   `ASOBO_737_MAX_SUPPORT_STATUS.md` before resuming Flow 7 live testing.
+5. Protect completed aircraft profiles with their existing isolation and
    contract tests.
-3. Continue live validation of optional SimBrief, SayIntentions, and GSX
+6. Continue live validation of optional SimBrief, SayIntentions, and GSX
    behavior without making them mandatory for normal flows.
-4. Keep customer-facing diagnostics concise while retaining bounded flight
+7. Keep customer-facing diagnostics concise while retaining bounded flight
    recordings for support.
+
+The UX work may reorganize WinForms presentation and expose already available
+GSX state, but must not refactor simulator command paths or weaken procedure
+verification as part of the visual redesign.
 
 SayIntentions Copilot communication and departure ATC workflow acceptance was
 completed gate-to-gate for v0.9.3. Frequency tuning remains exclusively owned

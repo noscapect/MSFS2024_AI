@@ -15,6 +15,7 @@ changes, and provides spoken operational callouts.
 - iniBuilds A330-300 (GE)
 - FlyByWire A32NX for MSFS 2024
 - PMDG 737-800
+- Asobo 737 MAX 8 (**development beta; see the warning below**)
 
 Unsupported aircraft are detected but not controlled. The app does not send
 guessed generic commands to an unknown cockpit.
@@ -59,6 +60,21 @@ EnableDataBroadcast=1
 ```
 
 The dashboard should show `PMDG SDK OK` after the aircraft is loaded.
+
+### Asobo 737 MAX 8 development status
+
+The repository contains a dedicated Asobo 737 MAX profile using native
+SimConnect Input Events and aircraft-specific procedures. Flows 1–6 have
+received iterative live testing, but the MAX profile is not yet gate-to-gate
+validated and is not part of the v0.9.5 release package.
+
+Do not rely on its current "Takeoff configuration normal" callout as an
+independent trim or flight-control check. Before takeoff, manually verify the
+FMC flap/V-speed configuration, stabilizer trim, yoke/elevator movement,
+hydraulics, and the aircraft's own takeoff-configuration warning. Flow 7 is
+not cleared for unattended use until actual trim, elevator, and control-input
+telemetry has been implemented and live validated. See
+[Asobo 737 MAX support status](docs/ASOBO_737_MAX_SUPPORT_STATUS.md).
 
 ## Installation
 
@@ -179,6 +195,9 @@ installed or disabled.
   profile and can be overridden where settings are available.
 - Aircraft or simulator updates can change cockpit interfaces. Stop the flow
   and take over if the displayed state does not match the cockpit.
+- The Asobo 737 MAX profile remains under active development. Its imported
+  SimBrief takeoff flap value is not currently compared with live MAX FMC
+  takeoff data, and stabilizer/elevator state is not yet verified.
 
 ## Troubleshooting and issue reports
 
@@ -207,6 +226,7 @@ retained flight recordings.
 
 - [Detailed gate-to-gate checklist](docs/checklist.md)
 - [Supported-aircraft and live-test status](docs/LIVE_TESTS.md)
+- [Asobo 737 MAX development status](docs/ASOBO_737_MAX_SUPPORT_STATUS.md)
 - [SayIntentions integration status](docs/SAYINTENTIONS_INTEGRATION_PLAN.md)
 - [SimBrief integration](docs/SIMBRIEF_INTEGRATION_PLAN.md)
 - [Product roadmap](docs/ROADMAP.md)

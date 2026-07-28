@@ -42,6 +42,14 @@ For the PMDG 737-800, the app also compares imported V1, VR, and takeoff flaps
 with live FMC TAKEOFF REF data. Missing values are shown as unavailable rather
 than guessed.
 
+For the development Asobo 737 MAX profile, imported V1/VR/V2 and takeoff flaps
+currently become procedure targets because no verified MAX FMC TAKEOFF REF
+readback has been implemented. Therefore the app cannot claim that SimBrief
+and the MAX FMC match. A July 28 live test demonstrated this limitation when
+the imported OFP supplied Flaps 5 while the pilot expected Flaps 15. The
+comparison label and takeoff-configuration callout must be corrected before
+the MAX profile is release eligible.
+
 SimBrief information remains dispatch/advisory input. It does not write to an
 MCDU/FMC, operate QNH controls, transmit cockpit commands, or block a flow.
 

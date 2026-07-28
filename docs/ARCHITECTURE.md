@@ -50,6 +50,7 @@ Boeing aircraft profiles:
 - iniBuilds A330-300 (GE)
 - FlyByWire A32NX for MSFS 2024
 - PMDG 737-800
+- Asobo 737 MAX 8 (development beta)
 
 iniBuilds command/state pairs and the mandatory momentary-command workflow are
 defined in `docs/NATIVE_CONTROL_STRATEGY.md`. Each supported aircraft has its
@@ -91,6 +92,20 @@ PMDG cockpit state is read from
 the official `PMDG_NG3_Data` client-data area and controls are sent through
 `PMDG_NG3_Control` or aircraft-confirmed PMDG `ROTOR_BRAKE` switch events
 where required.
+
+The Asobo 737 MAX is a second, independent Boeing profile. It uses
+`Asobo737MaxProcedureLibrary`, `Asobo737MaxChecklistLibrary`, and
+`Asobo737MaxControlProfile`; it must never inherit PMDG SDK structures,
+ROTOR_BRAKE codes, or PMDG completion assumptions. Native Input Event values
+are aircraft-specific and may be inverted relative to visually similar
+switches. MAX telemetry must remain authoritative when generic iniBuilds or
+Airbus runtime variables are also present.
+
+The MAX profile is not yet inside the stable-aircraft regression boundary.
+In particular, no verified telemetry currently exists for FMC takeoff-flap
+selection, stabilizer trim, elevator position, pilot yoke input, Speed Trim
+System commands, MCAS commands, or the aircraft takeoff-configuration warning.
+Procedure completion must not imply those unobserved states are normal.
 
 The PMDG 737-800 is a frozen, gate-to-gate live-validated profile. Its twelve
 procedures and checklists are separate objects, every automatic command is

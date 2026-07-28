@@ -12,6 +12,17 @@ schedule, and checklist library. It does not inherit these Airbus steps. Its
 released behavior and live-validation status are documented in
 `docs/PMDG_737_SUPPORT_PLAN.md`.
 
+The Asobo 737 MAX 8 uses a separate development profile in
+`Asobo737MaxProcedureLibrary`. It does not inherit the PMDG flow. Its current
+implemented behavior, live-test evidence, and unresolved takeoff limitations
+are documented in `docs/ASOBO_737_MAX_SUPPORT_STATUS.md`.
+
+**MAX takeoff restriction:** Flows 1–6 are still being validated and Flow 7
+must not be treated as unattended takeoff automation. The app does not yet
+verify MAX FMC takeoff flaps, stabilizer trim, elevator response, pilot yoke
+input, STS/MCAS commands, or the aircraft takeoff-configuration warning.
+The pilot must verify those items directly before commencing takeoff.
+
 An interrupted active flow is saved locally and restored at its exact step
 after restart. During restoration, transient milestones that have already
 passed are recovered from current aircraft state rather than awaited again.

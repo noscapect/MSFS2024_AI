@@ -2,6 +2,28 @@
 
 ## 2026-07-28 - Asobo 737 MAX Flow 3 selector corrections
 
+### Flow 7 takeoff incident
+
+The first MAX takeoff attempt is **not a passed Flow 7 validation**. Recorded
+telemetry showed full thrust (approximately 99% N1), parking brake released,
+spoilers down, gear down, and Flaps 5 with both flap surfaces near 12.5%.
+The aircraft reached the configured 141-knot VR, but pitch remained near zero
+and it stayed on the runway until approximately 197 knots. It then became
+briefly airborne without a normal rotation, descended, and crashed.
+
+The app sent no pitch, elevator, or trim command during the takeoff roll.
+However, it had accepted an unverified manual stabilizer-trim confirmation and
+then spoke "Takeoff configuration normal." It also used the imported SimBrief
+Flaps 5 target without a live MAX FMC comparison. The recording does not
+contain yoke input, elevator deflection, stabilizer position, STS/MCAS command
+state, or the aircraft takeoff-configuration warning, so it cannot distinguish
+a failed control input from severely incorrect stabilizer trim.
+
+Result: **Failed / investigation required.** Flow 7 is not cleared for
+unattended use. Before another takeoff test, add and validate the missing
+takeoff-control telemetry, make unavailable FMC comparison explicit, and
+remove the unconditional configuration-normal assurance.
+
 During the first live Flow 3 pass, the app reported PACK AUTO, isolation valve
 OPEN, ground power OFF, and anti-collision ON even though the cockpit controls
 did not match those states.

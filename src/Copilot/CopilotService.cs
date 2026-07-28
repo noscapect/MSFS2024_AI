@@ -9,6 +9,7 @@ using Msfs2024Ai.Copilot.Checklists;
 using Msfs2024Ai.Copilot.Controls;
 using Msfs2024Ai.Copilot.Diagnostics;
 using Msfs2024Ai.Copilot.Domain;
+using Msfs2024Ai.Copilot.AircraftAdapters.Asobo737Max;
 using Msfs2024Ai.Copilot.Gsx;
 using Msfs2024Ai.Copilot.Procedures;
 using Msfs2024Ai.Copilot.Settings;
@@ -357,6 +358,9 @@ internal sealed class CopilotService : Form
     private double? _asobo737MaxAntiCollisionInputState;
     private double? _asobo737MaxFlapsInputState;
     private double? _asobo737MaxAutobrakeInputState;
+    private double? _asobo737MaxAutothrottleInputState;
+    private double? _asobo737MaxTransponderModeInputState;
+    private double? _asobo737MaxTransponderOperatingModeInputState;
     private bool _asobo737MaxInputEventsEnumerated;
     private bool _asobo737MaxFireTestsInProgress;
     private static readonly string[] Asobo737MaxFuelPumpInputEventNames =
@@ -399,8 +403,14 @@ internal sealed class CopilotService : Form
         16858870040215037861UL
     };
     private const ulong Asobo737MaxAntiCollisionInputEventHash = 15622846362031305197UL;
+    private const ulong Asobo737MaxExternalPowerInputEventHash = 10160635751565732413UL;
     private const ulong Asobo737MaxFlapsInputEventHash = 13998713293320135111UL;
     private const ulong Asobo737MaxAutobrakeInputEventHash = 7142783048944440595UL;
+    private const ulong Asobo737MaxAutothrottleInputEventHash = 8838131474811569287UL;
+    private const ulong Asobo737MaxLnavInputEventHash = 5252030825318025405UL;
+    private const ulong Asobo737MaxVnavInputEventHash = 7249118735569564221UL;
+    private const ulong Asobo737MaxTransponderModeInputEventHash = 1428665342216455960UL;
+    private const ulong Asobo737MaxTransponderOperatingModeInputEventHash = 15256658846979713216UL;
     private static readonly ulong[] A330FuelPumpInputEventHashes =
     {
         17160241956476466648UL, // AIRLINER_FUEL_ENG1_L1
@@ -721,6 +731,9 @@ internal sealed class CopilotService : Form
         Asobo737MaxAntiCollisionInputEvent = 275,
         Asobo737MaxFlapsInputEvent = 276,
         Asobo737MaxAutobrakeInputEvent = 277,
+        Asobo737MaxAutothrottleInputEvent = 278,
+        Asobo737MaxTransponderOperatingModeInputEvent = 279,
+        Asobo737MaxTransponderModeInputEvent = 280,
         PmdgNg3Data = 300,
         PmdgNg3Control = 301
     }
@@ -1592,6 +1605,13 @@ internal sealed class CopilotService : Form
                     sender.GetInputEvent(Request.Asobo737MaxAntiCollisionInputEvent, Asobo737MaxAntiCollisionInputEventHash);
                     sender.GetInputEvent(Request.Asobo737MaxFlapsInputEvent, Asobo737MaxFlapsInputEventHash);
                     sender.GetInputEvent(Request.Asobo737MaxAutobrakeInputEvent, Asobo737MaxAutobrakeInputEventHash);
+                    sender.GetInputEvent(Request.Asobo737MaxAutothrottleInputEvent, Asobo737MaxAutothrottleInputEventHash);
+                    sender.GetInputEvent(
+                        Request.Asobo737MaxTransponderOperatingModeInputEvent,
+                        Asobo737MaxTransponderOperatingModeInputEventHash);
+                    sender.GetInputEvent(
+                        Request.Asobo737MaxTransponderModeInputEvent,
+                        Asobo737MaxTransponderModeInputEventHash);
                     for (var index = 0; index < _asobo737MaxApuGeneratorInputEventHashes.Length; index++)
                     {
                         if (_asobo737MaxApuGeneratorInputEventHashes[index].HasValue)
@@ -2814,6 +2834,36 @@ internal sealed class CopilotService : Form
         if (request == Request.Asobo737MaxAutobrakeInputEvent)
         {
             SetAsobo737MaxLoggedInputState(ref _asobo737MaxAutobrakeInputState, numericValue.Value, "autobrake");
+            ApplyNativeAircraftState();
+            return;
+        }
+
+        if (request == Request.Asobo737MaxAutothrottleInputEvent)
+        {
+            SetAsobo737MaxLoggedInputState(
+                ref _asobo737MaxAutothrottleInputState,
+                numericValue.Value,
+                "autothrottle");
+            ApplyNativeAircraftState();
+            return;
+        }
+
+        if (request == Request.Asobo737MaxTransponderOperatingModeInputEvent)
+        {
+            SetAsobo737MaxLoggedInputState(
+                ref _asobo737MaxTransponderOperatingModeInputState,
+                numericValue.Value,
+                "transponder operating mode");
+            ApplyNativeAircraftState();
+            return;
+        }
+
+        if (request == Request.Asobo737MaxTransponderModeInputEvent)
+        {
+            SetAsobo737MaxLoggedInputState(
+                ref _asobo737MaxTransponderModeInputState,
+                numericValue.Value,
+                "transponder mode selector");
             ApplyNativeAircraftState();
             return;
         }
@@ -4225,6 +4275,13 @@ internal sealed class CopilotService : Form
             {
                 _state.RightPackSwitchPosition = Asobo737MaxPackPosition(_asobo737MaxRightPackInputState.Value);
             }
+            if (_asobo737MaxEngineBleedInputStates.All(state => state.HasValue))
+            {
+                _state.BoeingEngineBleed1On =
+                    _asobo737MaxEngineBleedInputStates[0]!.Value >= 0.5;
+                _state.BoeingEngineBleed2On =
+                    _asobo737MaxEngineBleedInputStates[1]!.Value >= 0.5;
+            }
             if (_asobo737MaxIsolationValveInputState.HasValue)
             {
                 _state.IsolationValvePosition = Asobo737MaxIsolationValvePosition(_asobo737MaxIsolationValveInputState.Value);
@@ -4235,8 +4292,12 @@ internal sealed class CopilotService : Form
             }
             if (_asobo737MaxElectricHydraulicPumpInputStates.All(state => state.HasValue))
             {
-                _state.BoeingElectricHydraulicPump1On = _asobo737MaxElectricHydraulicPumpInputStates[0]!.Value >= 0.5;
-                _state.BoeingElectricHydraulicPump2On = _asobo737MaxElectricHydraulicPumpInputStates[1]!.Value >= 0.5;
+                _state.BoeingElectricHydraulicPump1On =
+                    Asobo737MaxControlProfile.IsElectricHydraulicPumpOn(
+                        _asobo737MaxElectricHydraulicPumpInputStates[0]!.Value);
+                _state.BoeingElectricHydraulicPump2On =
+                    Asobo737MaxControlProfile.IsElectricHydraulicPumpOn(
+                        _asobo737MaxElectricHydraulicPumpInputStates[1]!.Value);
                 _state.BoeingElectricHydraulicPumpsOn =
                     _state.BoeingElectricHydraulicPump1On
                     && _state.BoeingElectricHydraulicPump2On;
@@ -4249,23 +4310,49 @@ internal sealed class CopilotService : Form
             {
                 _state.AutobrakeLevel = _asobo737MaxAutobrakeInputState.Value;
             }
+            if (_asobo737MaxAutothrottleInputState.HasValue)
+            {
+                _state.BoeingAutothrottleArmed =
+                    Asobo737MaxControlProfile.IsAutothrottleArmed(
+                        _asobo737MaxAutothrottleInputState.Value);
+            }
+            if (_asobo737MaxTransponderOperatingModeInputState.HasValue)
+            {
+                _state.BoeingTransponderOperatingMode =
+                    _asobo737MaxTransponderOperatingModeInputState.Value;
+            }
+            if (_asobo737MaxTransponderModeInputState.HasValue)
+            {
+                _state.TransponderModeSelectorPosition =
+                    _asobo737MaxTransponderModeInputState.Value;
+                _state.TransponderStandby =
+                    Math.Abs(
+                        _asobo737MaxTransponderModeInputState.Value
+                        - Asobo737MaxControlProfile.TransponderStandby) < 0.1;
+            }
             if (_asobo737MaxTaxiLightInputState.HasValue)
             {
-                _state.NoseLightSelectorPosition = Asobo737MaxBinarySwitchIsOnNormal(_asobo737MaxTaxiLightInputState.Value) ? 1 : 2;
+                _state.NoseLightSelectorPosition =
+                    Asobo737MaxControlProfile.NormalizeTaxiLightPosition(
+                        _asobo737MaxTaxiLightInputState.Value);
             }
             if (_asobo737MaxRunwayTurnoffInputStates.All(state => state.HasValue))
             {
-                _state.RunwayTurnoffLightsOn = _asobo737MaxRunwayTurnoffInputStates.All(state => state!.Value >= 0.5);
+                _state.RunwayTurnoffLightsOn =
+                    _asobo737MaxRunwayTurnoffInputStates.All(
+                        state => Asobo737MaxControlProfile.IsRunwayTurnoffLightOn(state!.Value));
             }
             if (_asobo737MaxLandingLightInputStates.All(state => state.HasValue))
             {
-                var landingLightsOn = _asobo737MaxLandingLightInputStates.All(state => state!.Value >= 0.5);
+                var landingLightsOn = _asobo737MaxLandingLightInputStates.All(
+                    state => Asobo737MaxControlProfile.IsLandingLightOn(state!.Value));
                 _state.LeftLandingLightSelectorPosition = landingLightsOn ? 0 : 1;
                 _state.RightLandingLightSelectorPosition = landingLightsOn ? 0 : 1;
             }
             if (_asobo737MaxAntiCollisionInputState.HasValue)
             {
-                _state.BeaconOn = _asobo737MaxAntiCollisionInputState.Value >= 0.5;
+                _state.BeaconOn = Asobo737MaxControlProfile.IsAntiCollisionOn(
+                    _asobo737MaxAntiCollisionInputState.Value);
             }
             if (_asobo737MaxPositionLightInputState.HasValue)
             {
@@ -4295,13 +4382,20 @@ internal sealed class CopilotService : Form
             _state.WeatherRadarPwsSelectorPosition =
                 _a330WeatherRadarPwsInputState.Value >= 0.5 ? 0 : 1;
         }
-        _state.NoseLightSelectorPosition = _nativeNoseLightSelector;
+        if (!_state.IsAsobo737Max8 || !_asobo737MaxTaxiLightInputState.HasValue)
+        {
+            _state.NoseLightSelectorPosition = _nativeNoseLightSelector;
+        }
         if (_state.IsIniBuildsA330 && _a330NoseLightInputState.HasValue)
         {
             _state.NoseLightSelectorPosition = _a330NoseLightInputState.Value;
         }
-        _state.LeftLandingLightSelectorPosition = _nativeLeftLandingLightSelector;
-        _state.RightLandingLightSelectorPosition = _nativeRightLandingLightSelector;
+        if (!_state.IsAsobo737Max8
+            || !_asobo737MaxLandingLightInputStates.All(state => state.HasValue))
+        {
+            _state.LeftLandingLightSelectorPosition = _nativeLeftLandingLightSelector;
+            _state.RightLandingLightSelectorPosition = _nativeRightLandingLightSelector;
+        }
         if (_state.IsIniBuildsA330 && _a330LandingLightInputState.HasValue)
         {
             var a330LandingLightPosition =
@@ -4327,9 +4421,12 @@ internal sealed class CopilotService : Form
         {
             _state.TcasMode = _a330TcasTrafficInputState.Value;
         }
-        _state.TransponderModeSelectorPosition = _nativeTransponderStandby;
-        _state.TransponderStandby = _nativeTransponderStandby.HasValue
-                                    && _nativeTransponderStandby.Value != 0;
+        if (!_state.IsAsobo737Max8 || !_asobo737MaxTransponderModeInputState.HasValue)
+        {
+            _state.TransponderModeSelectorPosition = _nativeTransponderStandby;
+            _state.TransponderStandby = _nativeTransponderStandby.HasValue
+                                        && _nativeTransponderStandby.Value != 0;
+        }
         if (_state.IsIniBuildsA330 && _a330TransponderModeInputState.HasValue)
         {
             _state.TransponderModeSelectorPosition = _a330TransponderModeInputState.Value;
@@ -4690,7 +4787,8 @@ internal sealed class CopilotService : Form
             BeaconOn = isPmdg737 && pmdg != null
                 ? pmdg.AntiCollisionOn
                 : isAsobo737Max && _asobo737MaxAntiCollisionInputState.HasValue
-                    ? Asobo737MaxBinarySwitchIsOnNormal(_asobo737MaxAntiCollisionInputState.Value)
+                    ? Asobo737MaxControlProfile.IsAntiCollisionOn(
+                        _asobo737MaxAntiCollisionInputState.Value)
                 : raw.Beacon != 0,
             NavigationLightsOn = isPmdg737 && pmdg != null
                 ? ResolvePmdgCommandedPositionLightState(
@@ -4775,6 +4873,10 @@ internal sealed class CopilotService : Form
                 : isAsobo737Max && _asobo737MaxRightPackInputState.HasValue
                     ? Asobo737MaxPackPosition(_asobo737MaxRightPackInputState.Value)
                 : null,
+            BoeingEngineBleed1On = isAsobo737Max
+                && _asobo737MaxEngineBleedInputStates[0] >= 0.5,
+            BoeingEngineBleed2On = isAsobo737Max
+                && _asobo737MaxEngineBleedInputStates[1] >= 0.5,
             IsolationValvePosition = isPmdg737 && pmdg != null
                 ? pmdg.IsolationValveSwitch
                 : isAsobo737Max && _asobo737MaxIsolationValveInputState.HasValue
@@ -4821,15 +4923,18 @@ internal sealed class CopilotService : Form
                 && pmdg.ElectricHydraulicPump2On
                 || isAsobo737Max
                 && _asobo737MaxElectricHydraulicPumpInputStates.All(state => state.HasValue)
-                && _asobo737MaxElectricHydraulicPumpInputStates.All(state => state!.Value >= 0.5),
+                && _asobo737MaxElectricHydraulicPumpInputStates.All(
+                    state => Asobo737MaxControlProfile.IsElectricHydraulicPumpOn(state!.Value)),
             BoeingElectricHydraulicPump1On = isPmdg737 && pmdg != null && pmdg.ElectricHydraulicPump1On
                 || isAsobo737Max
                 && _asobo737MaxElectricHydraulicPumpInputStates[0].HasValue
-                && _asobo737MaxElectricHydraulicPumpInputStates[0]!.Value >= 0.5,
+                && Asobo737MaxControlProfile.IsElectricHydraulicPumpOn(
+                    _asobo737MaxElectricHydraulicPumpInputStates[0]!.Value),
             BoeingElectricHydraulicPump2On = isPmdg737 && pmdg != null && pmdg.ElectricHydraulicPump2On
                 || isAsobo737Max
                 && _asobo737MaxElectricHydraulicPumpInputStates[1].HasValue
-                && _asobo737MaxElectricHydraulicPumpInputStates[1]!.Value >= 0.5,
+                && Asobo737MaxControlProfile.IsElectricHydraulicPumpOn(
+                    _asobo737MaxElectricHydraulicPumpInputStates[1]!.Value),
             BoeingElectricHydraulicPump1LowPressure = isPmdg737 && pmdg != null && pmdg.ElectricHydraulicPump1LowPressure,
             BoeingElectricHydraulicPump2LowPressure = isPmdg737 && pmdg != null && pmdg.ElectricHydraulicPump2LowPressure,
             ApuVolts = raw.ApuVolts,
@@ -4946,6 +5051,9 @@ internal sealed class CopilotService : Form
                 ? pmdg.GearLever
                 : isFlyByWireAirbus
                     ? raw.GearHandle != 0 ? 2 : 0
+                : isAsobo737Max
+                    ? Asobo737MaxControlProfile.NormalizeGearHandlePosition(
+                        raw.GearHandle)
                     : _nativeGearHandlePosition.HasValue
                         ? _nativeGearHandlePosition.Value >= 0.5 ? 2 : 0
                         : raw.GearHandle != 0 ? 2 : 0,
@@ -4953,11 +5061,20 @@ internal sealed class CopilotService : Form
                 ? raw.GearHandle != 0
                 : isPmdg737 && pmdg != null
                     ? pmdg.GearLever == 2
+                : isAsobo737Max
+                    ? Asobo737MaxControlProfile.IsGearHandleDown(raw.GearHandle)
                 : _nativeGearHandlePosition.HasValue
                     ? _nativeGearHandlePosition.Value >= 0.5
                     : raw.GearHandle != 0,
             PitchDegrees = raw.PitchDegrees,
             AutopilotMasterOn = raw.AutopilotMaster != 0,
+            BoeingAutothrottleArmed = isAsobo737Max
+                && _asobo737MaxAutothrottleInputState.HasValue
+                && Asobo737MaxControlProfile.IsAutothrottleArmed(
+                    _asobo737MaxAutothrottleInputState.Value),
+            BoeingTransponderOperatingMode = isAsobo737Max
+                ? _asobo737MaxTransponderOperatingModeInputState
+                : null,
             AutopilotApproachHoldOn = raw.AutopilotApproachHold != 0,
             AutopilotGlideslopeHoldOn = raw.AutopilotGlideslopeHold != 0,
             Nav1HasLocalizer = raw.Nav1HasLocalizer != 0,
@@ -5141,7 +5258,8 @@ internal sealed class CopilotService : Form
                 : isPmdg737 && pmdg != null
                     ? pmdg.TaxiLightOn ? 1 : 2
                 : isAsobo737Max && _asobo737MaxTaxiLightInputState.HasValue
-                    ? Asobo737MaxBinarySwitchIsOnNormal(_asobo737MaxTaxiLightInputState.Value) ? 1 : 2
+                    ? Asobo737MaxControlProfile.NormalizeTaxiLightPosition(
+                        _asobo737MaxTaxiLightInputState.Value)
                 : _nativeNoseLightSelector,
             LeftLandingLightSelectorPosition = isFlyByWireAirbus
                 ? ResolveFbwLandingLightSelectorPosition(
@@ -5156,7 +5274,8 @@ internal sealed class CopilotService : Form
                         _pmdgCommandedLandingLightUtc,
                         pmdg.LeftLandingLight)
                 : isAsobo737Max && _asobo737MaxLandingLightInputStates[0].HasValue
-                    ? Asobo737MaxBinarySwitchIsOnNormal(_asobo737MaxLandingLightInputStates[0]!.Value) ? 0d : 1d
+                    ? Asobo737MaxControlProfile.IsLandingLightOn(
+                        _asobo737MaxLandingLightInputStates[0]!.Value) ? 0d : 1d
                 : _nativeLeftLandingLightSelector,
             RightLandingLightSelectorPosition = isFlyByWireAirbus
                 ? ResolveFbwLandingLightSelectorPosition(
@@ -5171,12 +5290,14 @@ internal sealed class CopilotService : Form
                         _pmdgCommandedLandingLightUtc,
                         pmdg.RightLandingLight)
                 : isAsobo737Max && _asobo737MaxLandingLightInputStates[1].HasValue
-                    ? Asobo737MaxBinarySwitchIsOnNormal(_asobo737MaxLandingLightInputStates[1]!.Value) ? 0d : 1d
+                    ? Asobo737MaxControlProfile.IsLandingLightOn(
+                        _asobo737MaxLandingLightInputStates[1]!.Value) ? 0d : 1d
                 : _nativeRightLandingLightSelector,
             RunwayTurnoffLightsOn = isPmdg737 && pmdg != null
                 ? pmdg.LeftRunwayTurnoffLight && pmdg.RightRunwayTurnoffLight
                 : isAsobo737Max && _asobo737MaxRunwayTurnoffInputStates.All(state => state.HasValue)
-                    ? _asobo737MaxRunwayTurnoffInputStates.All(state => Asobo737MaxBinarySwitchIsOnNormal(state!.Value))
+                    ? _asobo737MaxRunwayTurnoffInputStates.All(
+                        state => Asobo737MaxControlProfile.IsRunwayTurnoffLightOn(state!.Value))
                 : isIniBuildsAirbusFamily
                     ? raw.IniBuildsTurnoffLightSwitch != 0
                 : raw.LeftRunwayTurnoffLightCircuit != 0
@@ -5210,11 +5331,17 @@ internal sealed class CopilotService : Form
                     ? _a330TransponderModeInputState.Value
                 : isPmdg737 && pmdg != null
                     ? pmdg.TransponderMode
+                : isAsobo737Max && _asobo737MaxTransponderModeInputState.HasValue
+                    ? _asobo737MaxTransponderModeInputState.Value
                 : _nativeTransponderStandby,
             TransponderStandby = isPmdg737 && pmdg != null
                 ? pmdg.TransponderMode == 0
                 : isIniBuildsA330 && _a330TransponderModeInputState.HasValue
                     ? _a330TransponderModeInputState.Value < 0.5
+                : isAsobo737Max && _asobo737MaxTransponderModeInputState.HasValue
+                    ? Math.Abs(
+                        _asobo737MaxTransponderModeInputState.Value
+                        - Asobo737MaxControlProfile.TransponderStandby) < 0.1
                 : _nativeTransponderStandby.HasValue
                   && _nativeTransponderStandby.Value != 0,
             AtcClearedIfr = raw.AtcClearedIfr != 0,
@@ -6380,10 +6507,13 @@ internal sealed class CopilotService : Form
                 SetAsobo737MaxPassengerSign("no-smoking", _asobo737MaxNoSmokingInputEventHash, () => _asobo737MaxNoSmokingInputState);
                 break;
             case "asobo737max apu on":
-                SetAsobo737MaxApuSelector(1);
+                SetAsobo737MaxApuSelector(Asobo737MaxControlProfile.ApuOn);
                 break;
             case "asobo737max apu start":
-                SetAsobo737MaxApuSelector(0);
+                SetAsobo737MaxApuSelector(Asobo737MaxControlProfile.ApuStart);
+                break;
+            case "asobo737max apu off":
+                SetAsobo737MaxApuSelector(Asobo737MaxControlProfile.ApuOff);
                 break;
             case "asobo737max apu-generator on":
                 SetAsobo737MaxApuGenerator(true);
@@ -6421,13 +6551,31 @@ internal sealed class CopilotService : Form
             case "asobo737max packs off":
                 SetAsobo737MaxPacks(auto: false);
                 break;
+            case "asobo737max engine-bleeds on":
+                SetAsobo737MaxEngineBleeds(true);
+                break;
             case "asobo737max engine-generators on":
                 SetAsobo737MaxEngineGenerators(true);
                 break;
             case "asobo737max electric-hydraulic-pumps on":
                 SetAsobo737MaxElectricHydraulicPumps(true);
                 break;
-            case "asobo737max taxi-light on":
+            case "asobo737max autothrottle arm":
+                SetAsobo737MaxAutothrottleArmed();
+                break;
+            case "asobo737max lnav arm":
+                PulseAsobo737MaxMcpButton("LNAV", Asobo737MaxLnavInputEventHash);
+                break;
+            case "asobo737max vnav arm":
+                PulseAsobo737MaxMcpButton("VNAV", Asobo737MaxVnavInputEventHash);
+                break;
+            case "asobo737max transponder tara":
+                SetAsobo737MaxTransponderTaRa();
+                break;
+            case "asobo737max transponder auto":
+                SetAsobo737MaxTransponderAuto();
+                break;
+            case "asobo737max taxi-light auto":
                 SetAsobo737MaxTaxiLight(true);
                 break;
             case "asobo737max taxi-light off":
@@ -7936,15 +8084,23 @@ internal sealed class CopilotService : Form
                        || (Math.Abs(desiredPosition) < 0.1 && (state.ApuStarterPercent > 0 || state.ApuSpoolingOrAvailable));
             }
 
-            return Math.Abs(desiredPosition - 1) < 0.1
-                ? state.ApuMasterSwitchOn
-                : state.ApuStartButtonOn || state.ApuSpoolingOrAvailable;
+            if (Math.Abs(desiredPosition - Asobo737MaxControlProfile.ApuOn) < 0.1)
+            {
+                return state.ApuMasterSwitchOn;
+            }
+
+            if (Math.Abs(desiredPosition - Asobo737MaxControlProfile.ApuOff) < 0.1)
+            {
+                return !state.ApuMasterSwitchOn;
+            }
+
+            return state.ApuStartButtonOn || state.ApuSpoolingOrAvailable;
         }
 
         if (Verify(_state))
         {
             AppendDashboardLog(
-                $"737 MAX APU selector already {(Math.Abs(desiredPosition - 1) < 0.1 ? "ON" : "START")}.");
+                $"737 MAX APU selector already {Asobo737MaxApuSelectorLabel(desiredPosition)}.");
             FinishOneShot();
             return;
         }
@@ -7973,8 +8129,15 @@ internal sealed class CopilotService : Form
             Verify,
             true,
             TimeSpan.FromSeconds(8),
-            Math.Abs(desiredPosition - 1) < 0.1 ? "ON" : "START");
+            Asobo737MaxApuSelectorLabel(desiredPosition));
     }
+
+    private static string Asobo737MaxApuSelectorLabel(double position) =>
+        Math.Abs(position - Asobo737MaxControlProfile.ApuOff) < 0.1
+            ? "OFF"
+            : Math.Abs(position - Asobo737MaxControlProfile.ApuOn) < 0.1
+                ? "ON"
+                : "START";
 
     private void SetAsobo737MaxLightingInputEvent(
         string name,
@@ -9234,7 +9397,9 @@ internal sealed class CopilotService : Form
 
     private void SetAsobo737MaxIsolationValve(bool open)
     {
-        var desiredValue = open ? 1.0 : 0.0;
+        var desiredValue = open
+            ? Asobo737MaxControlProfile.IsolationValveOpen
+            : Asobo737MaxControlProfile.IsolationValveAuto;
         SetAsobo737MaxSingleInputEvent(
             open ? "isolation valve OPEN" : "isolation valve AUTO",
             Asobo737MaxIsolationValveInputEventHash,
@@ -9244,7 +9409,9 @@ internal sealed class CopilotService : Form
 
     private void ForceSetAsobo737MaxIsolationValve(bool open)
     {
-        var desiredValue = open ? 1.0 : 0.0;
+        var desiredValue = open
+            ? Asobo737MaxControlProfile.IsolationValveOpen
+            : Asobo737MaxControlProfile.IsolationValveAuto;
         ForceSetAsobo737MaxSingleInputEventCommand(
             open ? "isolation valve OPEN" : "isolation valve AUTO",
             Asobo737MaxIsolationValveInputEventHash,
@@ -9254,7 +9421,9 @@ internal sealed class CopilotService : Form
 
     private void SetAsobo737MaxPacks(bool auto)
     {
-        var desiredValue = auto ? 2.0 : 1.0;
+        var desiredValue = auto
+            ? Asobo737MaxControlProfile.PackAuto
+            : Asobo737MaxControlProfile.PackOff;
         SetAsobo737MaxDualInputEvent(
             auto ? "packs AUTO" : "packs OFF",
             new[] { Asobo737MaxLeftPackInputEventHash, Asobo737MaxRightPackInputEventHash },
@@ -9264,7 +9433,9 @@ internal sealed class CopilotService : Form
 
     private void ForceSetAsobo737MaxPacks(bool auto)
     {
-        var desiredValue = auto ? 2.0 : 1.0;
+        var desiredValue = auto
+            ? Asobo737MaxControlProfile.PackAuto
+            : Asobo737MaxControlProfile.PackOff;
         ForceSetAsobo737MaxSingleInputEventCommand(
             auto ? "left pack AUTO" : "left pack OFF",
             Asobo737MaxLeftPackInputEventHash,
@@ -9273,6 +9444,17 @@ internal sealed class CopilotService : Form
         ScheduleInputEvent(Asobo737MaxRightPackInputEventHash, desiredValue, 350);
         AppLog.Write(
             $"Asobo 737 MAX right pack forced single InputEvent command scheduled: {desiredValue:0.###}.");
+    }
+
+    private void SetAsobo737MaxEngineBleeds(bool on)
+    {
+        SetAsobo737MaxDualInputEvent(
+            on ? "engine bleed switches ON" : "engine bleed switches OFF",
+            Asobo737MaxEngineBleedInputEventHashes,
+            on
+                ? Asobo737MaxControlProfile.EngineBleedOn
+                : Asobo737MaxControlProfile.EngineBleedOff,
+            state => state.BoeingEngineBleedsOn == on);
     }
 
     private void SetAsobo737MaxEngineGenerators(bool on)
@@ -9325,18 +9507,76 @@ internal sealed class CopilotService : Form
         SetAsobo737MaxDualInputEvent(
             on ? "electric hydraulic pumps ON" : "electric hydraulic pumps OFF",
             Asobo737MaxElectricHydraulicPumpInputEventHashes,
-            on ? 1.0 : 0.0,
+            on
+                ? Asobo737MaxControlProfile.ElectricHydraulicPumpOn
+                : Asobo737MaxControlProfile.ElectricHydraulicPumpOff,
             state => state.BoeingElectricHydraulicPumpsOn == on);
     }
 
     private void SetAsobo737MaxTaxiLight(bool on)
     {
         SetAsobo737MaxSingleInputEvent(
-            on ? "taxi light ON" : "taxi light OFF",
+            on ? "taxi light AUTO" : "taxi light OFF",
             Asobo737MaxTaxiLightInputEventHash,
-            on ? 1.0 : 0.0,
+            on
+                ? Asobo737MaxControlProfile.TaxiLightAuto
+                : Asobo737MaxControlProfile.TaxiLightOff,
             state => state.NoseLightSelectorPosition.HasValue
                      && Math.Abs(state.NoseLightSelectorPosition.Value - (on ? 1 : 2)) < 0.1);
+    }
+
+    private void SetAsobo737MaxAutothrottleArmed()
+    {
+        SetAsobo737MaxSingleInputEvent(
+            "autothrottle ARM",
+            Asobo737MaxAutothrottleInputEventHash,
+            Asobo737MaxControlProfile.AutothrottleArmed,
+            state => state.BoeingAutothrottleArmed);
+    }
+
+    private void PulseAsobo737MaxMcpButton(string name, ulong inputEventHash)
+    {
+        if (_simConnect == null || _state?.IsAsobo737Max8 != true)
+        {
+            AppendDashboardLog($"737 MAX {name} blocked: Asobo 737 MAX profile is not active.");
+            FinishOneShot(4);
+            return;
+        }
+
+        try
+        {
+            _simConnect.SetInputEvent(inputEventHash, 1.0);
+            _simConnect.SetInputEvent(inputEventHash, 0.0);
+            AppLog.Write($"Asobo 737 MAX {name} MCP button pulse sent.");
+            FinishOneShot();
+        }
+        catch (Exception ex) when (ex is COMException or InvalidOperationException)
+        {
+            AppendDashboardLog($"737 MAX {name} command failed: {ex.Message}");
+            FinishOneShot(4);
+        }
+    }
+
+    private void SetAsobo737MaxTransponderTaRa()
+    {
+        SetAsobo737MaxSingleInputEvent(
+            "transponder TA/RA",
+            Asobo737MaxTransponderOperatingModeInputEventHash,
+            Asobo737MaxControlProfile.TransponderTaRa,
+            state => state.BoeingTransponderOperatingMode.HasValue
+                     && Asobo737MaxControlProfile.IsTransponderTaRa(
+                         state.BoeingTransponderOperatingMode.Value));
+    }
+
+    private void SetAsobo737MaxTransponderAuto()
+    {
+        SetAsobo737MaxSingleInputEvent(
+            "transponder AUTO",
+            Asobo737MaxTransponderModeInputEventHash,
+            Asobo737MaxControlProfile.TransponderAuto,
+            state => state.TransponderModeSelectorPosition.HasValue
+                     && Asobo737MaxControlProfile.IsTransponderAuto(
+                         state.TransponderModeSelectorPosition.Value));
     }
 
     private void SetAsobo737MaxRunwayTurnoffLights(bool on)
@@ -9344,7 +9584,9 @@ internal sealed class CopilotService : Form
         SetAsobo737MaxDualInputEvent(
             on ? "runway turnoff lights ON" : "runway turnoff lights OFF",
             Asobo737MaxRunwayTurnoffInputEventHashes,
-            on ? 1.0 : 0.0,
+            on
+                ? Asobo737MaxControlProfile.RunwayTurnoffLightOn
+                : Asobo737MaxControlProfile.RunwayTurnoffLightOff,
             state => state.RunwayTurnoffLightsOn == on);
     }
 
@@ -9353,7 +9595,9 @@ internal sealed class CopilotService : Form
         SetAsobo737MaxDualInputEvent(
             on ? "landing lights ON" : "landing lights OFF",
             Asobo737MaxLandingLightInputEventHashes,
-            on ? 1.0 : 0.0,
+            on
+                ? Asobo737MaxControlProfile.LandingLightOn
+                : Asobo737MaxControlProfile.LandingLightOff,
             state => state.LeftLandingLightSelectorPosition.HasValue
                      && state.RightLandingLightSelectorPosition.HasValue
                      && Math.Abs(state.LeftLandingLightSelectorPosition.Value - (on ? 0 : 1)) < 0.1
@@ -9365,7 +9609,9 @@ internal sealed class CopilotService : Form
         ForceSetAsobo737MaxSingleInputEventCommand(
             on ? "anti-collision light ON" : "anti-collision light OFF",
             Asobo737MaxAntiCollisionInputEventHash,
-            on ? 1.0 : 0.0,
+            on
+                ? Asobo737MaxControlProfile.AntiCollisionOn
+                : Asobo737MaxControlProfile.AntiCollisionOff,
             state => state.BeaconOn == on);
     }
 
@@ -9385,8 +9631,25 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        TransmitExternalPowerCommand(1, false);
-        AppLog.Write("Asobo 737 MAX ground power OFF command forced after APU generator handover.");
+        try
+        {
+            _simConnect.SetInputEvent(
+                Asobo737MaxExternalPowerInputEventHash,
+                Asobo737MaxControlProfile.ExternalPowerOff);
+            ScheduleInputEvent(
+                Asobo737MaxExternalPowerInputEventHash,
+                Asobo737MaxControlProfile.ExternalPowerNeutral,
+                350);
+            AppLog.Write(
+                "Asobo 737 MAX native ground power OFF command sent; neutral release scheduled.");
+        }
+        catch (Exception ex) when (ex is COMException or InvalidOperationException)
+        {
+            AppendDashboardLog($"737 MAX ground power OFF command failed: {ex.Message}");
+            FinishOneShot(4);
+            return;
+        }
+
         BeginNativeAction(
             "737 MAX ground power",
             state => !state.ExternalPowerOn,
@@ -10002,10 +10265,10 @@ internal sealed class CopilotService : Form
         value >= 0.5;
 
     private static double Asobo737MaxPackPosition(double value) =>
-        value >= 1.5 ? 1 : 0;
+        Asobo737MaxControlProfile.NormalizePackPosition(value);
 
     private static double Asobo737MaxIsolationValvePosition(double value) =>
-        value >= 0.5 ? 2 : 1;
+        Asobo737MaxControlProfile.NormalizeIsolationValvePosition(value);
 
     private static double Asobo737MaxFlapsHandleIndex(double value) =>
         Math.Round(value * 8, MidpointRounding.AwayFromZero);
@@ -13853,7 +14116,7 @@ internal sealed class CopilotService : Form
                         + communication.OutgoingMessage.Trim());
                 }
 
-                if (change.OutgoingChanged)
+                if (change.OutgoingChanged || change.IncomingChanged)
                 {
                     await TryCompletePendingSayIntentionsAtcStepAsync(
                         flight,
@@ -13896,7 +14159,7 @@ internal sealed class CopilotService : Form
             communications,
             baseline,
             DateTimeOffset.UtcNow,
-            TimeSpan.FromMinutes(10));
+            TimeSpan.FromMinutes(30));
         if (clearance == null)
         {
             return false;
@@ -13914,21 +14177,25 @@ internal sealed class CopilotService : Form
         await TryCompletePendingSayIntentionsAtcStepAsync(
             flight,
             clearance,
-            cancellationToken);
+            cancellationToken,
+            clearanceAlreadyClassified: true);
         return true;
     }
 
     private async Task TryCompletePendingSayIntentionsAtcStepAsync(
         SayIntentionsFlightContext flight,
         SayIntentionsCommunication communication,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        bool clearanceAlreadyClassified = false)
     {
         var pendingStepId = _pendingSayIntentionsAtcStepId;
         if (pendingStepId == null
             || communication.Id <= _pendingSayIntentionsAtcBaselineId
-            || !SayIntentionsAtcResponseClassifier.IsClearanceResponse(
+            || !clearanceAlreadyClassified
+            && !SayIntentionsAtcResponseClassifier.IsClearanceResponse(
                 pendingStepId,
-                communication.OutgoingMessage))
+                communication.OutgoingMessage,
+                communication.IncomingMessage))
         {
             return;
         }
@@ -16997,6 +17264,9 @@ internal sealed class CopilotService : Form
         _asobo737MaxRightIrsInputEventHash = null;
         _asobo737MaxLeftIrsInputState = null;
         _asobo737MaxRightIrsInputState = null;
+        _asobo737MaxAutothrottleInputState = null;
+        _asobo737MaxTransponderModeInputState = null;
+        _asobo737MaxTransponderOperatingModeInputState = null;
         _asobo737MaxInputEventsEnumerated = false;
         _asobo737MaxFireTestsInProgress = false;
 

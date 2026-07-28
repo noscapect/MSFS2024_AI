@@ -56,9 +56,52 @@ public sealed class SayIntentionsAtcResponseClassifierTests
         Assert.IsFalse(SayIntentionsAtcResponseClassifier.IsClearanceResponse(
             "captain-ifr-clearance",
             "Cleared to Schiphol via the LNO1R departure."));
+        Assert.IsFalse(SayIntentionsAtcResponseClassifier.IsClearanceResponse(
+            "captain-ifr-clearance",
+            "Cleared to Schiphol via the HELE4G departure. Runway 25R. Initial climb FL060. Squawk 4773.",
+            "We're ready to receive our IFR clearance."));
+        Assert.IsTrue(SayIntentionsAtcResponseClassifier.IsClearanceResponse(
+            "captain-ifr-clearance",
+            "Cleared to Schiphol via the HELE4G departure. Runway 25R. Initial climb FL060. Squawk 4773.",
+            "Cleared to Schiphol via HELE4G departure, runway 25R. Initial climb FL060. Squawk 4773."));
         Assert.IsTrue(SayIntentionsAtcResponseClassifier.IsClearanceResponse(
             "captain-ifr-clearance",
             "Readback correct. Contact tower on 118.105."));
+    }
+
+    [TestMethod]
+    public void FindsIfrClearanceFollowedBySeparateCopilotReadback()
+    {
+        var requestAndClearance = new SayIntentionsCommunication
+        {
+            Id = 51664729,
+            TimestampUtc = "2026-07-28 21:28:03",
+            IncomingMessage = "We're ready to receive our IFR clearance.",
+            OutgoingMessage =
+                "Cleared to Schiphol via the HELE4G departure. Runway 25R. Initial climb FL060. Squawk 4773."
+        };
+        var readback = new SayIntentionsCommunication
+        {
+            Id = 51665017,
+            TimestampUtc = "2026-07-28 21:29:00",
+            IncomingMessage =
+                "Cleared to Schiphol via HELE4G departure, runway 25R. Initial climb FL060. Squawk 4773."
+        };
+
+        Assert.AreSame(
+            readback,
+            SayIntentionsAtcResponseClassifier.FindRecentClearance(
+                "captain-ifr-clearance",
+                new[] { requestAndClearance, readback },
+                0,
+                new DateTimeOffset(2026, 7, 28, 21, 29, 10, TimeSpan.Zero),
+                TimeSpan.FromMinutes(10)));
+        Assert.IsNull(SayIntentionsAtcResponseClassifier.FindRecentClearance(
+            "captain-ifr-clearance",
+            new[] { requestAndClearance },
+            0,
+            new DateTimeOffset(2026, 7, 28, 21, 29, 10, TimeSpan.Zero),
+            TimeSpan.FromMinutes(10)));
     }
 
     [TestMethod]

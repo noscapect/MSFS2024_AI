@@ -27,15 +27,50 @@ internal static class SayIntentionsAtcResponseClassifier
         IEnumerable<SayIntentionsCommunication> communications,
         long minimumExclusiveId,
         DateTimeOffset nowUtc,
-        TimeSpan maximumAge) =>
-        communications
+        TimeSpan maximumAge)
+    {
+        var eligible = communications
             .Where(item => item.Id > minimumExclusiveId)
             .Where(item => IsRecent(item.TimestampUtc, nowUtc, maximumAge))
-            .Where(item => IsClearanceResponse(stepId, item.OutgoingMessage))
+            .OrderBy(item => item.Id)
+            .ToList();
+
+        if (stepId != "captain-ifr-clearance")
+        {
+            return eligible
+                .Where(item => IsClearanceResponse(
+                    stepId,
+                    item.OutgoingMessage,
+                    item.IncomingMessage))
+                .OrderByDescending(item => item.Id)
+                .FirstOrDefault();
+        }
+
+        var explicitAcceptance = eligible
+            .Where(item => IsClearanceResponse(
+                stepId,
+                item.OutgoingMessage,
+                item.IncomingMessage))
             .OrderByDescending(item => item.Id)
             .FirstOrDefault();
+        if (explicitAcceptance != null)
+        {
+            return explicitAcceptance;
+        }
 
-    public static bool IsClearanceResponse(string stepId, string? atcMessage)
+        var issuedClearance = eligible
+            .LastOrDefault(item => IsStructuredIfrClearance(item.OutgoingMessage));
+        return issuedClearance == null
+            ? null
+            : eligible
+                .Where(item => item.Id > issuedClearance.Id)
+                .LastOrDefault(item => IsStructuredIfrClearance(item.IncomingMessage));
+    }
+
+    public static bool IsClearanceResponse(
+        string stepId,
+        string? atcMessage,
+        string? aircraftMessage = null)
     {
         if (string.IsNullOrWhiteSpace(atcMessage))
         {
@@ -53,7 +88,9 @@ internal static class SayIntentionsAtcResponseClassifier
             // Waiting for the accepted readback verifies that the clearance was
             // received and acknowledged, rather than merely requested.
             "captain-ifr-clearance" =>
-                ContainsAny(message, "readback correct", "read back correct"),
+                ContainsAny(message, "readback correct", "read back correct")
+                || IsStructuredIfrClearance(message)
+                && IsStructuredIfrClearance(aircraftMessage),
             "captain-pushback-clearance" =>
                 ContainsAny(
                     message,
@@ -85,4 +122,17 @@ internal static class SayIntentionsAtcResponseClassifier
 
     private static bool ContainsAny(string source, params string[] candidates) =>
         candidates.Any(source.Contains);
+
+    private static bool IsStructuredIfrClearance(string? source)
+    {
+        if (string.IsNullOrWhiteSpace(source))
+        {
+            return false;
+        }
+
+        var message = source!.Trim().ToLowerInvariant();
+        return message.Contains("cleared to")
+               && ContainsAny(message, "departure", "sid")
+               && ContainsAny(message, "runway", "squawk", "initial climb");
+    }
 }

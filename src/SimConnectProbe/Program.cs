@@ -79,6 +79,19 @@ internal static class Program
             .SkipWhile(arg => !string.Equals(arg, "monitor-input-name", StringComparison.OrdinalIgnoreCase))
             .Skip(1)
             .FirstOrDefault();
+        var setInputValueText = args
+            .SkipWhile(arg => !string.Equals(arg, "set-input-value", StringComparison.OrdinalIgnoreCase))
+            .Skip(1)
+            .FirstOrDefault();
+        double? setInputValue = null;
+        if (double.TryParse(
+                setInputValueText,
+                System.Globalization.NumberStyles.Float,
+                System.Globalization.CultureInfo.InvariantCulture,
+                out var parsedSetInputValue))
+        {
+            setInputValue = parsedSetInputValue;
+        }
         using var window = new SimConnectWindow(
             powerUp,
             monitor,
@@ -91,7 +104,8 @@ internal static class Program
             actionName,
             inputEventFilter,
             monitorInputHash,
-            monitorInputName);
+            monitorInputName,
+            setInputValue);
 
         var timeout = new System.Windows.Forms.Timer
         {
@@ -137,6 +151,7 @@ internal sealed class SimConnectWindow : Form
     private readonly string? _inputEventFilter;
     private readonly ulong? _monitorInputHash;
     private readonly string? _monitorInputName;
+    private readonly double? _setInputValue;
     private bool _powerUpIssued;
     private bool _bridgeResponseReceived;
     private readonly List<string> _bridgeResponseChunks = new List<string>();
@@ -399,7 +414,8 @@ internal sealed class SimConnectWindow : Form
         string? actionName,
         string? inputEventFilter,
         ulong? monitorInputHash,
-        string? monitorInputName)
+        string? monitorInputName,
+        double? setInputValue)
     {
         _powerUpRequested = powerUpRequested;
         _monitorRequested = monitorRequested;
@@ -413,6 +429,7 @@ internal sealed class SimConnectWindow : Form
         _inputEventFilter = inputEventFilter;
         _monitorInputHash = monitorInputHash;
         _monitorInputName = monitorInputName;
+        _setInputValue = setInputValue;
         Text = "MSFS 2024 AI SimConnect Probe";
         ShowInTaskbar = false;
         WindowState = FormWindowState.Minimized;
@@ -641,8 +658,28 @@ internal sealed class SimConnectWindow : Form
                 AutoFlush = true
             };
             _genericInputMonitorWriter.WriteLine("TimestampUtc\tSource\tName\tHash\tType\tValue");
+            if (_setInputValue.HasValue)
+            {
+                var handleField = typeof(SimConnect).GetField(
+                    "hSimConnect",
+                    System.Reflection.BindingFlags.Instance
+                    | System.Reflection.BindingFlags.NonPublic);
+                var handle = handleField == null
+                    ? IntPtr.Zero
+                    : (IntPtr)handleField.GetValue(sender);
+                var value = _setInputValue.Value;
+                var result = SimConnect_SetInputEvent(
+                    handle,
+                    _monitorInputHash.Value,
+                    sizeof(double),
+                    ref value);
+                Console.WriteLine(
+                    $"INPUT SET: {FindInputEventName(_monitorInputHash.Value)} " +
+                    $"({_monitorInputHash.Value}) => {value:0.###} (0x{result:X8}).");
+            }
             sender.SubscribeInputEvent(_monitorInputHash.Value);
             sender.GetInputEvent(Request.GenericInputMonitor, _monitorInputHash.Value);
+            sender.EnumerateInputEventParams(_monitorInputHash.Value);
             _genericInputPollingTimer = new System.Windows.Forms.Timer { Interval = 250 };
             _genericInputPollingTimer.Tick += (_, _) =>
             {

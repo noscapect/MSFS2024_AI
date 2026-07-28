@@ -1,5 +1,6 @@
 using System.Reflection;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using Msfs2024Ai.Copilot.AircraftAdapters.Asobo737Max;
 using Msfs2024Ai.Copilot.Checklists;
 using Msfs2024Ai.Copilot.Domain;
 using Msfs2024Ai.Copilot.Procedures;
@@ -91,9 +92,10 @@ public sealed class ProcedureCatalogTests
     [TestMethod]
     public void Asobo737MaxPowerUpUsesAutomaticIrsNav()
     {
-        var left = Asobo737MaxProcedureLibrary.PowerUpAndInitialSetup.Steps
+        var steps = Asobo737MaxProcedureLibrary.PowerUpAndInitialSetup.Steps.ToList();
+        var left = steps
             .Single(item => item.Id == "fo-irs-left");
-        var right = Asobo737MaxProcedureLibrary.PowerUpAndInitialSetup.Steps
+        var right = steps
             .Single(item => item.Id == "fo-irs-right");
 
         Assert.AreEqual(ProcedureStepKind.AutomaticAction, left.Kind);
@@ -104,6 +106,190 @@ public sealed class ProcedureCatalogTests
         Assert.IsFalse(right.IsComplete(new AircraftState { Title = "737 Max 8 Passengers", Adirs2SelectorState = 1 }));
         Assert.IsTrue(left.IsComplete(new AircraftState { Title = "737 Max 8 Passengers", Adirs1SelectorState = 2 }));
         Assert.IsTrue(right.IsComplete(new AircraftState { Title = "737 Max 8 Passengers", Adirs2SelectorState = 2 }));
+        Assert.IsTrue(
+            steps.IndexOf(left) < steps.IndexOf(steps.Single(item => item.Id == "fo-fire-tests")),
+            "IRS alignment must start before the fire tests.");
+        Assert.AreEqual(steps.IndexOf(left) + 1, steps.IndexOf(right));
+    }
+
+    [TestMethod]
+    public void Asobo737MaxEngineStartConfiguresEngineBleedsBeforePacks()
+    {
+        var steps = Asobo737MaxProcedureLibrary.EngineStartSequence.Steps.ToList();
+        var engineBleeds = steps.Single(step => step.Id == "fo-engine-bleeds-on");
+        var packsOff = steps.Single(step => step.Id == "fo-packs-off");
+
+        Assert.AreEqual(ProcedureStepKind.AutomaticAction, engineBleeds.Kind);
+        Assert.AreEqual("asobo737max engine-bleeds on", engineBleeds.Command);
+        Assert.IsTrue(engineBleeds.IsComplete(new AircraftState
+        {
+            Title = "737 Max 8 Passengers",
+            BoeingEngineBleed1On = true,
+            BoeingEngineBleed2On = true
+        }));
+        Assert.IsFalse(engineBleeds.IsComplete(new AircraftState
+        {
+            Title = "737 Max 8 Passengers",
+            BoeingEngineBleed1On = true,
+            BoeingEngineBleed2On = false
+        }));
+        Assert.IsTrue(steps.IndexOf(engineBleeds) < steps.IndexOf(packsOff));
+    }
+
+    [TestMethod]
+    public void Asobo737MaxAfterStartTurnsApuOffAutomatically()
+    {
+        var step = Asobo737MaxProcedureLibrary.AfterStartAndTaxi.Steps
+            .Single(item => item.Id == "fo-apu-off");
+
+        Assert.AreEqual(ProcedureStepKind.AutomaticAction, step.Kind);
+        Assert.AreEqual(CrewRole.FirstOfficer, step.AssignedRole);
+        Assert.AreEqual("asobo737max apu off", step.Command);
+        Assert.IsFalse(step.IsComplete(new AircraftState
+        {
+            Title = "737 Max 8 Passengers",
+            ApuMasterSwitchOn = true
+        }));
+        Assert.IsTrue(step.IsComplete(new AircraftState
+        {
+            Title = "737 Max 8 Passengers",
+            ApuMasterSwitchOn = false
+        }));
+    }
+
+    [TestMethod]
+    public void Asobo737MaxAfterStartHasNoManualCockpitActions()
+    {
+        var manualSteps = Asobo737MaxProcedureLibrary.AfterStartAndTaxi.Steps
+            .Where(step => step.Kind == ProcedureStepKind.ManualAction)
+            .Select(step => step.Id)
+            .ToArray();
+
+        CollectionAssert.AreEqual(
+            new[] { "fo-taxi-clearance" },
+            manualSteps,
+            "Only the intentional ATC interaction may require confirmation in Flow 5.");
+    }
+
+    [TestMethod]
+    public void Asobo737MaxAfterStartUsesTaxiAutoAndRunwayTurnoffOn()
+    {
+        var taxi = Asobo737MaxProcedureLibrary.AfterStartAndTaxi.Steps
+            .Single(step => step.Id == "fo-taxi-light");
+        var runwayTurnoff = Asobo737MaxProcedureLibrary.AfterStartAndTaxi.Steps
+            .Single(step => step.Id == "fo-runway-turnoff-on");
+
+        Assert.AreEqual("Taxi light AUTO", taxi.Label);
+        Assert.AreEqual("asobo737max taxi-light auto", taxi.Command);
+        Assert.AreEqual("asobo737max runway-turnoff on", runwayTurnoff.Command);
+
+        Assert.IsTrue(taxi.IsComplete(new AircraftState { NoseLightSelectorPosition = 1 }));
+        Assert.IsFalse(taxi.IsComplete(new AircraftState { NoseLightSelectorPosition = 2 }));
+        Assert.IsTrue(runwayTurnoff.IsComplete(new AircraftState { RunwayTurnoffLightsOn = true }));
+        Assert.IsFalse(runwayTurnoff.IsComplete(new AircraftState { RunwayTurnoffLightsOn = false }));
+    }
+
+    [TestMethod]
+    public void Asobo737MaxBeforeTakeoffAutomatesFirstOfficerCockpitActions()
+    {
+        var steps = Asobo737MaxProcedureLibrary.BeforeTakeoff.Steps;
+        var automaticCommands = steps
+            .Where(step => step.AssignedRole == CrewRole.FirstOfficer
+                           && step.Kind == ProcedureStepKind.AutomaticAction)
+            .Select(step => step.Command)
+            .ToArray();
+        var manualFirstOfficerSteps = steps
+            .Where(step => step.AssignedRole == CrewRole.FirstOfficer
+                           && step.Kind == ProcedureStepKind.ManualAction)
+            .Select(step => step.Id)
+            .ToArray();
+
+        CollectionAssert.IsSubsetOf(
+            new[]
+            {
+                "asobo737max autothrottle arm",
+                "asobo737max lnav arm",
+                "asobo737max vnav arm",
+                "asobo737max transponder auto",
+                "asobo737max transponder tara"
+            },
+            automaticCommands);
+        CollectionAssert.AreEqual(
+            new[] { "fo-takeoff-clearance" },
+            manualFirstOfficerSteps,
+            "Only the intentional ATC interaction may remain manual in Flow 6.");
+
+        var xpdrAuto = steps.Single(step => step.Id == "fo-transponder-auto");
+        Assert.IsFalse(xpdrAuto.IsComplete(new AircraftState
+        {
+            TransponderModeSelectorPosition = Asobo737MaxControlProfile.TransponderStandby
+        }));
+        Assert.IsTrue(xpdrAuto.IsComplete(new AircraftState
+        {
+            TransponderModeSelectorPosition = Asobo737MaxControlProfile.TransponderAuto
+        }));
+
+        var taRa = steps.Single(step => step.Id == "fo-transponder-tara");
+        Assert.IsTrue(taRa.IsComplete(new AircraftState
+        {
+            BoeingTransponderOperatingMode = Asobo737MaxControlProfile.TransponderTaRa
+        }));
+        Assert.IsFalse(taRa.IsComplete(new AircraftState { TcasMode = 4 }));
+    }
+
+    [TestMethod]
+    public void Asobo737MaxTakeoffRequiresPositiveClimbAndSafeFlapRetractionGate()
+    {
+        var steps = Asobo737MaxProcedureLibrary.TakeoffAndClimb.Steps;
+        var positiveClimb = steps.Single(step => step.Id == "airborne");
+        var accelerationAltitude = steps.Single(step => step.Id == "acceleration-altitude");
+        var flapRetractionSpeed = steps.Single(step => step.Id == "flap-retraction-speed");
+        var gearUp = steps.Single(step => step.Id == "fo-gear-up");
+
+        Assert.IsFalse(positiveClimb.IsComplete(new AircraftState
+        {
+            OnGround = false,
+            AltitudeAboveGroundFeet = 50,
+            VerticalSpeedFeetPerMinute = 0
+        }));
+        Assert.IsTrue(positiveClimb.IsComplete(new AircraftState
+        {
+            OnGround = false,
+            AltitudeAboveGroundFeet = 50,
+            VerticalSpeedFeetPerMinute = 500
+        }));
+        Assert.IsFalse(gearUp.IsComplete(new AircraftState
+        {
+            GearHandlePosition = 2,
+            GearHandleDown = true
+        }));
+        Assert.IsTrue(gearUp.IsComplete(new AircraftState
+        {
+            GearHandlePosition = 0,
+            GearHandleDown = false
+        }));
+        Assert.IsFalse(accelerationAltitude.IsComplete(new AircraftState
+        {
+            OnGround = false,
+            AltitudeAboveGroundFeet = 1499
+        }));
+        Assert.IsTrue(accelerationAltitude.IsComplete(new AircraftState
+        {
+            OnGround = false,
+            AltitudeAboveGroundFeet = 1500
+        }));
+        Assert.IsFalse(flapRetractionSpeed.IsComplete(new AircraftState
+        {
+            OnGround = false,
+            TakeoffV2SpeedKnots = 148,
+            IndicatedAirspeedKnots = 187
+        }));
+        Assert.IsTrue(flapRetractionSpeed.IsComplete(new AircraftState
+        {
+            OnGround = false,
+            TakeoffV2SpeedKnots = 148,
+            IndicatedAirspeedKnots = 188
+        }));
     }
 
     [TestMethod]

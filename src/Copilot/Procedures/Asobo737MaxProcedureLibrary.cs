@@ -1,3 +1,4 @@
+using Msfs2024Ai.Copilot.AircraftAdapters.Asobo737Max;
 using Msfs2024Ai.Copilot.Domain;
 
 namespace Msfs2024Ai.Copilot.Procedures;
@@ -105,6 +106,8 @@ internal static class Asobo737MaxProcedureLibrary
                 Manual("captain-standby-power", "STANDBY POWER AUTO", "Captain: verify STANDBY POWER is AUTO.", CrewRole.Captain),
                 Manual("captain-ground-power-available", "Ground power available", "Captain: connect ground power if GRD POWER AVAILABLE is not shown.", CrewRole.Captain, state => state.ExternalPowerAvailable),
                 Manual("captain-external-power", "Ground power ON", "Captain: switch GRD POWER ON and verify the aircraft is powered.", CrewRole.Captain, state => state.ExternalPowerOn),
+                Automatic("fo-irs-left", "Left IRS selector NAV", state => state.Adirs1SelectorState >= 2, "asobo737max irs left nav"),
+                Automatic("fo-irs-right", "Right IRS selector NAV", state => state.Adirs2SelectorState >= 2, "asobo737max irs right nav"),
                 Automatic(
                     "fo-fire-tests",
                     "Fire detection/extinguisher tests",
@@ -112,8 +115,6 @@ internal static class Asobo737MaxProcedureLibrary
                              && state.Engine1FireTestCompleted
                              && state.Engine2FireTestCompleted,
                     "asobo737max fire-tests"),
-                Automatic("fo-irs-left", "Left IRS selector NAV", state => state.Adirs1SelectorState >= 2, "asobo737max irs left nav"),
-                Automatic("fo-irs-right", "Right IRS selector NAV", state => state.Adirs2SelectorState >= 2, "asobo737max irs right nav"),
                 Automatic("fo-position", "Position lights STEADY", state => state.NavigationLightsOn, "asobo737max position steady"),
                 Automatic("fo-logo", "Logo light ON", state => state.LogoLightsOn, "asobo737max logo on"),
                 Automatic("fo-emergency-lights-armed", "Emergency exit lights ARMED", state => state.EmergencyExitSelectorPosition.HasValue && Math.Abs(state.EmergencyExitSelectorPosition.Value - 1) < 0.1, "asobo737max emergency-exit arm")
@@ -166,6 +167,7 @@ internal static class Asobo737MaxProcedureLibrary
             new[]
             {
                 Observe("start-condition", "Aircraft on ground with anti-collision ON", state => state.OnGround && state.BeaconOn),
+                Automatic("fo-engine-bleeds-on", "Engine bleed switches ON", state => state.BoeingEngineBleedsOn, "asobo737max engine-bleeds on"),
                 Automatic("fo-packs-off", "PACK switches OFF", state => state.PacksOffForEngineStart, "asobo737max packs off"),
                 Automatic("fo-isolation-open", "Isolation valve OPEN", state => state.IsolationValveOpen, "asobo737max isolation open"),
                 Manual("captain-engine-two-start", "Engine 2 start switch GRD", "Captain: move Engine 2 start switch to GRD.", CrewRole.Captain, state => state.Engine2StarterActive || state.Engine2Running),
@@ -190,11 +192,11 @@ internal static class Asobo737MaxProcedureLibrary
                 Automatic("fo-apu-bleed-off", "APU bleed OFF", state => !state.ApuBleedOn, "asobo737max apu-bleed off"),
                 Automatic("fo-packs-auto", "PACK switches AUTO", state => state.PacksAuto, "asobo737max packs auto"),
                 Automatic("fo-isolation-auto", "Isolation valve AUTO", state => state.IsolationValveAuto, "asobo737max isolation auto"),
-                Manual("fo-apu-off", "APU selector OFF", "First Officer: set APU selector OFF.", CrewRole.FirstOfficer),
+                Automatic("fo-apu-off", "APU selector OFF", state => !state.ApuMasterSwitchOn, "asobo737max apu off"),
                 Observe("fo-speedbrake-down", "Speedbrake DOWN verified", _ => true),
                 Automatic("fo-flaps-takeoff", "Flaps takeoff setting", state => state.BoeingTakeoffFlapsSet, "asobo737max flaps takeoff"),
                 Automatic("fo-autobrake-rto", "Autobrake RTO", state => state.AutobrakeLevel.HasValue && Math.Abs(state.AutobrakeLevel.Value - 1) < 0.1, "asobo737max autobrake rto"),
-                Automatic("fo-taxi-light", "Taxi light ON", state => state.NoseLightSelectorPosition.HasValue && Math.Abs(state.NoseLightSelectorPosition.Value - 1) < 0.1, "asobo737max taxi-light on"),
+                Automatic("fo-taxi-light", "Taxi light AUTO", state => state.NoseLightSelectorPosition.HasValue && Math.Abs(state.NoseLightSelectorPosition.Value - 1) < 0.1, "asobo737max taxi-light auto"),
                 Automatic("fo-runway-turnoff-on", "Runway turnoff lights ON", state => state.RunwayTurnoffLightsOn, "asobo737max runway-turnoff on"),
                 Manual("fo-taxi-clearance", "Taxi clearance received", "First Officer: press Confirm now to request taxi clearance through SayIntentions.", CrewRole.FirstOfficer, state => !state.SayIntentionsAtcActive),
                 Observe("captain-taxi-started", "Captain started taxi", state => state.OnGround && state.GroundSpeedKnots > 1)
@@ -209,12 +211,14 @@ internal static class Asobo737MaxProcedureLibrary
                 Observe("holding-short", "Aircraft stopped near runway", state => state.OnGround && state.GroundSpeedKnots <= 1),
                 Manual("captain-takeoff-briefing", "Takeoff briefing complete", "Captain: complete takeoff briefing.", CrewRole.Captain),
                 Manual("captain-trim-green-band", "Stabilizer trim set for takeoff", "Captain: verify stabilizer trim is set in the green takeoff range.", CrewRole.Captain),
-                Manual("fo-autothrottle-arm", "Autothrottle ARM", "First Officer: arm autothrottle.", CrewRole.FirstOfficer),
-                Manual("fo-lnav-vnav", "LNAV/VNAV armed as required", "First Officer: arm LNAV/VNAV as briefed.", CrewRole.FirstOfficer),
+                Automatic("fo-autothrottle-arm", "Autothrottle ARM", state => state.BoeingAutothrottleArmed, "asobo737max autothrottle arm"),
+                Automatic("fo-lnav-arm", "LNAV armed", _ => true, "asobo737max lnav arm", requireCommandExecution: true),
+                Automatic("fo-vnav-arm", "VNAV armed", _ => true, "asobo737max vnav arm", requireCommandExecution: true),
                 Automatic("fo-landing-lights", "Landing lights ON", state => state.LeftLandingLightSelectorPosition.HasValue && state.RightLandingLightSelectorPosition.HasValue && Math.Abs(state.LeftLandingLightSelectorPosition.Value) < 0.1 && Math.Abs(state.RightLandingLightSelectorPosition.Value) < 0.1, "asobo737max landing-lights on"),
                 Automatic("fo-taxi-light-off", "Taxi light OFF", state => state.NoseLightSelectorPosition.HasValue && Math.Abs(state.NoseLightSelectorPosition.Value - 2) < 0.1, "asobo737max taxi-light off"),
                 Automatic("fo-strobes", "Position/strobe STROBE & STEADY", state => state.StrobeSelectorPosition.HasValue && Math.Abs(state.StrobeSelectorPosition.Value - 2) < 0.1, "asobo737max strobes on"),
-                Manual("fo-transponder-tara", "Transponder TA/RA", "First Officer: set transponder TA/RA.", CrewRole.FirstOfficer),
+                Automatic("fo-transponder-auto", "XPDR AUTO", state => state.TransponderModeSelectorPosition.HasValue && Asobo737MaxControlProfile.IsTransponderAuto(state.TransponderModeSelectorPosition.Value), "asobo737max transponder auto"),
+                Automatic("fo-transponder-tara", "Transponder TA/RA", state => state.BoeingTransponderOperatingMode.HasValue && Asobo737MaxControlProfile.IsTransponderTaRa(state.BoeingTransponderOperatingMode.Value), "asobo737max transponder tara"),
                 Observe("cabin-ready", "Cabin crew, prepare for takeoff", _ => true),
                 Manual("fo-takeoff-clearance", "Takeoff clearance received", "First Officer: while holding short, press Confirm now to report ready for departure and request takeoff clearance through SayIntentions.", CrewRole.FirstOfficer, state => !state.SayIntentionsAtcActive)
             });
@@ -229,9 +233,10 @@ internal static class Asobo737MaxProcedureLibrary
                 Observe("hundred-knots", "100 knots", state => state.IndicatedAirspeedKnots >= 100),
                 Observe("v1", "V1", state => state.IndicatedAirspeedKnots >= state.TakeoffV1SpeedKnots),
                 Observe("rotate", "Rotate", state => state.IndicatedAirspeedKnots >= state.TakeoffRotateSpeedKnots),
-                Observe("airborne", "Positive climb", state => !state.OnGround && state.AltitudeAboveGroundFeet >= 35),
+                Observe("airborne", "Positive climb", state => !state.OnGround && state.AltitudeAboveGroundFeet >= 35 && state.VerticalSpeedFeetPerMinute > 100),
                 Automatic("fo-gear-up", "Landing gear UP", state => state.GearHandleUp, "asobo737max gear up"),
-                Observe("acceleration-altitude", "Acceleration altitude passed", state => !state.OnGround && state.AltitudeAboveGroundFeet >= 1000),
+                Observe("acceleration-altitude", "Acceleration altitude passed", state => !state.OnGround && state.AltitudeAboveGroundFeet >= 1500),
+                Observe("flap-retraction-speed", "Flap retraction speed reached", state => !state.OnGround && state.TakeoffV2SpeedKnots.HasValue && state.IndicatedAirspeedKnots >= state.TakeoffV2SpeedKnots.Value + 40),
                 Automatic("fo-flaps-up", "Flaps retracted on schedule", state => state.BoeingFlapsAtSetting(0), "asobo737max flaps clean"),
                 Observe("ten-thousand-feet", "10,000 feet passed", state => state.IndicatedAltitudeFeet >= 10000),
                 Automatic("fo-landing-lights-above-ten", "Landing lights OFF above 10,000 feet", state => state.LeftLandingLightSelectorPosition.HasValue && state.RightLandingLightSelectorPosition.HasValue && Math.Abs(state.LeftLandingLightSelectorPosition.Value - 1) < 0.1 && Math.Abs(state.RightLandingLightSelectorPosition.Value - 1) < 0.1, "asobo737max landing-lights off"),

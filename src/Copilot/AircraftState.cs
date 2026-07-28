@@ -174,6 +174,8 @@ internal sealed class AircraftState
     public bool GearHandleDown { get; set; }
     public double PitchDegrees { get; set; }
     public bool AutopilotMasterOn { get; set; }
+    public bool BoeingAutothrottleArmed { get; set; }
+    public double? BoeingTransponderOperatingMode { get; set; }
     public bool AutopilotApproachHoldOn { get; set; }
     public bool AutopilotGlideslopeHoldOn { get; set; }
     public bool Nav1HasLocalizer { get; set; }
@@ -330,6 +332,11 @@ internal sealed class AircraftState
         && RightPackSwitchPosition.HasValue
         && Math.Abs(LeftPackSwitchPosition.Value - 1) < 0.1
         && Math.Abs(RightPackSwitchPosition.Value - 1) < 0.1;
+    public bool BoeingEngineBleed1On { get; set; }
+    public bool BoeingEngineBleed2On { get; set; }
+    public bool BoeingEngineBleedsOn =>
+        BoeingEngineBleed1On
+        && BoeingEngineBleed2On;
     public bool IsolationValveOpen =>
         IsolationValvePosition.HasValue
         && Math.Abs(IsolationValvePosition.Value - 2) < 0.1;

@@ -1,5 +1,99 @@
 # Live test evidence
 
+## 2026-07-28 - Asobo 737 MAX Flow 3 selector corrections
+
+During the first live Flow 3 pass, the app reported PACK AUTO, isolation valve
+OPEN, ground power OFF, and anti-collision ON even though the cockpit controls
+did not match those states.
+
+The live cockpit observation and polled Input Event values established:
+
+| Control | Native value | Physical state |
+|---|---:|---|
+| Left/right PACK | `2` | OFF |
+| Engine bleed 1/2 | `0` | OFF |
+| Engine bleed 1/2 | `1` | ON |
+| Electric hydraulic pump 1/2 | `1` | OFF; LOW PRESSURE illuminated |
+| Electric hydraulic pump 1/2 | `0` | ON; LOW PRESSURE extinguished |
+| Isolation valve before command | `0` | OPEN |
+| Isolation valve after command | `1` | AUTO |
+| Anti-collision | `1` | OFF |
+| External-power selector | `1` | Neutral after the momentary operation |
+| Taxi light | `1` | OFF |
+| Taxi light | `0` | AUTO |
+| Left/right runway turnoff light | `1` | OFF |
+| Left/right runway turnoff light | `0` | ON |
+
+The corrected MAX control profile therefore uses PACK `1` AUTO / `2` OFF,
+isolation `0` OPEN / `1` AUTO, and anti-collision `0` ON / `1` OFF. Ground
+power now uses the aircraft's native `ELECTRICAL_EXTERNAL_POWER` Input Event
+with momentary OFF `2` followed by neutral release `1`; actual electrical
+handover remains independently verified by `EXTERNAL POWER ON:1`.
+
+Automated result: **six focused Asobo 737 MAX tests passed.** These four
+corrected Flow 3 operations await a repeat live pass.
+
+The same session exposed a missing Flow 4 action: both engine bleed switches
+could remain OFF from cold and dark. Flow 4 now commands both native
+`PNEUMATICS_ENGINE_BLEED_1/2` Input Events to `1` (ON), verifies both native
+readbacks, and only then continues to PACK OFF and isolation OPEN.
+
+Flow 5 electric hydraulic pump commands and readbacks were also inverted.
+Manual selection established native `0` as ON and `1` as OFF; both LOW
+PRESSURE lights extinguished at `0/0`. The corrected Flow 5 action sends `0`
+to both switches and verifies both independent native readbacks.
+
+The same Flow 5 pass then stopped at a manual First Officer APU OFF prompt.
+The MAX selector already has verified native START `0`, ON `1`, and OFF `2`
+positions. Flow 5 now commands OFF `2` automatically and verifies the exact
+native selector readback instead of requiring pilot confirmation.
+
+The Flow 5/6 lighting pass established that the MAX taxi selector has AUTO,
+not ON, and that its native Input Event uses `0` for AUTO and `1` for OFF.
+Runway turnoff lights use the same inverted native convention: `0` is ON and
+`1` is OFF. Commands, labels, and verified readbacks now follow those physical
+positions, preventing an unchanged OFF switch from being falsely accepted.
+The subsequent repeat showed the taxi switch physically reaching AUTO and its
+native readback reaching `0`, while a generic nose-light update overwrote the
+normalized MAX state and caused verification to time out. MAX native taxi
+readback is now authoritative in both live and newly constructed state paths.
+
+The Flow 6 repeat established that the fixed landing-light Input Events use
+the same inverted convention as the other MAX exterior-light switches:
+`0` is ON and `1` is OFF. Both command and state normalization now use that
+physical polarity. The TCAS operating-mode selector reached TA/RA, but the
+separate XPDR selector remained at STBY. Flow 6 now sets
+`XPDR_PANEL_XPDR_MODE` to AUTO (`1`) as an independent verified action before
+selecting TA/RA. The next live log established TA/RA as native value `3`;
+the earlier assumed value `4` was rejected and left the readback unchanged.
+MAX landing-light and XPDR native state are now also protected from later
+generic telemetry overwrites.
+
+The Flow 7 preflight audit found that generic iniBuilds gear telemetry could
+override the MAX simulator gear-handle value and falsely report UP while lined
+up with the gear down. MAX state now uses the simulator gear handle directly.
+Positive Climb requires both 35 feet AGL and more than 100 fpm before gear-up.
+Flap cleanup is held until 1,500 feet AGL and at least V2+40 knots, preventing
+the previous unconditional cleanup at 1,000 feet.
+
+Flow 6 then exposed three First Officer cockpit groups that were still modeled
+as manual confirmations. Live Input Event enumeration identified
+`FCC_AUTOTHROTTLE`, `FCC_LNAV`, `FCC_VNAV`, and
+`XPDR_PANEL_XPDR_OPERATING_MODE`; their current values were all `0`. Flow 6
+now commands and verifies autothrottle ARM, pulses the two MCP mode buttons as
+distinct actions, and commands/verifies the transponder TA/RA detent. Only the
+takeoff-clearance SayIntentions interaction remains a manual First Officer
+step.
+
+On the repeat flight, SayIntentions issued a complete IFR clearance and the
+First Officer read it back, but Flow 2 remained pending because no later ATC
+message said “readback correct.” Communication-history matching now accepts
+that fallback only when a structured IFR clearance is followed by a later
+structured aircraft readback. SayIntentions stores those as separate history
+records in this scenario; their record order is now correlated. An initial
+request or clearance alone cannot complete the checkpoint, and incoming-message
+updates now also trigger the completion check.
+
 ## 2026-07-20 - v0.9.5 stabilization release
 
 The optional GSX Pro departure coordinator now uses the official

@@ -4421,10 +4421,10 @@ internal sealed class CopilotService : Form
                 raw.IniBuildsIgnitionKnob,
                 ref _lastLoggedIniBuildsIgnitionKnob);
         }
-        if (aircraftVariant == AircraftVariant.IniBuildsA320NeoV2)
+        if (isIniBuildsAirbusFamily)
         {
             LogChangedFloat(
-                "iniBuilds A320 direct INI_TURNOFF_LIGHT_SWITCH",
+                "iniBuilds direct INI_TURNOFF_LIGHT_SWITCH",
                 raw.IniBuildsTurnoffLightSwitch,
                 ref _lastLoggedIniBuildsTurnoffLightSwitch);
         }
@@ -4575,7 +4575,7 @@ internal sealed class CopilotService : Form
             Engine1FuelFlowPph = raw.Engine1FuelFlow,
             Engine2FuelFlowPph = raw.Engine2FuelFlow,
             EngineModeSelectorPosition = ResolveEngineModeSelectorPosition(
-                aircraftVariant == AircraftVariant.IniBuildsA320NeoV2
+                isIniBuildsAirbusFamily
                     ? raw.IniBuildsIgnitionKnob
                     : null,
                 isIniBuildsAirbusFamily ? _nativeEngineModeSelector : null,
@@ -5177,7 +5177,7 @@ internal sealed class CopilotService : Form
                 ? pmdg.LeftRunwayTurnoffLight && pmdg.RightRunwayTurnoffLight
                 : isAsobo737Max && _asobo737MaxRunwayTurnoffInputStates.All(state => state.HasValue)
                     ? _asobo737MaxRunwayTurnoffInputStates.All(state => Asobo737MaxBinarySwitchIsOnNormal(state!.Value))
-                : aircraftVariant == AircraftVariant.IniBuildsA320NeoV2
+                : isIniBuildsAirbusFamily
                     ? raw.IniBuildsTurnoffLightSwitch != 0
                 : raw.LeftRunwayTurnoffLightCircuit != 0
                   && raw.RightRunwayTurnoffLightCircuit != 0,

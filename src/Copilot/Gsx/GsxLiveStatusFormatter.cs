@@ -115,7 +115,10 @@ internal static class GsxLiveStatusFormatter
         }
 
         // Summary string
-        if (state.PassengerProgressText != null && cleanLines.Any(l => l.IndexOf("boarding", StringComparison.OrdinalIgnoreCase) >= 0))
+        if (state.PassengerProgressText != null
+            && cleanLines.Any(
+                line => line.IndexOf("boarding", StringComparison.OrdinalIgnoreCase) >= 0
+                        || line.IndexOf("boarded", StringComparison.OrdinalIgnoreCase) >= 0))
         {
             state.SummaryText = $"Boarding in progress ({state.PassengerProgressText})";
         }

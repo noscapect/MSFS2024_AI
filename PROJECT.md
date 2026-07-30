@@ -2,10 +2,11 @@
 
 This file is the primary technical handoff for continuing development. The
 latest public release remains **v0.9.5** from July 20, 2026. Unreleased
-development on `main` additionally contains the Asobo 737 MAX profile, and
-`feature/ux-redesign` is the active development branch. The flows implemented
-in the application are authoritative; supporting documents must follow the
-application when they differ.
+development on `main` additionally contains the experimental Asobo 737 MAX
+profile, dashboard redesign, and MSFS 2024 EFB companion. Continued UX and EFB
+work belongs on `feature/ux-efb-refinement`. The flows implemented in the
+application are authoritative; supporting documents must follow the application
+when they differ.
 
 Suggested opening prompt for a new development chat:
 
@@ -36,6 +37,8 @@ software, not an autopilot, and the pilot must always be able to take over.
 - Release executable: `src/Copilot/bin/Release/net472/Copilot.exe`
 - Settings and runtime data: `%LOCALAPPDATA%\MSFS2024_AI`
 - Primary runtime log: `%LOCALAPPDATA%\MSFS2024_AI\logs\copilot.log`
+- EFB source/package project: `src/EfbCompanion`
+- EFB protocol: versioned JSON over the MSFS 2024 CommBus API
 
 Build and test:
 
@@ -44,12 +47,28 @@ dotnet build .\src\Copilot\Copilot.csproj -c Release --no-restore
 dotnet test .\tests\Copilot.Tests\Copilot.Tests.csproj -c Release --no-restore
 ```
 
-The v0.9.5 release was built with no warnings or errors and passed the full
-176-test release suite.
+The v0.9.5 release was built with no warnings or errors and passed its full
+release suite. Current unreleased development passes 248 tests.
 
 No newer public release has been built. The Asobo 737 MAX merge is source-only
 and must complete its remaining safety instrumentation and gate-to-gate live
 validation before release consideration.
+
+## MSFS 2024 EFB companion
+
+The development EFB app is an official MSFS 2024 EFB application installed as
+a Community package. `CopilotService` subscribes to two CommBus events:
+
+- `MSFS2024_AI_EFB_COMMAND_V1`
+- `MSFS2024_AI_EFB_STATE_REQUEST_V1`
+
+It publishes state and command results on
+`MSFS2024_AI_EFB_STATE_V1`. Only `start_flow`, `confirm`, `pause`, `resume`,
+`cancel`, and `request_state` are accepted. Flow IDs are checked against the
+current aircraft catalog, and runtime state guards are reapplied on the
+desktop side. The EFB never receives a general-purpose command endpoint.
+
+Build and installation details are in `docs/EFB_COMPANION.md`.
 
 ## Supported aircraft
 
@@ -340,12 +359,13 @@ the Release build and the UI does not identify Debug versus Release.
 
 ## Current development
 
-- `feature/ux-redesign` owns the dashboard and GSX progress redesign described
-  in `docs/ROADMAP.md`; no UX implementation has been committed yet.
+- The first dashboard redesign and MSFS 2024 EFB companion are implemented;
+  current work focuses on their live validation and refinement.
 - Fix verified bugs and regressions without weakening aircraft-specific
   verification.
-- Keep Asobo 737 MAX Flow 7 out of unattended operation until takeoff trim,
-  elevator response, and configuration warnings are observable and live tested.
+- Active Asobo 737 MAX development is paused. Preserve it as experimental and
+  keep Flow 7 out of unattended operation until takeoff trim, elevator
+  response, and configuration warnings are observable and live tested.
 - Continue regression validation of aircraft profiles, SayIntentions, GSX,
   SimBrief, and voice behavior after simulator or add-on updates.
 - Improve diagnostics and documentation only where they help resolve defects.

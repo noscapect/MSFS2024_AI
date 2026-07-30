@@ -4,22 +4,26 @@ This roadmap records intentionally deferred product work. It is not a promise
 that experimental features belong in the next public release. Stable aircraft
 profiles remain protected by their aircraft-specific regression tests.
 
-## Current development: UX redesign and MAX stabilization
+## Current development: dashboard UX and in-simulator EFB
 
 The latest public release remains v0.9.5. The Asobo 737 MAX development
-profile has been merged to `main` without publishing a new release. Active
-work continues on `feature/ux-redesign`.
+profile, first dashboard redesign, and EFB companion have been merged to `main`
+without publishing a new release. Active work continues on
+`feature/ux-efb-refinement`. MAX support is retained as experimental, but active
+MAX development is paused.
 
 Priorities are:
 
-1. Redesign the dashboard around a prominent current-action card, a
-   gate-to-gate progress stepper, and a dedicated GSX ground-services card.
-2. Surface existing GSX passenger count, percentage, active services,
-   action-required prompt, and freshness information without inventing an ETA.
-3. Move raw telemetry and activity diagnostics into collapsible secondary
-   panels and simplify routine controls to one contextual primary action.
-4. Add the MAX takeoff instrumentation and safety gates listed in
-   `ASOBO_737_MAX_SUPPORT_STATUS.md` before resuming Flow 7 live testing.
+1. Live-validate the new MSFS 2024 EFB companion after a simulator restart,
+   including start, confirm, pause, resume, cancel, reconnect, and stale-state
+   behavior.
+2. Keep the EFB a narrow remote over the versioned CommBus protocol; do not
+   duplicate procedure or aircraft-control logic in JavaScript.
+3. Retain the completed dashboard redesign, GSX passenger progress, and
+   collapsible diagnostics on the desktop app.
+4. Preserve the MAX limitations and release gates documented in
+   `ASOBO_737_MAX_SUPPORT_STATUS.md`; do not resume Flow 7 testing without an
+   explicit decision to restart MAX development.
 5. Protect completed aircraft profiles with their existing isolation and
    contract tests.
 6. Continue live validation of optional SimBrief, SayIntentions, and GSX
@@ -27,9 +31,8 @@ Priorities are:
 7. Keep customer-facing diagnostics concise while retaining bounded flight
    recordings for support.
 
-The UX work may reorganize WinForms presentation and expose already available
-GSX state, but must not refactor simulator command paths or weaken procedure
-verification as part of the visual redesign.
+The EFB may expose existing flow controls and operational state, but must not
+refactor simulator command paths or weaken procedure verification.
 
 SayIntentions Copilot communication and departure ATC workflow acceptance was
 completed gate-to-gate for v0.9.3. Frequency tuning remains exclusively owned

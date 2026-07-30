@@ -54,6 +54,8 @@ internal static class Program
             arg => string.Equals(arg, "monitor-asobo737max", StringComparison.OrdinalIgnoreCase));
         var listLVars = args.Any(
             arg => string.Equals(arg, "list-lvars", StringComparison.OrdinalIgnoreCase));
+        var probeEfbState = args.Any(
+            arg => string.Equals(arg, "efb-state", StringComparison.OrdinalIgnoreCase));
         var bridgeCommand = args
             .SkipWhile(arg => !string.Equals(arg, "bridge", StringComparison.OrdinalIgnoreCase))
             .Skip(1)
@@ -100,6 +102,7 @@ internal static class Program
             monitorBeforeStart,
             monitorAsobo737Max,
             listLVars,
+            probeEfbState,
             bridgeCommand,
             actionName,
             inputEventFilter,
@@ -146,6 +149,7 @@ internal sealed class SimConnectWindow : Form
     private readonly bool _monitorBeforeStartRequested;
     private readonly bool _monitorAsobo737MaxRequested;
     private readonly bool _listLVarsRequested;
+    private readonly bool _efbStateProbeRequested;
     private readonly string? _bridgeCommand;
     private readonly string? _actionName;
     private readonly string? _inputEventFilter;
@@ -410,6 +414,7 @@ internal sealed class SimConnectWindow : Form
         bool monitorBeforeStartRequested,
         bool monitorAsobo737MaxRequested,
         bool listLVarsRequested,
+        bool efbStateProbeRequested,
         string? bridgeCommand,
         string? actionName,
         string? inputEventFilter,
@@ -424,6 +429,7 @@ internal sealed class SimConnectWindow : Form
         _monitorBeforeStartRequested = monitorBeforeStartRequested;
         _monitorAsobo737MaxRequested = monitorAsobo737MaxRequested;
         _listLVarsRequested = listLVarsRequested;
+        _efbStateProbeRequested = efbStateProbeRequested;
         _bridgeCommand = bridgeCommand;
         _actionName = actionName;
         _inputEventFilter = inputEventFilter;
@@ -719,6 +725,17 @@ internal sealed class SimConnectWindow : Form
                 wasmTarget,
                 _bridgeCommand);
             Console.WriteLine($"BRIDGE COMMAND SENT: {_bridgeCommand}");
+        }
+        if (_efbStateProbeRequested)
+        {
+            sender.SubscribeToCommBusEvent(
+                CommBusEvent.BridgeResponse,
+                "MSFS2024_AI_EFB_STATE_V1");
+            sender.CallCommBusEvent(
+                "MSFS2024_AI_EFB_STATE_REQUEST_V1",
+                SIMCONNECT_COMM_BUS_BROADCAST_TO.SIMCONNECT,
+                "{}");
+            Console.WriteLine("EFB STATE REQUEST SENT");
         }
         if (!string.IsNullOrWhiteSpace(_actionName))
         {
@@ -1028,8 +1045,15 @@ internal sealed class SimConnectWindow : Form
         _bridgeResponseChunks.Add(data.rgData);
         if (data.dwEntryNumber + 1 >= data.dwOutOf)
         {
-            Console.WriteLine($"BRIDGE RESPONSE: {string.Concat(_bridgeResponseChunks)}");
+            Console.WriteLine(
+                $"{(_efbStateProbeRequested ? "EFB STATE" : "BRIDGE RESPONSE")}: "
+                + string.Concat(_bridgeResponseChunks));
             _bridgeResponseReceived = true;
+            if (_efbStateProbeRequested)
+            {
+                Application.ExitThread();
+                return;
+            }
             ExitWhenComplete();
         }
     }
@@ -1381,6 +1405,10 @@ internal sealed class SimConnectWindow : Form
         }
 
         if (!string.IsNullOrWhiteSpace(_bridgeCommand) && !_bridgeResponseReceived)
+        {
+            return;
+        }
+        if (_efbStateProbeRequested && !_bridgeResponseReceived)
         {
             return;
         }

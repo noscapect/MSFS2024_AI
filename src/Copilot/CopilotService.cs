@@ -9,6 +9,7 @@ using Msfs2024Ai.Copilot.Checklists;
 using Msfs2024Ai.Copilot.Controls;
 using Msfs2024Ai.Copilot.Diagnostics;
 using Msfs2024Ai.Copilot.Domain;
+using Msfs2024Ai.Copilot.Efb;
 using Msfs2024Ai.Copilot.AircraftAdapters.Asobo737Max;
 using Msfs2024Ai.Copilot.Gsx;
 using Msfs2024Ai.Copilot.Procedures;
@@ -46,6 +47,8 @@ internal sealed class CopilotService : Form
     // Change the schema suffix whenever the ordered runtime LVar list changes.
     // MobiFlight client-data layouts persist for the simulator session.
     private const string MobiFlightRuntimeClientName = "MSFS2024_AI_Copilot_v27";
+    private readonly Dictionary<EfbCommBusEvent, List<string>> _efbCommBusChunks =
+        new();
     private readonly string? _oneShotCommand;
     private readonly bool _showUi;
     private readonly CopilotSettings _settings;
@@ -887,6 +890,12 @@ internal sealed class CopilotService : Form
         Gsx = 400
     }
 
+    private enum EfbCommBusEvent
+    {
+        Command = 500,
+        StateRequest = 501
+    }
+
     private enum Priority
     {
         Highest = 1
@@ -1301,6 +1310,7 @@ internal sealed class CopilotService : Form
             _simConnect.OnRecvEnumerateInputEvents += OnEnumerateInputEvents;
             _simConnect.OnRecvGetInputEvent += OnGetInputEvent;
             _simConnect.OnRecvEvent += OnGsxEvent;
+            _simConnect.OnRecvCommBus += OnEfbCommBusEvent;
         }
         catch (COMException exception)
         {
@@ -1496,6 +1506,13 @@ internal sealed class CopilotService : Form
         InitializeGsxProtocol(sender);
         InitializeMobiFlight(sender);
         InitializePmdgNg3Sdk(sender);
+        sender.SubscribeToCommBusEvent(
+            EfbCommBusEvent.Command,
+            EfbCompanionProtocol.CommandEventName);
+        sender.SubscribeToCommBusEvent(
+            EfbCommBusEvent.StateRequest,
+            EfbCompanionProtocol.StateRequestEventName);
+        AppLog.Write("MSFS EFB companion CommBus bridge ready.");
 
         sender.RequestDataOnSimObject(
             Request.AircraftState,
@@ -1775,6 +1792,7 @@ internal sealed class CopilotService : Form
                 }
                 HandleGsxStatusPrompt();
                 UpdateDashboard();
+                PublishEfbState();
                 break;
         }
     }
@@ -5385,6 +5403,7 @@ internal sealed class CopilotService : Form
             _completedProcedureIds.Add(_procedureRunner.Definition.Id);
         }
         UpdateDashboard();
+        PublishEfbState();
         FinishProcedureOneShotIfTerminal();
 
         if (_initialStateReceived)
@@ -8391,6 +8410,7 @@ internal sealed class CopilotService : Form
         }
         SaveProcedureSession();
         PrintProcedureUpdate();
+        PublishEfbState(force: true);
 
         var nextFlow = completedDefinition == null
             ? null
@@ -16409,7 +16429,7 @@ internal sealed class CopilotService : Form
                     : _state.IsPmdg737800
                     ? "PMDG 737-800"
                     : _state.IsAsobo737Max8
-                    ? "Asobo 737 MAX 8"
+                    ? "737 MAX EXPERIMENTAL"
                     : "AIRCRAFT UNSUPPORTED",
             _state.IsSupportedAircraft
                 ? System.Drawing.Color.FromArgb(39, 130, 87)
@@ -16444,7 +16464,7 @@ internal sealed class CopilotService : Form
                 ? "PMDG NG3 SDK data connected"
                 : "PMDG NG3 SDK waiting - enable [SDK] EnableDataBroadcast=1 in 737_Options.ini"
             : _state.IsAsobo737Max8
-                ? "Asobo 737 MAX profile active; using MSFS/SimConnect telemetry while switch mappings are developed."
+                ? "EXPERIMENTAL Asobo 737 MAX profile; incomplete live validation and no unattended Flow 7 use."
             : _mobiFlightReady
                 ? "MobiFlight connected"
                 : "MobiFlight not connected - aircraft controls unavailable";
@@ -17331,6 +17351,363 @@ internal sealed class CopilotService : Form
             _flowList.TopIndex = Math.Max(
                 0,
                 Math.Min(topIndex, _flowList.Items.Count - 1));
+        }
+    }
+
+    private void OnEfbCommBusEvent(
+        SimConnect sender,
+        SIMCONNECT_RECV_COMM_BUS data)
+    {
+        var eventId = (EfbCommBusEvent)data.uEventID;
+        if (eventId is not EfbCommBusEvent.Command
+            and not EfbCommBusEvent.StateRequest)
+        {
+            return;
+        }
+
+        if (!_efbCommBusChunks.TryGetValue(eventId, out var chunks))
+        {
+            chunks = new List<string>();
+            _efbCommBusChunks[eventId] = chunks;
+        }
+        chunks.Add(data.rgData ?? string.Empty);
+        if (data.dwEntryNumber + 1 < data.dwOutOf)
+        {
+            return;
+        }
+
+        var payload = string.Concat(chunks);
+        chunks.Clear();
+        if (eventId == EfbCommBusEvent.StateRequest)
+        {
+            PublishEfbState(force: true);
+            return;
+        }
+
+        HandleEfbCommand(payload);
+    }
+
+    private void HandleEfbCommand(string payload)
+    {
+        if (!EfbCompanionProtocol.TryParseCommand(
+                payload,
+                out var command,
+                out var parseError))
+        {
+            SendEfbCommandResult(string.Empty, false, parseError);
+            AppLog.Write($"Rejected malformed EFB command: {parseError}");
+            return;
+        }
+
+        if (command.Action == "request_state")
+        {
+            SendEfbCommandResult(
+                command.RequestId,
+                true,
+                "State refresh requested.");
+            PublishEfbState(force: true);
+            return;
+        }
+
+        if (_state == null)
+        {
+            SendEfbCommandResult(
+                command.RequestId,
+                false,
+                "Aircraft telemetry is not available yet.");
+            return;
+        }
+
+        var status = _procedureRunner.Status;
+        var active = IsProcedureActive(status)
+                     || _pendingGsxEngineStartProcedure != null;
+        switch (command.Action)
+        {
+            case "start_flow":
+            {
+                if (active)
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        "Another flow is already active.");
+                    return;
+                }
+
+                var definition = ProcedureCatalog.ForAircraft(_state)
+                    .FirstOrDefault(
+                        item => string.Equals(
+                            item.Id,
+                            command.FlowId,
+                            StringComparison.OrdinalIgnoreCase));
+                if (definition == null)
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        "That flow is not available for the current aircraft.");
+                    return;
+                }
+
+                _commands.Enqueue($"procedure start {definition.Id}");
+                SendEfbCommandResult(
+                    command.RequestId,
+                    true,
+                    $"Starting {definition.Name}.");
+                break;
+            }
+            case "confirm":
+                if (status != ProcedureStatus.WaitingForManualAction)
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        "No pilot action is waiting for confirmation.");
+                    return;
+                }
+                if (_sayIntentionsHandoffInProgress
+                    || _pendingSayIntentionsAtcStepId != null)
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        "The First Officer is already waiting for the ATC response.");
+                    return;
+                }
+
+                _ = HandleConfirmButtonAsync();
+                SendEfbCommandResult(
+                    command.RequestId,
+                    true,
+                    "Confirmation requested.");
+                break;
+            case "pause":
+                if (status is not ProcedureStatus.Running
+                    and not ProcedureStatus.WaitingForManualAction
+                    and not ProcedureStatus.WaitingForVerification)
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        "The current flow cannot be paused.");
+                    return;
+                }
+                _commands.Enqueue("procedure pause");
+                SendEfbCommandResult(command.RequestId, true, "Pausing flow.");
+                break;
+            case "resume":
+                if (status != ProcedureStatus.Paused)
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        "The current flow is not paused.");
+                    return;
+                }
+                _commands.Enqueue("procedure resume");
+                SendEfbCommandResult(command.RequestId, true, "Resuming flow.");
+                break;
+            case "cancel":
+                if (!active)
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        "No flow is active.");
+                    return;
+                }
+                _commands.Enqueue("procedure cancel");
+                SendEfbCommandResult(command.RequestId, true, "Cancelling flow.");
+                break;
+        }
+
+        AppLog.Write(
+            $"Accepted MSFS EFB command '{command.Action}' "
+            + $"({command.RequestId}).");
+    }
+
+    private void SendEfbCommandResult(
+        string requestId,
+        bool accepted,
+        string message)
+    {
+        SendEfbEnvelope(
+            new Dictionary<string, object?>
+            {
+                ["protocolVersion"] = EfbCompanionProtocol.Version,
+                ["kind"] = "commandResult",
+                ["requestId"] = requestId,
+                ["accepted"] = accepted,
+                ["message"] = message,
+                ["sentUtc"] = DateTime.UtcNow.ToString("O")
+            });
+    }
+
+    private void PublishEfbState(bool force = false)
+    {
+        if (_simConnect == null)
+        {
+            return;
+        }
+
+        var envelope = BuildEfbStateEnvelope();
+        SendEfbEnvelope(envelope);
+    }
+
+    private Dictionary<string, object?> BuildEfbStateEnvelope()
+    {
+        var state = _state;
+        var gsx = GsxLiveStatusFormatter.Format(
+            _gsxTooltip,
+            _gsxMenu,
+            _settings.EnableGsxIntegration,
+            _gsxInstallation != null,
+            _gsxCouatlStarted);
+        var definition =
+            _pendingGsxEngineStartProcedure ?? _procedureRunner.Definition;
+        var currentStep = _pendingGsxEngineStartProcedure == null
+            ? _procedureRunner.CurrentStep
+            : null;
+        var recommendation = state == null
+            ? null
+            : FlowRecommendationEngine.Recommend(
+                state,
+                _completedProcedureIds).Procedure;
+        var totalSteps = definition?.Steps.Count ?? 0;
+        var completedSteps = _pendingGsxEngineStartProcedure != null
+            ? 0
+            : Math.Min(totalSteps, _procedureRunner.CompletedStepCount);
+        var waitingFor = state == null
+            ? "Waiting for aircraft telemetry."
+            : _pendingGsxEngineStartProcedure != null
+                ? FormatGsxPushbackWaitingReason()
+                : FormatWaitingReason(
+                    currentStep,
+                    state,
+                    _procedureRunner.Status);
+        var statusText = _pendingGsxEngineStartProcedure != null
+            ? "Waiting for GSX"
+            : FormatProcedureStatus(_procedureRunner.Status);
+        var procedureActive =
+            IsProcedureActive(_procedureRunner.Status)
+            || _pendingGsxEngineStartProcedure != null;
+
+        var flows = state == null
+            ? Array.Empty<object>()
+            : ProcedureCatalog.ForAircraft(state)
+                .Select(
+                    flow => (object)new Dictionary<string, object?>
+                    {
+                        ["id"] = flow.Id,
+                        ["name"] = flow.Name,
+                        ["automationSummary"] = flow.AutomationSummary,
+                        ["state"] = string.Equals(
+                                        flow.Id,
+                                        definition?.Id,
+                                        StringComparison.OrdinalIgnoreCase)
+                            ? "current"
+                            : _completedProcedureIds.Contains(flow.Id)
+                                ? "done"
+                                : string.Equals(
+                                    flow.Id,
+                                    recommendation?.Id,
+                                    StringComparison.OrdinalIgnoreCase)
+                                    ? "next"
+                                    : "upcoming"
+                    })
+                .ToArray();
+
+        return new Dictionary<string, object?>
+        {
+            ["protocolVersion"] = EfbCompanionProtocol.Version,
+            ["kind"] = "state",
+            ["sentUtc"] = DateTime.UtcNow.ToString("O"),
+            ["companionVersion"] = GetApplicationVersion(),
+            ["connected"] = _simConnect != null,
+            ["aircraftReady"] = state != null,
+            ["aircraft"] = new Dictionary<string, object?>
+            {
+                ["title"] = state?.Title ?? "Waiting for aircraft",
+                ["family"] = state?.AircraftFamilyLabel ?? "Unknown",
+                ["supported"] = state?.IsSupportedAircraft == true,
+                ["warning"] = state?.IsAsobo737Max8 == true
+                    ? "Development beta: MAX Flow 7 is not cleared for unattended use."
+                    : null,
+                ["phase"] = state == null
+                    ? "Unknown"
+                    : OperationalPhaseDetector.Detect(state).ToString()
+            },
+            ["telemetry"] = new Dictionary<string, object?>
+            {
+                ["aglFeet"] = state?.AltitudeAboveGroundFeet ?? 0,
+                ["altitudeFeet"] = state?.IndicatedAltitudeFeet ?? 0,
+                ["airspeedKnots"] = state?.IndicatedAirspeedKnots ?? 0,
+                ["verticalSpeedFpm"] = state?.VerticalSpeedFeetPerMinute ?? 0
+            },
+            ["flow"] = new Dictionary<string, object?>
+            {
+                ["id"] = definition?.Id,
+                ["name"] = definition?.Name ?? "No active flow",
+                ["status"] = statusText,
+                ["currentStepId"] = currentStep?.Id,
+                ["currentStep"] = currentStep?.Label ?? "No active step",
+                ["assignedRole"] = currentStep == null
+                    ? string.Empty
+                    : FormatCrewRole(currentStep.AssignedRole),
+                ["completedSteps"] = completedSteps,
+                ["totalSteps"] = totalSteps,
+                ["waitingFor"] = waitingFor,
+                ["canStart"] = state != null && !procedureActive,
+                ["canConfirm"] =
+                    _procedureRunner.Status
+                        == ProcedureStatus.WaitingForManualAction
+                    && !_sayIntentionsHandoffInProgress
+                    && _pendingSayIntentionsAtcStepId == null,
+                ["canPause"] = _procedureRunner.Status
+                    is ProcedureStatus.Running
+                    or ProcedureStatus.WaitingForManualAction
+                    or ProcedureStatus.WaitingForVerification,
+                ["canResume"] =
+                    _procedureRunner.Status == ProcedureStatus.Paused,
+                ["canCancel"] = procedureActive
+            },
+            ["flows"] = flows,
+            ["gsx"] = new Dictionary<string, object?>
+            {
+                ["summary"] = gsx.SummaryText,
+                ["passengerProgress"] = gsx.PassengerProgressText,
+                ["passengerPercent"] = gsx.PassengerPercent ?? 0,
+                ["actionRequired"] = gsx.ActionRequiredText,
+                ["hasActionRequired"] = gsx.HasActionRequired,
+                ["activeServices"] = gsx.ActiveServices.ToArray()
+            }
+        };
+    }
+
+    private void SendEfbEnvelope(object envelope)
+    {
+        if (_simConnect == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var companionTargets =
+                (SIMCONNECT_COMM_BUS_BROADCAST_TO)Enum.Parse(
+                    typeof(SIMCONNECT_COMM_BUS_BROADCAST_TO),
+                    "ALL",
+                    true);
+            _simConnect.CallCommBusEvent(
+                EfbCompanionProtocol.StateEventName,
+                companionTargets,
+                EfbCompanionProtocol.Serialize(envelope));
+        }
+        catch (Exception exception)
+        {
+            AppLog.Write(
+                $"Could not publish MSFS EFB companion state: "
+                + exception.Message);
         }
     }
 

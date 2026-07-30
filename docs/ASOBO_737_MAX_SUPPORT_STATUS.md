@@ -2,9 +2,11 @@
 
 ## Status
 
-The Asobo 737 MAX 8 is an unreleased development-beta aircraft profile. It was
+The Asobo 737 MAX 8 is an unreleased, experimental aircraft profile. It was
 merged to `main` after iterative cold-and-dark testing, but no new public
-release was built. It is not yet gate-to-gate validated.
+release was built. It is not yet gate-to-gate validated. Active development is
+paused while the project focuses on the desktop UX redesign and MSFS 2024 EFB
+companion.
 
 - Flows 1–6: implemented and iteratively live tested; further regression
   flights remain necessary.

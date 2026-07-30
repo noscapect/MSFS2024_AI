@@ -33,6 +33,8 @@ guessed generic commands to an unknown cockpit.
   callouts
 - `Minimal`, `Standard`, and `Expanded` voice detail
 - Optional SimBrief, SayIntentions, and GSX Pro integration
+- Optional MSFS 2024 EFB companion for starting and controlling flows without
+  leaving the simulator
 - Saved flight progress with a clear `New flight / Reset progress` control
 - Quiet diagnostic recording for troubleshooting
 
@@ -61,12 +63,14 @@ EnableDataBroadcast=1
 
 The dashboard should show `PMDG SDK OK` after the aircraft is loaded.
 
-### Asobo 737 MAX 8 development status
+### Asobo 737 MAX 8 experimental support
 
 The repository contains a dedicated Asobo 737 MAX profile using native
 SimConnect Input Events and aircraft-specific procedures. Flows 1–6 have
 received iterative live testing, but the MAX profile is not yet gate-to-gate
-validated and is not part of the v0.9.5 release package.
+validated and is not part of the v0.9.5 release package. Support is
+**experimental**, and further MAX development is paused while work focuses on
+the desktop UX redesign and MSFS 2024 EFB companion.
 
 Do not rely on its current "Takeoff configuration normal" callout as an
 independent trim or flight-control check. Before takeoff, manually verify the
@@ -89,6 +93,20 @@ telemetry has been implemented and live validated. See
 Keep all DLLs beside `Copilot.exe`. Windows may show a SmartScreen warning for
 an unsigned community application; verify that the download came from this
 repository before allowing it to run.
+
+### In-simulator EFB companion (development)
+
+The current unreleased source includes a native MSFS 2024 EFB app. It displays
+the current flow and step, allows the pilot to start, confirm, pause, resume, or
+cancel a flow, and surfaces aircraft telemetry and GSX boarding progress
+without Alt-Tabbing.
+
+The EFB remains a thin remote: `Copilot.exe` must be running and continues to
+own all procedure, verification, aircraft-control, GSX, and SayIntentions
+logic. The EFB cannot send arbitrary cockpit commands.
+
+Developer build and installation instructions are in
+[EFB Companion](docs/EFB_COMPANION.md).
 
 ## First flight
 
@@ -195,7 +213,8 @@ installed or disabled.
   profile and can be overridden where settings are available.
 - Aircraft or simulator updates can change cockpit interfaces. Stop the flow
   and take over if the displayed state does not match the cockpit.
-- The Asobo 737 MAX profile remains under active development. Its imported
+- The Asobo 737 MAX profile is experimental and active development is paused.
+  Its imported
   SimBrief takeoff flap value is not currently compared with live MAX FMC
   takeoff data, and stabilizer/elevator state is not yet verified.
 

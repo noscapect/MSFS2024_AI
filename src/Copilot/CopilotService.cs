@@ -9,6 +9,7 @@ using Msfs2024Ai.Copilot.Checklists;
 using Msfs2024Ai.Copilot.Controls;
 using Msfs2024Ai.Copilot.Diagnostics;
 using Msfs2024Ai.Copilot.Domain;
+using Msfs2024Ai.Copilot.Efb;
 using Msfs2024Ai.Copilot.AircraftAdapters.Asobo737Max;
 using Msfs2024Ai.Copilot.Gsx;
 using Msfs2024Ai.Copilot.Procedures;
@@ -46,6 +47,8 @@ internal sealed class CopilotService : Form
     // Change the schema suffix whenever the ordered runtime LVar list changes.
     // MobiFlight client-data layouts persist for the simulator session.
     private const string MobiFlightRuntimeClientName = "MSFS2024_AI_Copilot_v27";
+    private readonly Dictionary<EfbCommBusEvent, List<string>> _efbCommBusChunks =
+        new();
     private readonly string? _oneShotCommand;
     private readonly bool _showUi;
     private readonly CopilotSettings _settings;
@@ -506,6 +509,10 @@ internal sealed class CopilotService : Form
     private Label? _simBriefStatusLabel;
     private Label? _sayIntentionsStatusLabel;
     private Label? _gsxStatusLabel;
+    private Label? _gsxLiveSummaryLabel;
+    private Label? _gsxLiveActionLabel;
+    private Label? _gsxPassengerLabel;
+    private ProgressBar? _gsxPassengerProgress;
     private Label? _simBadgeLabel;
     private Label? _aircraftBadgeLabel;
     private Label? _adapterBadgeLabel;
@@ -527,6 +534,7 @@ internal sealed class CopilotService : Form
     private Label? _stepLabel;
     private Label? _statusBadgeLabel;
     private Label? _waitingForLabel;
+    private Label? _stepProgressLabel;
     private ProgressBar? _procedureProgress;
     private ComboBox? _automationPolicyBox;
     private NumericUpDown? _transitionAltitudeBox;
@@ -880,6 +888,12 @@ internal sealed class CopilotService : Form
     private enum NotificationGroup
     {
         Gsx = 400
+    }
+
+    private enum EfbCommBusEvent
+    {
+        Command = 500,
+        StateRequest = 501
     }
 
     private enum Priority
@@ -1296,6 +1310,7 @@ internal sealed class CopilotService : Form
             _simConnect.OnRecvEnumerateInputEvents += OnEnumerateInputEvents;
             _simConnect.OnRecvGetInputEvent += OnGetInputEvent;
             _simConnect.OnRecvEvent += OnGsxEvent;
+            _simConnect.OnRecvCommBus += OnEfbCommBusEvent;
         }
         catch (COMException exception)
         {
@@ -1491,6 +1506,13 @@ internal sealed class CopilotService : Form
         InitializeGsxProtocol(sender);
         InitializeMobiFlight(sender);
         InitializePmdgNg3Sdk(sender);
+        sender.SubscribeToCommBusEvent(
+            EfbCommBusEvent.Command,
+            EfbCompanionProtocol.CommandEventName);
+        sender.SubscribeToCommBusEvent(
+            EfbCommBusEvent.StateRequest,
+            EfbCompanionProtocol.StateRequestEventName);
+        AppLog.Write("MSFS EFB companion CommBus bridge ready.");
 
         sender.RequestDataOnSimObject(
             Request.AircraftState,
@@ -1770,6 +1792,7 @@ internal sealed class CopilotService : Form
                 }
                 HandleGsxStatusPrompt();
                 UpdateDashboard();
+                PublishEfbState();
                 break;
         }
     }
@@ -5380,6 +5403,7 @@ internal sealed class CopilotService : Form
             _completedProcedureIds.Add(_procedureRunner.Definition.Id);
         }
         UpdateDashboard();
+        PublishEfbState();
         FinishProcedureOneShotIfTerminal();
 
         if (_initialStateReceived)
@@ -8386,6 +8410,7 @@ internal sealed class CopilotService : Form
         }
         SaveProcedureSession();
         PrintProcedureUpdate();
+        PublishEfbState(force: true);
 
         var nextFlow = completedDefinition == null
             ? null
@@ -13144,15 +13169,16 @@ internal sealed class CopilotService : Form
 
     private void BuildDashboard()
     {
-        Width = 920;
-        Height = 760;
-        MinimumSize = new System.Drawing.Size(820, 680);
+        Width = 1220;
+        Height = 900;
+        MinimumSize = new System.Drawing.Size(1040, 760);
         StartPosition = FormStartPosition.CenterScreen;
         BackColor = System.Drawing.Color.FromArgb(242, 245, 248);
 
         var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
+            AutoScroll = true,
             Padding = new Padding(16),
             ColumnCount = 1,
             RowCount = 8
@@ -13161,9 +13187,9 @@ internal sealed class CopilotService : Form
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 135));
-        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 150));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 154));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 206));
+        root.RowStyles.Add(new RowStyle(SizeType.Absolute, 42));
         root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         Controls.Add(root);
 
@@ -13219,37 +13245,51 @@ internal sealed class CopilotService : Form
             Dock = DockStyle.Top,
             AutoSize = true,
             ColumnCount = 3,
+            Padding = new Padding(12, 10, 12, 10),
+            BackColor = System.Drawing.Color.White,
             Margin = new Padding(0, 0, 12, 0)
         };
-        statusPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 180));
+        statusPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 130));
         statusPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
         statusPanel.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 120));
         statusShell.Controls.Add(statusPanel, 0, 0);
         statusShell.Controls.Add(BuildAircraftCard(), 1, 0);
 
-        _connectionLabel = AddDashboardRow(statusPanel, "Simulator", "Connecting...");
-        _aircraftLabel = AddDashboardRow(statusPanel, "Aircraft", "Waiting for state...");
+        var overviewTitle = new Label
+        {
+            Text = "Flight overview",
+            AutoSize = true,
+            Font = new System.Drawing.Font(
+                Font.FontFamily,
+                11,
+                System.Drawing.FontStyle.Bold),
+            ForeColor = System.Drawing.Color.FromArgb(40, 68, 106),
+            Margin = new Padding(0, 0, 0, 8)
+        };
+        statusPanel.Controls.Add(overviewTitle, 0, 0);
+        statusPanel.SetColumnSpan(overviewTitle, 2);
+        statusPanel.RowCount = 1;
+        statusPanel.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+
         _phaseLabel = AddDashboardRow(statusPanel, "Operational phase", "Unknown");
-        _electricalLabel = AddDashboardRow(statusPanel, "Electrical", "Waiting for state...");
-        _adapterLabel = AddDashboardRow(statusPanel, "Aircraft adapter", "Connecting...");
-        _recommendationLabel = AddDashboardRow(statusPanel, "Recommended flow", "Waiting for state...");
-        _telemetryLabel = AddDashboardRow(statusPanel, "Current-step telemetry", "Waiting for state...");
-        var simBriefRow = statusPanel.RowCount;
-        _simBriefStatusLabel = AddDashboardRow(statusPanel, "SimBrief", SimBriefStatusText());
-        _sayIntentionsStatusLabel = AddDashboardRow(
+        _simBriefStatusLabel = AddDashboardRow(
             statusPanel,
-            "SayIntentions",
-            "Client not detected - optional integration inactive.");
-        _gsxStatusLabel = AddDashboardRow(
+            "Flight plan",
+            SimBriefStatusText());
+        _recommendationLabel = AddDashboardRow(
             statusPanel,
-            "GSX",
-            GsxStatusText());
+            "Next flow",
+            "Waiting for aircraft state...");
+        _telemetryLabel = AddDashboardRow(
+            statusPanel,
+            "Aircraft telemetry",
+            "Waiting for aircraft state...");
         var integrationsButton = new Button
         {
-            Text = "Manage\r\nintegrations",
+            Text = "Integrations",
             Width = 112,
-            Height = 58,
-            Margin = new Padding(4, 0, 0, 2),
+            Height = 34,
+            Margin = new Padding(4, 2, 0, 2),
             FlatStyle = FlatStyle.Flat,
             BackColor = System.Drawing.Color.White,
             ForeColor = System.Drawing.Color.FromArgb(40, 68, 106),
@@ -13258,11 +13298,19 @@ internal sealed class CopilotService : Form
         integrationsButton.FlatAppearance.BorderColor =
             System.Drawing.Color.FromArgb(190, 198, 208);
         integrationsButton.Click += (_, _) => ShowIntegrationsDialog();
-        statusPanel.Controls.Add(integrationsButton, 2, simBriefRow);
-        statusPanel.SetRowSpan(integrationsButton, 3);
-        _versionLabel = AddDashboardRow(
-            statusPanel,
-            "Version",
+        statusPanel.Controls.Add(integrationsButton, 2, 1);
+        statusPanel.SetRowSpan(integrationsButton, 4);
+
+        // These details remain available to badges, diagnostics, and integration
+        // dialogs without repeating them in the main flight overview.
+        _connectionLabel = NewDashboardLabel("Connecting...");
+        _aircraftLabel = NewDashboardLabel("Waiting for state...");
+        _electricalLabel = NewDashboardLabel("Waiting for state...");
+        _adapterLabel = NewDashboardLabel("Connecting...");
+        _sayIntentionsStatusLabel = NewDashboardLabel(
+            "Client not detected - optional integration inactive.");
+        _gsxStatusLabel = NewDashboardLabel(GsxStatusText());
+        _versionLabel = NewDashboardLabel(
             $"{GetApplicationVersion()} - checking GitHub releases...");
         UpdateGsxStatus(_gsxCouatlStarted);
 
@@ -13567,7 +13615,7 @@ internal sealed class CopilotService : Form
 
         var timelineGroup = new GroupBox
         {
-            Text = "Checklist and assistance flow - gate to gate",
+            Text = "Flight progress",
             Dock = DockStyle.Fill,
             Padding = new Padding(8)
         };
@@ -13583,8 +13631,13 @@ internal sealed class CopilotService : Form
         {
             Dock = DockStyle.Fill,
             IntegralHeight = false,
-            DisplayMember = nameof(ProcedureListItem.DisplayName)
+            DisplayMember = nameof(ProcedureListItem.DisplayName),
+            DrawMode = DrawMode.OwnerDrawFixed,
+            ItemHeight = 31,
+            BorderStyle = BorderStyle.None,
+            BackColor = System.Drawing.Color.White
         };
+        _flowList.DrawItem += DrawFlowItem;
         foreach (var procedure in ProcedureCatalog.ForAircraft(_state))
         {
             _flowList.Items.Add(new ProcedureListItem(procedure));
@@ -13640,20 +13693,34 @@ internal sealed class CopilotService : Form
         timelineGroup.Controls.Add(timelineLayout);
         root.Controls.Add(timelineGroup);
 
+        var activeArea = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1,
+            Margin = new Padding(0)
+        };
+        activeArea.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 68));
+        activeArea.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 32));
+        root.Controls.Add(activeArea);
+
         var procedureGroup = new GroupBox
         {
-            Text = "Active procedure",
+            Text = "Current action",
             Dock = DockStyle.Fill,
-            Padding = new Padding(12)
+            Padding = new Padding(14),
+            Margin = new Padding(0, 0, 8, 0),
+            BackColor = System.Drawing.Color.White
         };
-        root.Controls.Add(procedureGroup);
+        activeArea.Controls.Add(procedureGroup, 0, 0);
 
         var procedureLayout = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 5
+            RowCount = 6
         };
+        procedureLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         procedureLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         procedureLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
         procedureLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
@@ -13663,17 +13730,25 @@ internal sealed class CopilotService : Form
 
         _procedureLabel = NewDashboardLabel("None");
         _stepLabel = NewDashboardLabel("No active step");
+        _stepLabel.Font = new System.Drawing.Font(
+            Font.FontFamily,
+            12,
+            System.Drawing.FontStyle.Bold);
+        _stepLabel.ForeColor = System.Drawing.Color.FromArgb(31, 41, 55);
         _statusBadgeLabel = NewDashboardLabel("Idle");
         _statusBadgeLabel.Font = new System.Drawing.Font(
             SystemFonts.DefaultFont,
             System.Drawing.FontStyle.Bold);
         _waitingForLabel = NewDashboardLabel("Waiting for: none");
-        _waitingForLabel.MaximumSize = new System.Drawing.Size(680, 0);
-        _procedureProgress = new ProgressBar { Dock = DockStyle.Top, Height = 22 };
+        _waitingForLabel.MaximumSize = new System.Drawing.Size(760, 0);
+        _stepProgressLabel = NewDashboardLabel("0 of 0 steps complete");
+        _stepProgressLabel.ForeColor = System.Drawing.Color.DimGray;
+        _procedureProgress = new ProgressBar { Dock = DockStyle.Top, Height = 16 };
         procedureLayout.Controls.Add(_statusBadgeLabel);
         procedureLayout.Controls.Add(_procedureLabel);
         procedureLayout.Controls.Add(_stepLabel);
         procedureLayout.Controls.Add(_waitingForLabel);
+        procedureLayout.Controls.Add(_stepProgressLabel);
         procedureLayout.Controls.Add(_procedureProgress);
 
         var procedureButtons = new FlowLayoutPanel
@@ -13738,11 +13813,70 @@ internal sealed class CopilotService : Form
         procedureButtons.Controls.Add(resetProgressButton);
         procedureGroup.Controls.Add(procedureButtons);
 
+        var gsxGroup = new GroupBox
+        {
+            Text = "GSX ground services",
+            Dock = DockStyle.Fill,
+            Padding = new Padding(14),
+            Margin = new Padding(8, 0, 0, 0),
+            BackColor = System.Drawing.Color.White
+        };
+        activeArea.Controls.Add(gsxGroup, 1, 0);
+        var gsxLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 1,
+            RowCount = 5
+        };
+        gsxLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        gsxLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        gsxLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        gsxLayout.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        gsxLayout.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        gsxGroup.Controls.Add(gsxLayout);
+        _gsxLiveSummaryLabel = NewDashboardLabel("Checking GSX status...");
+        _gsxLiveSummaryLabel.Font = new System.Drawing.Font(
+            Font.FontFamily,
+            10,
+            System.Drawing.FontStyle.Bold);
+        _gsxLiveSummaryLabel.MaximumSize = new System.Drawing.Size(360, 0);
+        _gsxPassengerLabel = NewDashboardLabel("Passenger progress unavailable");
+        _gsxPassengerLabel.ForeColor = System.Drawing.Color.DimGray;
+        _gsxPassengerProgress = new ProgressBar
+        {
+            Dock = DockStyle.Top,
+            Height = 16,
+            Minimum = 0,
+            Maximum = 100
+        };
+        _gsxLiveActionLabel = NewDashboardLabel("No action required");
+        _gsxLiveActionLabel.MaximumSize = new System.Drawing.Size(360, 0);
+        _gsxLiveActionLabel.Padding = new Padding(8);
+        _gsxLiveActionLabel.BackColor = System.Drawing.Color.FromArgb(236, 253, 245);
+        _gsxLiveActionLabel.ForeColor = System.Drawing.Color.FromArgb(6, 95, 70);
+        var manageGsxButton = new Button
+        {
+            Text = "Open GSX details",
+            AutoSize = true,
+            Anchor = AnchorStyles.Bottom | AnchorStyles.Left,
+            FlatStyle = FlatStyle.Flat,
+            ForeColor = System.Drawing.Color.FromArgb(40, 68, 106),
+            BackColor = System.Drawing.Color.White,
+            UseVisualStyleBackColor = false
+        };
+        manageGsxButton.Click += (_, _) => ShowGsxDialog(this);
+        gsxLayout.Controls.Add(_gsxLiveSummaryLabel);
+        gsxLayout.Controls.Add(_gsxPassengerLabel);
+        gsxLayout.Controls.Add(_gsxPassengerProgress);
+        gsxLayout.Controls.Add(_gsxLiveActionLabel);
+        gsxLayout.Controls.Add(manageGsxButton);
+
         var logGroup = new GroupBox
         {
             Text = "Activity log",
             Dock = DockStyle.Fill,
-            Padding = new Padding(8)
+            Padding = new Padding(8),
+            Visible = false
         };
         _eventLog = new ListBox
         {
@@ -13752,7 +13886,33 @@ internal sealed class CopilotService : Form
             Font = new System.Drawing.Font("Consolas", 9)
         };
         logGroup.Controls.Add(_eventLog);
-        root.Controls.Add(logGroup);
+        var activityShell = new Panel { Dock = DockStyle.Fill };
+        var toggleActivityButton = new Button
+        {
+            Text = "Show activity log",
+            Dock = DockStyle.Top,
+            Height = 34,
+            FlatStyle = FlatStyle.Flat,
+            TextAlign = System.Drawing.ContentAlignment.MiddleLeft,
+            BackColor = System.Drawing.Color.White,
+            ForeColor = System.Drawing.Color.FromArgb(55, 65, 81),
+            UseVisualStyleBackColor = false
+        };
+        toggleActivityButton.FlatAppearance.BorderColor =
+            System.Drawing.Color.FromArgb(209, 213, 219);
+        toggleActivityButton.Click += (_, _) =>
+        {
+            logGroup.Visible = !logGroup.Visible;
+            root.RowStyles[6].Height = logGroup.Visible ? 170 : 42;
+            toggleActivityButton.Text = logGroup.Visible
+                ? "Hide activity log"
+                : "Show activity log";
+        };
+        activityShell.Controls.Add(logGroup);
+        activityShell.Controls.Add(toggleActivityButton);
+        toggleActivityButton.BringToFront();
+        logGroup.Padding = new Padding(8, 38, 8, 8);
+        root.Controls.Add(activityShell);
 
         var toolsShell = new FlowLayoutPanel
         {
@@ -14282,6 +14442,41 @@ internal sealed class CopilotService : Form
                     : couatlStarted
                         ? System.Drawing.Color.DarkGreen
                         : System.Drawing.Color.DarkGoldenrod;
+        }
+
+        var liveState = GsxLiveStatusFormatter.Format(
+            _gsxTooltip,
+            _gsxMenu,
+            _settings.EnableGsxIntegration,
+            _gsxInstallation != null,
+            couatlStarted);
+        if (_gsxLiveSummaryLabel != null)
+        {
+            _gsxLiveSummaryLabel.Text = liveState.SummaryText;
+            _gsxLiveSummaryLabel.ForeColor = liveState.HasActionRequired
+                ? System.Drawing.Color.FromArgb(180, 83, 9)
+                : System.Drawing.Color.FromArgb(31, 41, 55);
+        }
+        if (_gsxPassengerLabel != null)
+        {
+            _gsxPassengerLabel.Text = liveState.PassengerProgressText
+                ?? "Passenger progress unavailable";
+        }
+        if (_gsxPassengerProgress != null)
+        {
+            _gsxPassengerProgress.Value = liveState.PassengerPercent ?? 0;
+        }
+        if (_gsxLiveActionLabel != null)
+        {
+            _gsxLiveActionLabel.Text = liveState.HasActionRequired
+                ? $"Action required: {liveState.ActionRequiredText}"
+                : "No action required";
+            _gsxLiveActionLabel.BackColor = liveState.HasActionRequired
+                ? System.Drawing.Color.FromArgb(255, 247, 237)
+                : System.Drawing.Color.FromArgb(236, 253, 245);
+            _gsxLiveActionLabel.ForeColor = liveState.HasActionRequired
+                ? System.Drawing.Color.FromArgb(154, 52, 18)
+                : System.Drawing.Color.FromArgb(6, 95, 70);
         }
 
         var badgeText = !_settings.EnableGsxIntegration
@@ -16234,7 +16429,7 @@ internal sealed class CopilotService : Form
                     : _state.IsPmdg737800
                     ? "PMDG 737-800"
                     : _state.IsAsobo737Max8
-                    ? "Asobo 737 MAX 8"
+                    ? "737 MAX EXPERIMENTAL"
                     : "AIRCRAFT UNSUPPORTED",
             _state.IsSupportedAircraft
                 ? System.Drawing.Color.FromArgb(39, 130, 87)
@@ -16269,7 +16464,7 @@ internal sealed class CopilotService : Form
                 ? "PMDG NG3 SDK data connected"
                 : "PMDG NG3 SDK waiting - enable [SDK] EnableDataBroadcast=1 in 737_Options.ini"
             : _state.IsAsobo737Max8
-                ? "Asobo 737 MAX profile active; using MSFS/SimConnect telemetry while switch mappings are developed."
+                ? "EXPERIMENTAL Asobo 737 MAX profile; incomplete live validation and no unattended Flow 7 use."
             : _mobiFlightReady
                 ? "MobiFlight connected"
                 : "MobiFlight not connected - aircraft controls unavailable";
@@ -16340,6 +16535,19 @@ internal sealed class CopilotService : Form
         _procedureProgress.Value = Math.Min(
             _procedureProgress.Maximum,
             gsxEngineStartPending ? 0 : _procedureRunner.CompletedStepCount);
+        if (_stepProgressLabel != null)
+        {
+            var totalSteps = definition?.Steps.Count ?? 0;
+            var completedSteps = gsxEngineStartPending
+                ? 0
+                : Math.Min(totalSteps, _procedureRunner.CompletedStepCount);
+            var percent = totalSteps == 0
+                ? 0
+                : (int)Math.Round(completedSteps * 100d / totalSteps);
+            _stepProgressLabel.Text = totalSteps == 0
+                ? "No flow active"
+                : $"{completedSteps} of {totalSteps} steps complete ({percent}%)";
+        }
 
         var recommendation = FlowRecommendationEngine.Recommend(
             _state,
@@ -17144,6 +17352,478 @@ internal sealed class CopilotService : Form
                 0,
                 Math.Min(topIndex, _flowList.Items.Count - 1));
         }
+    }
+
+    private void OnEfbCommBusEvent(
+        SimConnect sender,
+        SIMCONNECT_RECV_COMM_BUS data)
+    {
+        var eventId = (EfbCommBusEvent)data.uEventID;
+        if (eventId is not EfbCommBusEvent.Command
+            and not EfbCommBusEvent.StateRequest)
+        {
+            return;
+        }
+
+        if (!_efbCommBusChunks.TryGetValue(eventId, out var chunks))
+        {
+            chunks = new List<string>();
+            _efbCommBusChunks[eventId] = chunks;
+        }
+        chunks.Add(data.rgData ?? string.Empty);
+        if (data.dwEntryNumber + 1 < data.dwOutOf)
+        {
+            return;
+        }
+
+        var payload = string.Concat(chunks);
+        chunks.Clear();
+        if (eventId == EfbCommBusEvent.StateRequest)
+        {
+            PublishEfbState(force: true);
+            return;
+        }
+
+        HandleEfbCommand(payload);
+    }
+
+    private void HandleEfbCommand(string payload)
+    {
+        if (!EfbCompanionProtocol.TryParseCommand(
+                payload,
+                out var command,
+                out var parseError))
+        {
+            SendEfbCommandResult(string.Empty, false, parseError);
+            AppLog.Write($"Rejected malformed EFB command: {parseError}");
+            return;
+        }
+
+        if (command.Action == "request_state")
+        {
+            SendEfbCommandResult(
+                command.RequestId,
+                true,
+                "State refresh requested.");
+            PublishEfbState(force: true);
+            return;
+        }
+
+        if (_state == null)
+        {
+            SendEfbCommandResult(
+                command.RequestId,
+                false,
+                "Aircraft telemetry is not available yet.");
+            return;
+        }
+
+        var status = _procedureRunner.Status;
+        var active = IsProcedureActive(status)
+                     || _pendingGsxEngineStartProcedure != null;
+        switch (command.Action)
+        {
+            case "start_flow":
+            {
+                if (active)
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        "Another flow is already active.");
+                    return;
+                }
+
+                var definition = ProcedureCatalog.ForAircraft(_state)
+                    .FirstOrDefault(
+                        item => string.Equals(
+                            item.Id,
+                            command.FlowId,
+                            StringComparison.OrdinalIgnoreCase));
+                if (definition == null)
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        "That flow is not available for the current aircraft.");
+                    return;
+                }
+
+                _commands.Enqueue($"procedure start {definition.Id}");
+                SendEfbCommandResult(
+                    command.RequestId,
+                    true,
+                    $"Starting {definition.Name}.");
+                break;
+            }
+            case "confirm":
+                if (status != ProcedureStatus.WaitingForManualAction)
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        "No pilot action is waiting for confirmation.");
+                    return;
+                }
+                if (_sayIntentionsHandoffInProgress
+                    || _pendingSayIntentionsAtcStepId != null)
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        "The First Officer is already waiting for the ATC response.");
+                    return;
+                }
+
+                _ = HandleConfirmButtonAsync();
+                SendEfbCommandResult(
+                    command.RequestId,
+                    true,
+                    "Confirmation requested.");
+                break;
+            case "pause":
+                if (status is not ProcedureStatus.Running
+                    and not ProcedureStatus.WaitingForManualAction
+                    and not ProcedureStatus.WaitingForVerification)
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        "The current flow cannot be paused.");
+                    return;
+                }
+                _commands.Enqueue("procedure pause");
+                SendEfbCommandResult(command.RequestId, true, "Pausing flow.");
+                break;
+            case "resume":
+                if (status != ProcedureStatus.Paused)
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        "The current flow is not paused.");
+                    return;
+                }
+                _commands.Enqueue("procedure resume");
+                SendEfbCommandResult(command.RequestId, true, "Resuming flow.");
+                break;
+            case "cancel":
+                if (!active)
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        "No flow is active.");
+                    return;
+                }
+                _commands.Enqueue("procedure cancel");
+                SendEfbCommandResult(command.RequestId, true, "Cancelling flow.");
+                break;
+        }
+
+        AppLog.Write(
+            $"Accepted MSFS EFB command '{command.Action}' "
+            + $"({command.RequestId}).");
+    }
+
+    private void SendEfbCommandResult(
+        string requestId,
+        bool accepted,
+        string message)
+    {
+        SendEfbEnvelope(
+            new Dictionary<string, object?>
+            {
+                ["protocolVersion"] = EfbCompanionProtocol.Version,
+                ["kind"] = "commandResult",
+                ["requestId"] = requestId,
+                ["accepted"] = accepted,
+                ["message"] = message,
+                ["sentUtc"] = DateTime.UtcNow.ToString("O")
+            });
+    }
+
+    private void PublishEfbState(bool force = false)
+    {
+        if (_simConnect == null)
+        {
+            return;
+        }
+
+        var envelope = BuildEfbStateEnvelope();
+        SendEfbEnvelope(envelope);
+    }
+
+    private Dictionary<string, object?> BuildEfbStateEnvelope()
+    {
+        var state = _state;
+        var gsx = GsxLiveStatusFormatter.Format(
+            _gsxTooltip,
+            _gsxMenu,
+            _settings.EnableGsxIntegration,
+            _gsxInstallation != null,
+            _gsxCouatlStarted);
+        var definition =
+            _pendingGsxEngineStartProcedure ?? _procedureRunner.Definition;
+        var currentStep = _pendingGsxEngineStartProcedure == null
+            ? _procedureRunner.CurrentStep
+            : null;
+        var recommendation = state == null
+            ? null
+            : FlowRecommendationEngine.Recommend(
+                state,
+                _completedProcedureIds).Procedure;
+        var totalSteps = definition?.Steps.Count ?? 0;
+        var completedSteps = _pendingGsxEngineStartProcedure != null
+            ? 0
+            : Math.Min(totalSteps, _procedureRunner.CompletedStepCount);
+        var waitingFor = state == null
+            ? "Waiting for aircraft telemetry."
+            : _pendingGsxEngineStartProcedure != null
+                ? FormatGsxPushbackWaitingReason()
+                : FormatWaitingReason(
+                    currentStep,
+                    state,
+                    _procedureRunner.Status);
+        var statusText = _pendingGsxEngineStartProcedure != null
+            ? "Waiting for GSX"
+            : FormatProcedureStatus(_procedureRunner.Status);
+        var procedureActive =
+            IsProcedureActive(_procedureRunner.Status)
+            || _pendingGsxEngineStartProcedure != null;
+
+        var flows = state == null
+            ? Array.Empty<object>()
+            : ProcedureCatalog.ForAircraft(state)
+                .Select(
+                    flow => (object)new Dictionary<string, object?>
+                    {
+                        ["id"] = flow.Id,
+                        ["name"] = flow.Name,
+                        ["automationSummary"] = flow.AutomationSummary,
+                        ["state"] = string.Equals(
+                                        flow.Id,
+                                        definition?.Id,
+                                        StringComparison.OrdinalIgnoreCase)
+                            ? "current"
+                            : _completedProcedureIds.Contains(flow.Id)
+                                ? "done"
+                                : string.Equals(
+                                    flow.Id,
+                                    recommendation?.Id,
+                                    StringComparison.OrdinalIgnoreCase)
+                                    ? "next"
+                                    : "upcoming"
+                    })
+                .ToArray();
+
+        return new Dictionary<string, object?>
+        {
+            ["protocolVersion"] = EfbCompanionProtocol.Version,
+            ["kind"] = "state",
+            ["sentUtc"] = DateTime.UtcNow.ToString("O"),
+            ["companionVersion"] = GetApplicationVersion(),
+            ["connected"] = _simConnect != null,
+            ["aircraftReady"] = state != null,
+            ["aircraft"] = new Dictionary<string, object?>
+            {
+                ["title"] = state?.Title ?? "Waiting for aircraft",
+                ["family"] = state?.AircraftFamilyLabel ?? "Unknown",
+                ["supported"] = state?.IsSupportedAircraft == true,
+                ["warning"] = state?.IsAsobo737Max8 == true
+                    ? "Development beta: MAX Flow 7 is not cleared for unattended use."
+                    : null,
+                ["phase"] = state == null
+                    ? "Unknown"
+                    : OperationalPhaseDetector.Detect(state).ToString()
+            },
+            ["telemetry"] = new Dictionary<string, object?>
+            {
+                ["aglFeet"] = state?.AltitudeAboveGroundFeet ?? 0,
+                ["altitudeFeet"] = state?.IndicatedAltitudeFeet ?? 0,
+                ["airspeedKnots"] = state?.IndicatedAirspeedKnots ?? 0,
+                ["verticalSpeedFpm"] = state?.VerticalSpeedFeetPerMinute ?? 0
+            },
+            ["flow"] = new Dictionary<string, object?>
+            {
+                ["id"] = definition?.Id,
+                ["name"] = definition?.Name ?? "No active flow",
+                ["status"] = statusText,
+                ["currentStepId"] = currentStep?.Id,
+                ["currentStep"] = currentStep?.Label ?? "No active step",
+                ["assignedRole"] = currentStep == null
+                    ? string.Empty
+                    : FormatCrewRole(currentStep.AssignedRole),
+                ["completedSteps"] = completedSteps,
+                ["totalSteps"] = totalSteps,
+                ["waitingFor"] = waitingFor,
+                ["canStart"] = state != null && !procedureActive,
+                ["canConfirm"] =
+                    _procedureRunner.Status
+                        == ProcedureStatus.WaitingForManualAction
+                    && !_sayIntentionsHandoffInProgress
+                    && _pendingSayIntentionsAtcStepId == null,
+                ["canPause"] = _procedureRunner.Status
+                    is ProcedureStatus.Running
+                    or ProcedureStatus.WaitingForManualAction
+                    or ProcedureStatus.WaitingForVerification,
+                ["canResume"] =
+                    _procedureRunner.Status == ProcedureStatus.Paused,
+                ["canCancel"] = procedureActive
+            },
+            ["flows"] = flows,
+            ["gsx"] = new Dictionary<string, object?>
+            {
+                ["summary"] = gsx.SummaryText,
+                ["passengerProgress"] = gsx.PassengerProgressText,
+                ["passengerPercent"] = gsx.PassengerPercent ?? 0,
+                ["actionRequired"] = gsx.ActionRequiredText,
+                ["hasActionRequired"] = gsx.HasActionRequired,
+                ["activeServices"] = gsx.ActiveServices.ToArray()
+            }
+        };
+    }
+
+    private void SendEfbEnvelope(object envelope)
+    {
+        if (_simConnect == null)
+        {
+            return;
+        }
+
+        try
+        {
+            var companionTargets =
+                (SIMCONNECT_COMM_BUS_BROADCAST_TO)Enum.Parse(
+                    typeof(SIMCONNECT_COMM_BUS_BROADCAST_TO),
+                    "ALL",
+                    true);
+            _simConnect.CallCommBusEvent(
+                EfbCompanionProtocol.StateEventName,
+                companionTargets,
+                EfbCompanionProtocol.Serialize(envelope));
+        }
+        catch (Exception exception)
+        {
+            AppLog.Write(
+                $"Could not publish MSFS EFB companion state: "
+                + exception.Message);
+        }
+    }
+
+    private void DrawFlowItem(object? sender, DrawItemEventArgs e)
+    {
+        if (_flowList == null
+            || e.Index < 0
+            || e.Index >= _flowList.Items.Count
+            || !(_flowList.Items[e.Index] is ProcedureListItem item))
+        {
+            return;
+        }
+
+        var selected = (e.State & DrawItemState.Selected) != 0;
+        var background = selected
+            ? System.Drawing.Color.FromArgb(232, 240, 249)
+            : item.Active
+                ? System.Drawing.Color.FromArgb(239, 246, 255)
+                : System.Drawing.Color.White;
+        using (var backgroundBrush = new System.Drawing.SolidBrush(background))
+        {
+            e.Graphics.FillRectangle(backgroundBrush, e.Bounds);
+        }
+
+        var markerColor = item.Completed
+            ? System.Drawing.Color.FromArgb(39, 130, 87)
+            : item.Active
+                ? System.Drawing.Color.FromArgb(37, 99, 235)
+                : item.Recommended
+                    ? System.Drawing.Color.FromArgb(217, 119, 6)
+                    : System.Drawing.Color.FromArgb(209, 213, 219);
+        using (var markerBrush = new System.Drawing.SolidBrush(markerColor))
+        {
+            e.Graphics.FillEllipse(
+                markerBrush,
+                e.Bounds.Left + 8,
+                e.Bounds.Top + 8,
+                14,
+                14);
+        }
+
+        var markerText = item.Completed ? "✓" : (e.Index + 1).ToString();
+        using (var markerFont = new System.Drawing.Font(
+                   Font.FontFamily,
+                   7,
+                   System.Drawing.FontStyle.Bold))
+        {
+            TextRenderer.DrawText(
+                e.Graphics,
+                markerText,
+                markerFont,
+                new System.Drawing.Rectangle(e.Bounds.Left + 7, e.Bounds.Top + 7, 16, 16),
+                item.Completed
+                    ? System.Drawing.Color.White
+                    : System.Drawing.Color.FromArgb(55, 65, 81),
+                TextFormatFlags.HorizontalCenter | TextFormatFlags.VerticalCenter);
+        }
+
+        var statusText = item.Active
+            ? "CURRENT"
+            : item.Recommended
+                ? "NEXT"
+                : item.Completed
+                    ? "DONE"
+                    : "UPCOMING";
+        using (var nameFont = new System.Drawing.Font(
+                   Font.FontFamily,
+                   9,
+                   item.Active
+                       ? System.Drawing.FontStyle.Bold
+                       : System.Drawing.FontStyle.Regular))
+        {
+            TextRenderer.DrawText(
+                e.Graphics,
+                item.Definition.Name,
+                nameFont,
+                new System.Drawing.Rectangle(
+                    e.Bounds.Left + 30,
+                    e.Bounds.Top + 3,
+                    e.Bounds.Width - 190,
+                    24),
+                System.Drawing.Color.FromArgb(31, 41, 55),
+                TextFormatFlags.Left | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        }
+        using (var statusFont = new System.Drawing.Font(
+                   Font.FontFamily,
+                   8,
+                   System.Drawing.FontStyle.Bold))
+        {
+            TextRenderer.DrawText(
+                e.Graphics,
+                statusText,
+                statusFont,
+                new System.Drawing.Rectangle(e.Bounds.Right - 150, e.Bounds.Top + 3, 65, 24),
+                markerColor,
+                TextFormatFlags.Right | TextFormatFlags.VerticalCenter);
+        }
+        using (var detailFont = new System.Drawing.Font(Font.FontFamily, 8))
+        {
+            TextRenderer.DrawText(
+                e.Graphics,
+                item.Definition.AutomationSummary,
+                detailFont,
+                new System.Drawing.Rectangle(e.Bounds.Right - 82, e.Bounds.Top + 3, 78, 24),
+                System.Drawing.Color.DimGray,
+                TextFormatFlags.Right | TextFormatFlags.VerticalCenter | TextFormatFlags.EndEllipsis);
+        }
+
+        using var separator =
+            new System.Drawing.Pen(System.Drawing.Color.FromArgb(229, 231, 235));
+        e.Graphics.DrawLine(
+            separator,
+            e.Bounds.Left + 30,
+            e.Bounds.Bottom - 1,
+            e.Bounds.Right,
+            e.Bounds.Bottom - 1);
     }
 
     private void FinishOneShot(int exitCode = 0)

@@ -1,0 +1,31 @@
+{
+  "name": "@msfs2024-ai/vfo-efb",
+  "version": "0.1.0",
+  "private": true,
+  "license": "MIT",
+  "scripts": {
+    "build": "node ./build.js",
+    "clean": "if exist ./dist/ (rmdir /s /q dist)",
+    "rebuild": "npm run clean && npm run build",
+    "watch": "cross-env SERVING_MODE=WATCH node ./build.js"
+  },
+  "dependencies": {
+    "@efb/efb-api": "file:../.sdk/efb_api/dist/",
+    "@microsoft/msfs-sdk": "file:../.sdk/vendor/microsoft-msfs-sdk-2.1.1.tgz",
+    "@microsoft/msfs-types": "^1.14.6"
+  },
+  "devDependencies": {
+    "@fal-works/esbuild-plugin-global-externals": "^2.1.2",
+    "@jgoz/esbuild-plugin-typecheck": "^3.0.2",
+    "@types/node": "^18.15.5",
+    "cross-env": "^7.0.3",
+    "dotenv": "^16.0.3",
+    "esbuild": "0.21.5",
+    "esbuild-copy-static-files": "^0.1.0",
+    "esbuild-sass-plugin": "3.3.0",
+    "postcss": "^8.4.30",
+    "postcss-prefix-selector": "1.16.0",
+    "postcss-url": "^10.1.3",
+    "typescript": "~5.6.2"
+  }
+}

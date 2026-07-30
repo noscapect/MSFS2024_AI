@@ -7,6 +7,26 @@
 Provides the management interface, settings, logs, procedure controls, flight
 overview, and pilot interaction.
 
+### MSFS 2024 EFB companion
+
+Provides an in-simulator presentation and control surface so a single-screen
+pilot does not need to Alt-Tab. It is an official EFB app built with the MSFS
+2024 EFB SDK and communicates with the external application through CommBus.
+
+The EFB is not another procedure engine. It renders desktop-owned snapshots
+and can request only an allow-listed set of procedure operations. The C#
+application validates protocol version, current procedure state, current
+aircraft flow catalog, and SayIntentions handoff state before placing any
+operation on the existing command queue.
+
+```text
+MSFS EFB TypeScript app
+        ⇅ versioned JSON / CommBus
+CopilotService command and snapshot bridge
+        ⇅
+Existing procedure, aircraft, GSX, and SayIntentions subsystems
+```
+
 ### Procedure engine
 
 Owns the gate-to-gate state machine. Each procedure contains ordered and

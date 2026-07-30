@@ -3,6 +3,12 @@
 **/obj/
 build-check/
 artifacts/
+src/EfbCompanion/PackageSources/.sdk/
+src/EfbCompanion/PackageSources/VfoEfb/node_modules/
+src/EfbCompanion/PackageSources/VfoEfb/dist/
+src/EfbCompanion/Packages/
+src/EfbCompanion/PackagesMetadata/
+src/EfbCompanion/_PackageInt/
 
 # Temporary development dependencies and scratch data
 .tmp/

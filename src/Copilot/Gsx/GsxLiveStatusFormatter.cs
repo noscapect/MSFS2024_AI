@@ -12,6 +12,8 @@ internal sealed class GsxLiveState
     public int? PassengerPercent { get; set; }
     public int? PassengerCurrent { get; set; }
     public int? PassengerTotal { get; set; }
+    public bool BoardingInProgress { get; set; }
+    public bool BoardingComplete { get; set; }
     public string? ActionRequiredText { get; set; }
     public bool HasActionRequired => !string.IsNullOrWhiteSpace(ActionRequiredText);
     public IReadOnlyList<string> ActiveServices { get; set; } = Array.Empty<string>();
@@ -57,6 +59,10 @@ internal static class GsxLiveStatusFormatter
 
         state.ActiveServices = cleanLines;
 
+        var boardingLines = cleanLines
+            .Where(MentionsBoarding)
+            .ToList();
+
         // Parse passenger progress if present
         foreach (var line in cleanLines)
         {
@@ -71,6 +77,21 @@ internal static class GsxLiveStatusFormatter
                 break;
             }
         }
+
+        state.BoardingComplete =
+            state.PassengerCurrent.HasValue
+            && state.PassengerTotal.HasValue
+            && state.PassengerCurrent.Value >= state.PassengerTotal.Value;
+        if (!state.BoardingComplete)
+        {
+            state.BoardingComplete = boardingLines.Any(
+                line => line.IndexOf("boarding complete", StringComparison.OrdinalIgnoreCase) >= 0
+                        || line.IndexOf("boarding completed", StringComparison.OrdinalIgnoreCase) >= 0
+                        || line.IndexOf("boarding finished", StringComparison.OrdinalIgnoreCase) >= 0
+                        || line.IndexOf("all passengers boarded", StringComparison.OrdinalIgnoreCase) >= 0);
+        }
+        state.BoardingInProgress = boardingLines.Count > 0
+                                   && !state.BoardingComplete;
 
         // Parse actions required
         var actions = new List<string>();
@@ -130,4 +151,9 @@ internal static class GsxLiveStatusFormatter
 
         return state;
     }
+
+    private static bool MentionsBoarding(string line) =>
+        line.IndexOf("deboarding", StringComparison.OrdinalIgnoreCase) < 0
+        && (line.IndexOf("boarding", StringComparison.OrdinalIgnoreCase) >= 0
+            || line.IndexOf("passengers boarded", StringComparison.OrdinalIgnoreCase) >= 0);
 }

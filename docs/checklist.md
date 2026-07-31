@@ -106,11 +106,15 @@ the FMC TAKEOFF REF setup in this same flow.
 5. **Captain:** Turn APU BLEED ON; detected from native state.
 6. **Captain:** Disconnect external power; detected from aircraft state.
 7. **Captain:** Turn beacon ON; detected from aircraft state.
-8. **Pilot/F/O ATC:** Press **Confirm now** to reaffirm the SayIntentions
-   Copilot handoff and delegate pushback/start clearance. SayIntentions handles the ATC exchange and
-   radio tuning. Without SayIntentions, use built-in MSFS ATC.
-9. **F/O automatic:** Set transponder mode to AUTO.
-10. **Monitor:** Wait until all configured cabin and cargo doors are closed.
+8. **GSX gate:** If GSX boarding is enabled or underway, wait for GSX to
+   report boarding complete. The clearance action remains disabled while the
+   passenger count is incomplete.
+9. **Pilot/F/O ATC:** Press **Confirm now** to reaffirm the SayIntentions
+   Copilot handoff and delegate pushback/start clearance. SayIntentions handles
+   the ATC exchange and radio tuning. Without SayIntentions, use built-in MSFS
+   ATC.
+10. **F/O automatic:** Set transponder mode to AUTO.
+11. **Monitor:** Wait until all configured cabin and cargo doors are closed.
 
 ## 4. Engine Start Sequence
 

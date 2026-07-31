@@ -66,6 +66,7 @@ internal sealed class CopilotService : Form
     private GsxDepartureAction? _pendingGsxAction;
     private DateTime? _pendingGsxActionDeadlineUtc;
     private bool _gsxBoardingRequestedThisFlight;
+    private bool _gsxBoardingCompletedThisFlight;
     private bool _gsxDepartureRequestedThisFlight;
     private bool _gsxDeboardingRequestedThisFlight;
     private bool _gsxDepartureRequestAccepted;
@@ -7654,6 +7655,7 @@ internal sealed class CopilotService : Form
         }
         _completedProcedureIds.Clear();
         _gsxBoardingRequestedThisFlight = false;
+        _gsxBoardingCompletedThisFlight = false;
         _gsxDepartureRequestedThisFlight = false;
         _gsxDeboardingRequestedThisFlight = false;
         _gsxDepartureRequestAccepted = false;
@@ -15229,6 +15231,14 @@ internal sealed class CopilotService : Form
     private async Task HandleConfirmButtonAsync()
     {
         var step = _procedureRunner.CurrentStep;
+        if (IsPushbackClearanceBlockedByGsx(step))
+        {
+            AppendDashboardLog(
+                "Pushback/start clearance request blocked until GSX boarding is complete.");
+            UpdateProcedureActionButtons();
+            PublishEfbState(force: true);
+            return;
+        }
         var flight = _sayIntentionsFlight;
         if (step == null
             || !IsSayIntentionsAtcStep(step.Id)
@@ -15359,6 +15369,40 @@ internal sealed class CopilotService : Form
             or "captain-pushback-clearance"
             or "fo-taxi-clearance"
             or "fo-takeoff-clearance";
+
+    private GsxLiveState GetGsxLiveState()
+    {
+        var gsx = GsxLiveStatusFormatter.Format(
+            _gsxTooltip,
+            _gsxMenu,
+            _settings.EnableGsxIntegration,
+            _gsxInstallation != null,
+            _gsxCouatlStarted);
+        if (gsx.BoardingComplete)
+        {
+            _gsxBoardingCompletedThisFlight = true;
+        }
+        return gsx;
+    }
+
+    private bool IsPushbackClearanceBlockedByGsx(ProcedureStep? step)
+    {
+        if (!string.Equals(
+                step?.Id,
+                "captain-pushback-clearance",
+                StringComparison.OrdinalIgnoreCase)
+            || !_settings.EnableGsxIntegration
+            || _gsxInstallation == null)
+        {
+            return false;
+        }
+
+        var gsx = GetGsxLiveState();
+        var boardingExpected = _settings.GsxAutomaticallyRequestBoarding
+                               || _gsxBoardingRequestedThisFlight
+                               || gsx.BoardingInProgress;
+        return boardingExpected && !_gsxBoardingCompletedThisFlight;
+    }
 
     private bool SimBriefConfigured =>
         !string.IsNullOrWhiteSpace(_settings.SimBriefPilotId)
@@ -16903,6 +16947,8 @@ internal sealed class CopilotService : Form
         var status = _procedureRunner.Status;
         var active = IsProcedureActive(status);
         var waitingForGsx = _pendingGsxEngineStartProcedure != null;
+        var waitingForBoarding = IsPushbackClearanceBlockedByGsx(
+            _procedureRunner.CurrentStep);
 
         if (_startFirstFlowButton != null)
         {
@@ -16960,10 +17006,13 @@ internal sealed class CopilotService : Form
                 ? System.Drawing.Color.FromArgb(245, 158, 11)
                 : System.Drawing.Color.FromArgb(34, 148, 96);
             _confirmCompletedButton.Enabled = !waitingForGsx
+                                              && !waitingForBoarding
                                               && !_sayIntentionsHandoffInProgress
                                               && !waitingForAtc;
             _confirmCompletedButton.Text = waitingForGsx
                 ? "Waiting for GSX..."
+                : waitingForBoarding
+                ? "Waiting for boarding..."
                 : _sayIntentionsHandoffInProgress
                 ? "Handing ATC to F/O..."
                 : waitingForAtc
@@ -17026,6 +17075,10 @@ internal sealed class CopilotService : Form
         }
         if (status == ProcedureStatus.WaitingForManualAction)
         {
+            if (IsPushbackClearanceBlockedByGsx(step))
+            {
+                return "Waiting for: GSX boarding completion before requesting pushback and engine-start clearance.";
+            }
             if (_sayIntentionsFlight != null && IsSayIntentionsAtcStep(step.Id))
             {
                 return step.Id switch
@@ -17604,12 +17657,7 @@ internal sealed class CopilotService : Form
     private Dictionary<string, object?> BuildEfbStateEnvelope()
     {
         var state = _state;
-        var gsx = GsxLiveStatusFormatter.Format(
-            _gsxTooltip,
-            _gsxMenu,
-            _settings.EnableGsxIntegration,
-            _gsxInstallation != null,
-            _gsxCouatlStarted);
+        var gsx = GetGsxLiveState();
         var definition =
             _pendingGsxEngineStartProcedure ?? _procedureRunner.Definition;
         var currentStep = _pendingGsxEngineStartProcedure == null
@@ -17708,6 +17756,7 @@ internal sealed class CopilotService : Form
                 ["canConfirm"] =
                     _procedureRunner.Status
                         == ProcedureStatus.WaitingForManualAction
+                    && !IsPushbackClearanceBlockedByGsx(currentStep)
                     && !_sayIntentionsHandoffInProgress
                     && _pendingSayIntentionsAtcStepId == null,
                 ["canPause"] = _procedureRunner.Status

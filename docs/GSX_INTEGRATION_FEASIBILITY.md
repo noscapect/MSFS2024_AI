@@ -24,8 +24,10 @@ in v0.9.5. Its scope is intentionally smaller than complete GSX automation:
 
 - GSX keeps all service-depth and timing configuration.
 - The app requests boarding during preflight when enabled.
-- The app requests **Prepare for Pushback and Departure** after the existing
-  ATC clearance checkpoint.
+- When boarding is expected or in progress, the app blocks the Flow 3
+  pushback/start-clearance request until GSX reports boarding complete.
+- The app requests **Prepare for Pushback and Departure** after that gated ATC
+  clearance checkpoint.
 - The app displays later GSX questions and returns the user's selected answer;
   captain choices remain under pilot control.
 - Arrival services and deeper automation remain deferred until after v1.0.
@@ -195,8 +197,9 @@ The protocol proof should be a modest task. A polished, reliable gate-to-gate
 integration is a larger feature because the difficult part is coordinating
 dynamic services and aircraft state, not sending the initial GSX command.
 
-Implemented baseline: VFO can request boarding, prepare departure/pushback,
-and request deboarding after Flow 12 detects the aircraft parked at the gate
+Implemented baseline: VFO can request boarding, gate pushback/start clearance
+on boarding completion, prepare departure/pushback, and request deboarding
+after Flow 12 detects the aircraft parked at the gate
 with parking brake set, engines off, and APU or external power available. Each
 automation is optional in the GSX integration settings so cargo or positioning
 flights can keep GSX services manual.

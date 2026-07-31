@@ -130,6 +130,8 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
     FSComponent.createRef<HTMLButtonElement>();
   private readonly nextFlowButtonRef =
     FSComponent.createRef<HTMLButtonElement>();
+  private readonly nextFlowHitboxRef =
+    FSComponent.createRef<HTMLDivElement>();
   private readonly confirmButtonRef =
     FSComponent.createRef<HTMLButtonElement>();
   private readonly pauseButtonRef =
@@ -156,7 +158,11 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
   private readonly receiveEnvelope =
     (payload: string): void => this.onEnvelope(payload);
   private readonly handleNextFlowClick =
-    (): void => this.startNextFlow();
+    (): void => {
+      if (!this.nextFlowButtonRef.instance.disabled) {
+        this.startNextFlow();
+      }
+    };
   private readonly handleStartFlowClick =
     (): void => this.startSelectedFlow();
   private readonly handleConfirmClick =
@@ -171,7 +177,7 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
   public onAfterRender(_node: VNode): void {
     // The MSFS SDK FSComponent renderer treats raw JSX event props as string
     // attributes. Wire native controls explicitly so Coherent receives clicks.
-    this.nextFlowButtonRef.instance.addEventListener(
+    this.nextFlowHitboxRef.instance.addEventListener(
       "click",
       this.handleNextFlowClick
     );
@@ -211,7 +217,7 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
   }
 
   public onClose(): void {
-    this.nextFlowButtonRef.instance.removeEventListener(
+    this.nextFlowHitboxRef.instance.removeEventListener(
       "click",
       this.handleNextFlowClick
     );
@@ -562,7 +568,7 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
       <div class="vfo-efb">
         <header class="app-header">
           <div>
-            <div class="eyebrow">MSFS 2024 - EFB build 0.2.3</div>
+            <div class="eyebrow">MSFS 2024 - EFB build 0.2.4</div>
             <h1>Virtual First Officer</h1>
           </div>
           <div ref={this.connectionRef} class="connection waiting">
@@ -577,13 +583,15 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
               Continue the gate-to-gate sequence
             </div>
           </div>
-          <button
-            ref={this.nextFlowButtonRef}
-            class="button next-flow"
-            disabled
-          >
-            Waiting for flow state
-          </button>
+          <div ref={this.nextFlowHitboxRef} class="next-flow-hitbox">
+            <button
+              ref={this.nextFlowButtonRef}
+              class="button next-flow"
+              disabled
+            >
+              Waiting for flow state
+            </button>
+          </div>
         </section>
 
         <main class="dashboard-grid">
@@ -714,7 +722,7 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
 // The class name is the EFB internal app identity and is applied to the host
 // `.efb-view` element. Version it together with the CSS scope when forcing
 // MSFS to discard a cached app and stylesheet.
-class VfoEfbV5 extends App {
+class VfoEfbV6 extends App {
   public get name(): string {
     return "Virtual First Officer";
   }
@@ -740,4 +748,4 @@ class VfoEfbV5 extends App {
   }
 }
 
-Efb.use(VfoEfbV5);
+Efb.use(VfoEfbV6);

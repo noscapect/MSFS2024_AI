@@ -268,8 +268,11 @@ The released implementation follows the locally installed official GSX Remote
 Control SDK contract. It provides installation and Couatl discovery, passive
 menu/status observation, Remote Control ownership protection, dynamic menu
 matching, and non-blocking fallback. Flow 2 can request the user-configured
-GSX boarding operation. Completing the existing pushback/start-clearance
-checkpoint can request GSX **Prepare for Pushback and Departure**.
+GSX boarding operation. When GSX boarding is expected or already active, the
+pushback/start-clearance action remains disabled until an explicit boarding
+completion status (including completed passenger counts) has been observed.
+Completing that gated clearance checkpoint can then request GSX **Prepare for
+Pushback and Departure**.
 When GSX departure coordination is active, an early Flow 4 selection remains
 pending until the parking brake is released and aircraft movement confirms
 that pushback is underway; engine start then begins automatically.

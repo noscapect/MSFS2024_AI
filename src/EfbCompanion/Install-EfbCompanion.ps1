@@ -49,7 +49,7 @@ if (Test-Path -LiteralPath $targetFull) {
     Remove-Item -LiteralPath $targetFull -Recurse -Force
 }
 
-$appTarget = Join-Path $targetFull "html_ui\efb_ui\efb_apps\VfoEfbV5"
+$appTarget = Join-Path $targetFull "html_ui\efb_ui\efb_apps\VfoEfbV6"
 New-Item -ItemType Directory -Path $appTarget -Force | Out-Null
 Copy-Item -Path (Join-Path $distRoot "*") -Destination $appTarget -Recurse -Force
 $contentInfoTarget = Join-Path $targetFull "ContentInfo\$packageName"
@@ -75,7 +75,7 @@ $manifest = [ordered]@{
     title = "MSFS 2024 Virtual First Officer EFB"
     manufacturer = "noscapect"
     creator = "noscapect"
-    package_version = "0.2.3"
+    package_version = "0.2.4"
     minimum_game_version = "1.7.0"
     minimum_compatibility_version = "1.0.0.0"
     export_type = "Community"

@@ -16,6 +16,7 @@ The EFB app provides:
 - Gate-to-gate flow status and next-flow selection
 - Aircraft phase and AGL/altitude/airspeed/vertical-speed telemetry
 - GSX live status, boarding percentage, and action-required prompts
+- GSX-aware pushback/start-clearance gating while boarding is incomplete
 - Connection and stale-state warnings
 
 `Copilot.exe` remains mandatory. The EFB does not contain aircraft mappings or
@@ -60,10 +61,10 @@ Restart MSFS after installing or updating the Community package. Open the
 simulator EFB app list and select **Virtual First Officer**. Start
 `Copilot.exe` before using its controls.
 
-The current development app uses the versioned internal identity `VfoEfbV5`
-and displays EFB build `0.2.3`. MSFS applies the internal name to the host
+The current development app uses the versioned internal identity `VfoEfbV6`
+and displays EFB build `0.2.4`. MSFS applies the internal name to the host
 `.efb-view` element, and the generated stylesheet is deliberately scoped to
-`.efb-view.VfoEfbV5`. Increment this identity when a simulator-level asset
+`.efb-view.VfoEfbV6`. Increment this identity when a simulator-level asset
 cache must be invalidated.
 
 ## CommBus protocol
@@ -98,9 +99,13 @@ After restarting MSFS:
 2. Open it with the desktop app stopped and verify the disconnected state.
 3. Start `Copilot.exe` and verify connection within five seconds.
 4. Start a safe ground flow from the EFB.
-5. Verify Confirm is enabled only for a manual-action step.
-6. Exercise pause and resume.
-7. Cancel a test flow and verify the confirmation prompt.
-8. Check live aircraft telemetry and GSX boarding progress.
-9. Restart the desktop app and verify EFB reconnection.
-10. Confirm no raw cockpit command can be submitted from the EFB.
+5. Click the left, center, and right portions of the wide recommended-action
+   button and verify its complete visible surface is interactive.
+6. Verify Confirm is enabled only for a manual-action step.
+7. During Flow 3, verify Confirm remains disabled while GSX boarding is below
+   its total and becomes available only after boarding completes.
+8. Exercise pause and resume.
+9. Cancel a test flow and verify the confirmation prompt.
+10. Check live aircraft telemetry and GSX boarding progress.
+11. Restart the desktop app and verify EFB reconnection.
+12. Confirm no raw cockpit command can be submitted from the EFB.

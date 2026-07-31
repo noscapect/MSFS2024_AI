@@ -21,7 +21,37 @@ public sealed class GsxLiveStatusFormatterTests
         Assert.AreEqual(82, state.PassengerPercent);
         Assert.AreEqual(180, state.PassengerCurrent);
         Assert.AreEqual(220, state.PassengerTotal);
+        Assert.IsTrue(state.BoardingInProgress);
+        Assert.IsFalse(state.BoardingComplete);
         Assert.IsTrue(state.SummaryText.Contains("180 / 220 passengers"));
+    }
+
+    [TestMethod]
+    public void MarksBoardingCompleteWhenPassengerTotalIsReached()
+    {
+        var state = GsxLiveStatusFormatter.Format(
+            new[] { "[GSX] 140/140 passengers boarded" },
+            null,
+            true,
+            true,
+            true);
+
+        Assert.IsTrue(state.BoardingComplete);
+        Assert.IsFalse(state.BoardingInProgress);
+    }
+
+    [TestMethod]
+    public void MarksBoardingCompleteFromCompletionStatus()
+    {
+        var state = GsxLiveStatusFormatter.Format(
+            new[] { "[GSX] Boarding completed" },
+            null,
+            true,
+            true,
+            true);
+
+        Assert.IsTrue(state.BoardingComplete);
+        Assert.IsFalse(state.BoardingInProgress);
     }
 
     [TestMethod]

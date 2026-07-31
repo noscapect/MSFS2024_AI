@@ -199,7 +199,7 @@ internal static class Asobo737MaxProcedureLibrary
                 Automatic("fo-taxi-light", "Taxi light AUTO", state => state.NoseLightSelectorPosition.HasValue && Math.Abs(state.NoseLightSelectorPosition.Value - 1) < 0.1, "asobo737max taxi-light auto"),
                 Automatic("fo-runway-turnoff-on", "Runway turnoff lights ON", state => state.RunwayTurnoffLightsOn, "asobo737max runway-turnoff on"),
                 Manual("fo-taxi-clearance", "Taxi clearance received", "First Officer: press Confirm now to request taxi clearance through SayIntentions.", CrewRole.FirstOfficer, state => !state.SayIntentionsAtcActive),
-                Observe("captain-taxi-started", "Captain started taxi", state => state.OnGround && state.GroundSpeedKnots > 1)
+                Observe("captain-taxi-started", "Captain started taxi", state => state.ForwardTaxiDetected)
             });
 
     public static ProcedureDefinition BeforeTakeoff { get; } =

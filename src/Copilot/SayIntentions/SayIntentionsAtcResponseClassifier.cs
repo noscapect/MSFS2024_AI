@@ -85,12 +85,13 @@ internal static class SayIntentionsAtcResponseClassifier
 
         return stepId switch
         {
-            // Waiting for the accepted readback verifies that the clearance was
-            // received and acknowledged, rather than merely requested.
+            // A complete issued clearance is sufficient to satisfy the flow.
+            // SayIntentions normally performs the readback itself, but it can
+            // leave the conversation waiting when ATC appends a separate
+            // question (for example, asking whether the crew has the ATIS).
             "captain-ifr-clearance" =>
                 ContainsAny(message, "readback correct", "read back correct")
-                || IsStructuredIfrClearance(message)
-                && IsStructuredIfrClearance(aircraftMessage),
+                || IsStructuredIfrClearance(message),
             "captain-pushback-clearance" =>
                 ContainsAny(
                     message,
@@ -110,7 +111,7 @@ internal static class SayIntentionsAtcResponseClassifier
     public static string VerificationMessage(string stepId) => stepId switch
     {
         "captain-ifr-clearance" =>
-            "SayIntentions ATC verified: IFR clearance received and readback accepted.",
+            "SayIntentions ATC verified: complete IFR clearance received.",
         "captain-pushback-clearance" =>
             "SayIntentions ATC verified: pushback/start clearance received.",
         "fo-taxi-clearance" =>

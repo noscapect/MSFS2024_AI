@@ -113,8 +113,41 @@ message said “readback correct.” Communication-history matching now accepts
 that fallback only when a structured IFR clearance is followed by a later
 structured aircraft readback. SayIntentions stores those as separate history
 records in this scenario; their record order is now correlated. An initial
-request or clearance alone cannot complete the checkpoint, and incoming-message
-updates now also trigger the completion check.
+request alone cannot complete the checkpoint, and incoming-message updates now
+also trigger the completion check.
+
+On 2026-07-31, ATC issued a complete clearance but appended an ATIS-status
+question. SayIntentions did not create a separate First Officer readback, so
+the accepted-readback requirement timed out despite the valid clearance being
+visible in communication history. A complete structured IFR clearance now
+completes the checkpoint directly; incomplete clearances, standby responses,
+and denials remain rejected.
+
+On 2026-07-31, the live GSX `Attach Pushback Tug now?` question exposed a
+Remote Control lifecycle defect. GSX emitted hide-menu event `2` immediately
+after publishing the question, and VFO incorrectly treated it like timeout
+event `3`, closing the response UI and removing the EFB choices. Event `2` now
+retains the cached prompt for desktop and EFB responses. The desktop details
+window is resizable, keeps Save/Refresh/Close visible in a fixed footer, and
+offers both direct prompt choices and a way to reopen the current GSX menu.
+
+The same flight exposed an EFB state-refresh feedback loop. The desktop
+acknowledged each `request_state` command, and the EFB treated every
+acknowledgement like a user-command result and scheduled another refresh.
+Traffic grew beyond 20,000 CommBus requests per minute and produced a 69 MB
+desktop log. Build 0.2.6 ignored refresh acknowledgements in the EFB and
+permitted only one outstanding refresh request with a bounded retry interval.
+Build 0.2.7 adds a rate-limited desktop acknowledgement and tracks it as
+desktop contact independently of the larger state render. The EFB therefore
+does not report a false communication failure during a delayed engine-start
+state update, while the one-second desktop and three-second EFB limits prevent
+the old feedback loop from returning.
+
+The same live sequence showed Flow 5 completing its taxi observation during
+backward GSX pushback, which made Flow 6 eligible before taxi. Taxi detection
+now requires positive longitudinal aircraft velocity, and EFB `start_flow`
+requests are accepted only for the recommendation engine's next incomplete
+flow.
 
 ## 2026-07-20 - v0.9.5 stabilization release
 

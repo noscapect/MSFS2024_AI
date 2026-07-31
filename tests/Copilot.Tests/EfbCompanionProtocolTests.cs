@@ -42,6 +42,39 @@ public sealed class EfbCompanionProtocolTests
     }
 
     [TestMethod]
+    public void ParsesGsxMenuChoice()
+    {
+        const string json =
+            "{\"protocolVersion\":2,\"requestId\":\"gsx-1\","
+            + "\"action\":\"gsx_menu_choice\",\"choiceIndex\":1}";
+
+        var parsed = EfbCompanionProtocol.TryParseCommand(
+            json,
+            out var command,
+            out var error);
+
+        Assert.IsTrue(parsed, error);
+        Assert.AreEqual("gsx_menu_choice", command.Action);
+        Assert.AreEqual(1, command.ChoiceIndex);
+    }
+
+    [TestMethod]
+    public void RejectsGsxMenuChoiceWithoutIndex()
+    {
+        const string json =
+            "{\"protocolVersion\":2,\"requestId\":\"gsx-2\","
+            + "\"action\":\"gsx_menu_choice\"}";
+
+        var parsed = EfbCompanionProtocol.TryParseCommand(
+            json,
+            out _,
+            out var error);
+
+        Assert.IsFalse(parsed);
+        StringAssert.Contains(error, "choice index");
+    }
+
+    [TestMethod]
     public void RejectsArbitraryCockpitCommand()
     {
         const string json =

@@ -48,4 +48,32 @@ public sealed class AircraftStateSanityTests
 
         Assert.AreEqual(0, AircraftStateSanity.Evaluate(state).Count);
     }
+
+    [TestMethod]
+    public void BackwardPushbackIsNotDetectedAsForwardTaxi()
+    {
+        var state = new AircraftState
+        {
+            OnGround = true,
+            ParkingBrakeSet = false,
+            GroundSpeedKnots = 3,
+            LongitudinalVelocityKnots = -3
+        };
+
+        Assert.IsFalse(state.ForwardTaxiDetected);
+    }
+
+    [TestMethod]
+    public void ForwardMovementWithBrakeReleasedIsDetectedAsTaxi()
+    {
+        var state = new AircraftState
+        {
+            OnGround = true,
+            ParkingBrakeSet = false,
+            GroundSpeedKnots = 3,
+            LongitudinalVelocityKnots = 3
+        };
+
+        Assert.IsTrue(state.ForwardTaxiDetected);
+    }
 }

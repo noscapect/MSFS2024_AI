@@ -49,6 +49,7 @@ internal sealed class CopilotService : Form
     private const string MobiFlightRuntimeClientName = "MSFS2024_AI_Copilot_v27";
     private readonly Dictionary<EfbCommBusEvent, List<string>> _efbCommBusChunks =
         new();
+    private DateTime _lastEfbStateRequestResponseUtc = DateTime.MinValue;
     private readonly string? _oneShotCommand;
     private readonly bool _showUi;
     private readonly CopilotSettings _settings;
@@ -514,6 +515,7 @@ internal sealed class CopilotService : Form
     private Label? _gsxLiveActionLabel;
     private Label? _gsxPassengerLabel;
     private ProgressBar? _gsxPassengerProgress;
+    private Button? _manageGsxButton;
     private Label? _simBadgeLabel;
     private Label? _aircraftBadgeLabel;
     private Label? _adapterBadgeLabel;
@@ -926,6 +928,7 @@ internal sealed class CopilotService : Form
 
         public double OnGround;
         public double GroundSpeed;
+        public double LongitudinalVelocity;
         public double Engine1Combustion;
         public double Engine2Combustion;
         public double Engine1Starter;
@@ -1376,6 +1379,7 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "TITLE", null, SIMCONNECT_DATATYPE.STRING256, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "SIM ON GROUND", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "GROUND VELOCITY", "Knots", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "VELOCITY BODY Z", "Feet per second", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "GENERAL ENG COMBUSTION:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "GENERAL ENG COMBUSTION:2", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "GENERAL ENG STARTER ACTIVE:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
@@ -1886,10 +1890,21 @@ internal sealed class CopilotService : Form
                 }
                 break;
             case 2:
+                // The GSX SDK defines event 2 as hideMenu(), not as a
+                // cancellation. Keep the cached question and our remote UI
+                // available so the captain can still return a choice.
+                AppLog.Write(
+                    "GSX requested that its menu be hidden; retaining the pending remote response.");
+                break;
             case 3:
-            case 4:
                 _gsxMenuOpen = false;
                 CloseGsxChoiceDialog();
+                break;
+            case 4:
+                // Closing the stock toolbar panel does not cancel a question
+                // delegated to the registered Remote Control client.
+                AppLog.Write(
+                    "GSX toolbar panel closed; retaining any pending remote response.");
                 break;
         }
     }
@@ -4663,6 +4678,7 @@ internal sealed class CopilotService : Form
             Title = raw.Title,
             OnGround = raw.OnGround != 0,
             GroundSpeedKnots = raw.GroundSpeed,
+            LongitudinalVelocityKnots = raw.LongitudinalVelocity * 0.592483801,
             Engine1Running = isFlyByWireAirbus
                 ? _fbwEngine1State == 1 || (_fbwEngine1N1 ?? (float)raw.Engine1N1) >= 15
                 : isPmdg737
@@ -13877,7 +13893,7 @@ internal sealed class CopilotService : Form
         _gsxLiveActionLabel.Padding = new Padding(8);
         _gsxLiveActionLabel.BackColor = System.Drawing.Color.FromArgb(236, 253, 245);
         _gsxLiveActionLabel.ForeColor = System.Drawing.Color.FromArgb(6, 95, 70);
-        var manageGsxButton = new Button
+        _manageGsxButton = new Button
         {
             Text = "Open GSX details",
             AutoSize = true,
@@ -13887,12 +13903,12 @@ internal sealed class CopilotService : Form
             BackColor = System.Drawing.Color.White,
             UseVisualStyleBackColor = false
         };
-        manageGsxButton.Click += (_, _) => ShowGsxDialog(this);
+        _manageGsxButton.Click += (_, _) => ShowGsxDialog(this);
         gsxLayout.Controls.Add(_gsxLiveSummaryLabel);
         gsxLayout.Controls.Add(_gsxPassengerLabel);
         gsxLayout.Controls.Add(_gsxPassengerProgress);
         gsxLayout.Controls.Add(_gsxLiveActionLabel);
-        gsxLayout.Controls.Add(manageGsxButton);
+        gsxLayout.Controls.Add(_manageGsxButton);
 
         var logGroup = new GroupBox
         {
@@ -14501,6 +14517,21 @@ internal sealed class CopilotService : Form
                 ? System.Drawing.Color.FromArgb(154, 52, 18)
                 : System.Drawing.Color.FromArgb(6, 95, 70);
         }
+        if (_manageGsxButton != null)
+        {
+            var hasSelectablePrompt = _gsxMenuOpen
+                                      && !_gsxMenu.IsEmpty
+                                      && !GsxPromptPolicy.IsRootServicesMenu(_gsxMenu);
+            _manageGsxButton.Text = hasSelectablePrompt
+                ? "Answer GSX prompt..."
+                : "Open GSX details";
+            _manageGsxButton.BackColor = hasSelectablePrompt
+                ? System.Drawing.Color.FromArgb(255, 247, 237)
+                : System.Drawing.Color.White;
+            _manageGsxButton.ForeColor = hasSelectablePrompt
+                ? System.Drawing.Color.FromArgb(154, 52, 18)
+                : System.Drawing.Color.FromArgb(40, 68, 106);
+        }
 
         var badgeText = !_settings.EnableGsxIntegration
             ? "GSX DISABLED"
@@ -14528,22 +14559,32 @@ internal sealed class CopilotService : Form
         using var dialog = new Form
         {
             Text = "GSX departure integration",
-            Width = 680,
-            Height = 520,
+            Width = 720,
+            Height = 640,
+            MinimumSize = new System.Drawing.Size(620, 500),
             StartPosition = FormStartPosition.CenterParent,
-            FormBorderStyle = FormBorderStyle.FixedDialog,
-            MaximizeBox = false,
+            FormBorderStyle = FormBorderStyle.Sizable,
+            MaximizeBox = true,
             MinimizeBox = false
         };
-        var layout = new FlowLayoutPanel
+        var root = new TableLayoutPanel
         {
             Dock = DockStyle.Fill,
             Padding = new Padding(16),
+            ColumnCount = 1,
+            RowCount = 2
+        };
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        dialog.Controls.Add(root);
+        var layout = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
             FlowDirection = FlowDirection.TopDown,
             WrapContents = false,
             AutoScroll = true
         };
-        dialog.Controls.Add(layout);
+        root.Controls.Add(layout, 0, 0);
         layout.Controls.Add(new Label
         {
             Text = "GSX departure coordination",
@@ -14624,6 +14665,42 @@ internal sealed class CopilotService : Form
         };
         layout.Controls.Add(observed);
 
+        var promptControls = new FlowLayoutPanel
+        {
+            AutoSize = true,
+            FlowDirection = FlowDirection.LeftToRight,
+            WrapContents = true,
+            Margin = new Padding(0, 10, 0, 0),
+            Visible = false
+        };
+        var promptLabel = new Label
+        {
+            AutoSize = true,
+            Font = new System.Drawing.Font(
+                Font.FontFamily,
+                Font.Size,
+                System.Drawing.FontStyle.Bold),
+            Margin = new Padding(0, 7, 8, 0)
+        };
+        var promptChoices = new ComboBox
+        {
+            DropDownStyle = ComboBoxStyle.DropDownList,
+            Width = 300
+        };
+        var sendPromptChoice = new Button
+        {
+            Text = "Send response to GSX",
+            AutoSize = true,
+            BackColor = System.Drawing.Color.FromArgb(39, 130, 87),
+            ForeColor = System.Drawing.Color.White,
+            FlatStyle = FlatStyle.Flat,
+            UseVisualStyleBackColor = false
+        };
+        promptControls.Controls.Add(promptLabel);
+        promptControls.Controls.Add(promptChoices);
+        promptControls.Controls.Add(sendPromptChoice);
+        layout.Controls.Add(promptControls);
+
         var testControls = new FlowLayoutPanel
         {
             AutoSize = true,
@@ -14655,9 +14732,34 @@ internal sealed class CopilotService : Form
             Visible = _gsxRemoteControlActive && !_gsxOwnsRemoteControl,
             Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted
         };
+        var openGsxMenu = new Button
+        {
+            Text = "Open current GSX menu",
+            AutoSize = true,
+            Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted
+        };
         requestBoarding.Click += (_, _) => BeginGsxAction(GsxDepartureAction.Boarding);
         prepareDeparture.Click += (_, _) => BeginGsxAction(GsxDepartureAction.PrepareForDeparture);
         requestDeboarding.Click += (_, _) => BeginGsxAction(GsxDepartureAction.Deboarding);
+        openGsxMenu.Click += (_, _) =>
+        {
+            if (!_gsxOwnsRemoteControl)
+            {
+                if (_gsxRemoteControlActive)
+                {
+                    AppendDashboardLog(
+                        "GSX Remote Control is owned by another add-on; the menu was not opened.");
+                    return;
+                }
+
+                SetGsxValue(Definition.GsxRemoteControl, 1);
+                _gsxOwnsRemoteControl = true;
+                _gsxRemoteControlActive = true;
+                _gsxOwnershipLease.MarkOwned(DateTime.UtcNow);
+            }
+            SetGsxValue(Definition.GsxMenuOpen, 1);
+            AppendDashboardLog("Opening the current GSX menu for a response.");
+        };
         recoverControl.Click += (_, _) =>
         {
             var result = MessageBox.Show(
@@ -14681,6 +14783,7 @@ internal sealed class CopilotService : Form
         testControls.Controls.Add(requestBoarding);
         testControls.Controls.Add(prepareDeparture);
         testControls.Controls.Add(requestDeboarding);
+        testControls.Controls.Add(openGsxMenu);
         testControls.Controls.Add(recoverControl);
         layout.Controls.Add(testControls);
 
@@ -14690,8 +14793,30 @@ internal sealed class CopilotService : Form
             recoverControl.Visible = _gsxRemoteControlActive && !_gsxOwnsRemoteControl;
             recoverControl.Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted;
             var tooltip = _gsxFileReader?.ReadTooltip() ?? Array.Empty<string>();
-            var menu = _gsxFileReader?.ReadMenu()
-                       ?? new GsxMenuSnapshot(string.Empty, Array.Empty<string>());
+            var fileMenu = _gsxFileReader?.ReadMenu()
+                           ?? new GsxMenuSnapshot(string.Empty, Array.Empty<string>());
+            var menu = _gsxMenuOpen && !_gsxMenu.IsEmpty
+                ? _gsxMenu
+                : fileMenu;
+            var selectable = _gsxMenuOpen
+                             && !menu.IsEmpty
+                             && !GsxPromptPolicy.IsRootServicesMenu(menu);
+            promptControls.Visible = selectable;
+            if (selectable)
+            {
+                promptLabel.Text = $"Response required: {menu.Title}";
+                promptChoices.BeginUpdate();
+                promptChoices.Items.Clear();
+                foreach (var choice in menu.Choices)
+                {
+                    promptChoices.Items.Add(choice);
+                }
+                promptChoices.EndUpdate();
+                if (promptChoices.Items.Count > 0)
+                {
+                    promptChoices.SelectedIndex = 0;
+                }
+            }
             var lines = new List<string>
             {
                 GsxStatusText(),
@@ -14707,6 +14832,25 @@ internal sealed class CopilotService : Form
             }
             observed.Lines = lines.ToArray();
         }
+
+        sendPromptChoice.Click += (_, _) =>
+        {
+            if (!_gsxMenuOpen
+                || _gsxMenu.IsEmpty
+                || GsxPromptPolicy.IsRootServicesMenu(_gsxMenu)
+                || promptChoices.SelectedIndex < 0
+                || promptChoices.SelectedIndex >= _gsxMenu.Choices.Count)
+            {
+                RefreshObservedState();
+                return;
+            }
+
+            var choiceIndex = promptChoices.SelectedIndex;
+            var choiceLabel = _gsxMenu.Choices[choiceIndex];
+            SendGsxMenuChoice(choiceIndex, choiceLabel);
+            CloseGsxChoiceDialog();
+            RefreshObservedState();
+        };
 
         var buttons = new FlowLayoutPanel
         {
@@ -14732,6 +14876,7 @@ internal sealed class CopilotService : Form
             requestBoarding.Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted;
             prepareDeparture.Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted;
             requestDeboarding.Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted;
+            openGsxMenu.Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted;
             recoverControl.Enabled = _settings.EnableGsxIntegration && _gsxCouatlStarted;
             RefreshObservedState();
         };
@@ -14740,7 +14885,8 @@ internal sealed class CopilotService : Form
         buttons.Controls.Add(save);
         buttons.Controls.Add(refresh);
         buttons.Controls.Add(close);
-        layout.Controls.Add(buttons);
+        buttons.Dock = DockStyle.Fill;
+        root.Controls.Add(buttons, 0, 1);
 
         RefreshObservedState();
         dialog.ShowDialog(owner ?? this);
@@ -17470,10 +17616,20 @@ internal sealed class CopilotService : Form
 
         if (command.Action == "request_state")
         {
+            // A bounded acknowledgement lets the EFB distinguish a busy state
+            // renderer from a disconnected desktop. Rate limiting also keeps
+            // older EFB builds from recreating their acknowledgement loop.
+            var now = DateTime.UtcNow;
+            if (now - _lastEfbStateRequestResponseUtc < TimeSpan.FromSeconds(1))
+            {
+                return;
+            }
+
+            _lastEfbStateRequestResponseUtc = now;
             SendEfbCommandResult(
                 command.RequestId,
                 true,
-                "State refresh requested.");
+                "State refresh acknowledged.");
             PublishEfbState(force: true);
             return;
         }
@@ -17549,11 +17705,62 @@ internal sealed class CopilotService : Form
                     return;
                 }
 
+                var recommendation = FlowRecommendationEngine.Recommend(
+                    _state,
+                    _completedProcedureIds).Procedure;
+                if (recommendation == null
+                    || !string.Equals(
+                        definition.Id,
+                        recommendation.Id,
+                        StringComparison.OrdinalIgnoreCase))
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        recommendation == null
+                            ? "No flow is currently eligible to start."
+                            : $"Complete {recommendation.Name} before starting {definition.Name}.");
+                    return;
+                }
+
                 _commands.Enqueue($"procedure start {definition.Id}");
                 SendEfbCommandResult(
                     command.RequestId,
                     true,
                     $"Starting {definition.Name}.");
+                break;
+            }
+            case "gsx_menu_choice":
+            {
+                if (!_settings.EnableGsxIntegration
+                    || !_gsxMenuOpen
+                    || _gsxMenu.IsEmpty
+                    || GsxPromptPolicy.IsRootServicesMenu(_gsxMenu))
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        "GSX is not waiting for a selectable response.");
+                    return;
+                }
+
+                var choiceIndex = command.ChoiceIndex ?? -1;
+                if (choiceIndex < 0 || choiceIndex >= _gsxMenu.Choices.Count)
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        "That GSX menu choice is no longer available.");
+                    return;
+                }
+
+                var choiceLabel = _gsxMenu.Choices[choiceIndex];
+                SendGsxMenuChoice(choiceIndex, choiceLabel);
+                CloseGsxChoiceDialog();
+                SendEfbCommandResult(
+                    command.RequestId,
+                    true,
+                    $"Sent '{choiceLabel}' to GSX.");
                 break;
             }
             case "confirm":
@@ -17775,7 +17982,19 @@ internal sealed class CopilotService : Form
                 ["passengerPercent"] = gsx.PassengerPercent ?? 0,
                 ["actionRequired"] = gsx.ActionRequiredText,
                 ["hasActionRequired"] = gsx.HasActionRequired,
-                ["activeServices"] = gsx.ActiveServices.ToArray()
+                ["activeServices"] = gsx.ActiveServices.ToArray(),
+                ["promptTitle"] =
+                    _gsxMenuOpen
+                    && !_gsxMenu.IsEmpty
+                    && !GsxPromptPolicy.IsRootServicesMenu(_gsxMenu)
+                        ? _gsxMenu.Title
+                        : null,
+                ["choices"] =
+                    _gsxMenuOpen
+                    && !_gsxMenu.IsEmpty
+                    && !GsxPromptPolicy.IsRootServicesMenu(_gsxMenu)
+                        ? _gsxMenu.Choices.ToArray()
+                        : Array.Empty<string>()
             }
         };
     }

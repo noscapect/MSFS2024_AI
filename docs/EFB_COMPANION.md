@@ -16,11 +16,20 @@ The EFB app provides:
 - Gate-to-gate flow status and next-flow selection
 - Aircraft phase and AGL/altitude/airspeed/vertical-speed telemetry
 - GSX live status, boarding percentage, and action-required prompts
+- Selectable responses for active non-root GSX menus, including tug prompts;
+  GSX hide-panel events retain the pending choices until GSX explicitly closes
+  or times out the question
 - GSX-aware pushback/start-clearance gating while boarding is incomplete
 - Connection and stale-state warnings
 
 `Copilot.exe` remains mandatory. The EFB does not contain aircraft mappings or
 procedure logic.
+
+Background synchronization is bounded to one outstanding state request. State
+refreshes return only a state envelope and are not displayed as command
+results; compatibility handling also ignores refresh acknowledgements from
+older desktop builds. This prevents the acknowledgement/request feedback loop
+observed during the 2026-07-31 engine-start test.
 
 ## Build
 
@@ -61,10 +70,10 @@ Restart MSFS after installing or updating the Community package. Open the
 simulator EFB app list and select **Virtual First Officer**. Start
 `Copilot.exe` before using its controls.
 
-The current development app uses the versioned internal identity `VfoEfbV6`
-and displays EFB build `0.2.4`. MSFS applies the internal name to the host
+The current development app uses the versioned internal identity `VfoEfbV9`
+and displays EFB build `0.2.7`. MSFS applies the internal name to the host
 `.efb-view` element, and the generated stylesheet is deliberately scoped to
-`.efb-view.VfoEfbV6`. Increment this identity when a simulator-level asset
+`.efb-view.VfoEfbV9`. Increment this identity when a simulator-level asset
 cache must be invalidated.
 
 ## CommBus protocol
@@ -79,8 +88,9 @@ Protocol version: `2`
 Allowed actions are:
 
 - `request_state`
-- `start_flow` with a current-aircraft flow ID
+- `start_flow` with the next eligible current-aircraft flow ID
 - `start_next_flow`
+- `gsx_menu_choice` with an index from the currently open non-root GSX prompt
 - `confirm`
 - `pause`
 - `resume`
@@ -90,6 +100,11 @@ Every command carries a request ID and protocol version. The desktop sends an
 accepted/rejected result and continues publishing authoritative state
 snapshots. Unknown actions, protocol versions, flow IDs, and operations that
 are invalid for the current procedure state are rejected.
+
+Only the next incomplete flow is selectable and accepted. This prevents the
+EFB from skipping operational prerequisites even if it holds stale state.
+Flow 5 also uses signed longitudinal movement, so backward GSX pushback cannot
+be mistaken for the captain commencing forward taxi.
 
 ## Required live test
 
@@ -107,5 +122,7 @@ After restarting MSFS:
 8. Exercise pause and resume.
 9. Cancel a test flow and verify the confirmation prompt.
 10. Check live aircraft telemetry and GSX boarding progress.
-11. Restart the desktop app and verify EFB reconnection.
-12. Confirm no raw cockpit command can be submitted from the EFB.
+11. Trigger a GSX secondary prompt such as **Attach Pushback Tug now?** and
+   answer it from the EFB; verify the prompt closes and GSX continues.
+12. Restart the desktop app and verify EFB reconnection.
+13. Confirm no raw cockpit command can be submitted from the EFB.

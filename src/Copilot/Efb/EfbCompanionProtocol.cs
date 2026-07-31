@@ -8,6 +8,7 @@ internal sealed class EfbCompanionCommand
     public string RequestId { get; set; } = string.Empty;
     public string Action { get; set; } = string.Empty;
     public string? FlowId { get; set; }
+    public int? ChoiceIndex { get; set; }
 }
 
 internal static class EfbCompanionProtocol
@@ -22,6 +23,7 @@ internal static class EfbCompanionProtocol
             "request_state",
             "start_flow",
             "start_next_flow",
+            "gsx_menu_choice",
             "confirm",
             "pause",
             "resume",
@@ -84,11 +86,24 @@ internal static class EfbCompanionProtocol
             return false;
         }
 
+        int? choiceIndex = null;
+        if (action == "gsx_menu_choice")
+        {
+            if (!TryReadInt(values, "choiceIndex", out var parsedChoiceIndex)
+                || parsedChoiceIndex < 0)
+            {
+                error = "A GSX menu selection requires a valid choice index.";
+                return false;
+            }
+            choiceIndex = parsedChoiceIndex;
+        }
+
         command = new EfbCompanionCommand
         {
             RequestId = requestId,
             Action = action,
-            FlowId = flowId
+            FlowId = flowId,
+            ChoiceIndex = choiceIndex
         };
         return true;
     }

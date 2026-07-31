@@ -10,6 +10,13 @@ internal sealed class AircraftState
     public string Title { get; set; } = "";
     public bool OnGround { get; set; }
     public double GroundSpeedKnots { get; set; }
+    public double? LongitudinalVelocityKnots { get; set; }
+    public bool ForwardTaxiDetected =>
+        OnGround
+        && !ParkingBrakeSet
+        && GroundSpeedKnots > 0.5
+        && (!LongitudinalVelocityKnots.HasValue
+            || LongitudinalVelocityKnots.Value > 0.5);
     public bool Engine1Running { get; set; }
     public bool Engine2Running { get; set; }
     public bool Engine1StarterActive { get; set; }

@@ -63,10 +63,11 @@ a Community package. `CopilotService` subscribes to one CommBus command event:
 
 It publishes state and command results on
 `VFO_EFB_STATE_V2`. Only `start_flow`, `start_next_flow`, `confirm`,
-`pause`, `resume`, `cancel`, and `request_state` are accepted. Flow IDs are
-checked against the current aircraft catalog, and runtime state guards are
-reapplied on the desktop side. The EFB never receives a general-purpose
-command endpoint.
+`pause`, `resume`, `cancel`, `request_state`, and a validated
+`gsx_menu_choice` are accepted. Flow IDs are checked against the current
+aircraft catalog; GSX choice indexes are checked against the currently open,
+non-root GSX prompt; and runtime state guards are reapplied on the desktop
+side. The EFB never receives a general-purpose command endpoint.
 
 Build and installation details are in `docs/EFB_COMPANION.md`.
 
@@ -277,8 +278,9 @@ When GSX departure coordination is active, an early Flow 4 selection remains
 pending until the parking brake is released and aircraft movement confirms
 that pushback is underway; engine start then begins automatically.
 GSX Remote Control is fully bidirectional: every secondary menu emitted by
-GSX is shown in a VFO response dialog and the selected zero-based choice is
-returned to GSX. This is required for prompts such as deicing and pushback
+GSX is shown in both the desktop response dialog and the in-simulator EFB;
+the selected zero-based choice is returned to GSX. This is required for
+prompts such as tug connection, deicing, and pushback
 direction; handling only the first service menu causes GSX to stop after the
 tug connects and locks the nose gear.
 GSX ownership is recorded in a short-lived local lease. A replacement VFO

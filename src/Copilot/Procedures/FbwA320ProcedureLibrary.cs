@@ -297,9 +297,7 @@ internal static class FbwA320ProcedureLibrary
                 Observe(
                     "captain-taxi",
                     "Captain commenced taxi",
-                    state => state.OnGround
-                             && !state.ParkingBrakeSet
-                             && state.GroundSpeedKnots > 0.5,
+                    state => state.ForwardTaxiDetected,
                     CrewRole.FirstOfficer)
             });
 

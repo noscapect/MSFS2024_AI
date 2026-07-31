@@ -336,6 +336,34 @@
     }
   }
 
+  .gsx-prompt {
+    display: none;
+    margin-top: 14px;
+    color: #ffd17a;
+    font-size: 15px;
+    font-weight: 800;
+    line-height: 1.35;
+  }
+
+  .gsx-choices {
+    display: none;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 8px;
+    margin-top: 10px;
+  }
+
+  .gsx-choice-button {
+    min-height: 43px;
+    padding: 8px 12px;
+    border: 1px solid rgba(245, 183, 72, 0.55);
+    border-radius: 8px;
+    color: #fff3d0;
+    background: rgba(157, 102, 16, 0.35);
+    font: inherit;
+    font-weight: 750;
+    cursor: pointer;
+  }
+
   .flow-list-card {
     grid-column: 1 / -1;
   }
@@ -432,6 +460,10 @@
 
     .flow-list-card {
       grid-column: auto;
+    }
+
+    .gsx-choices {
+      grid-template-columns: 1fr;
     }
   }
 }

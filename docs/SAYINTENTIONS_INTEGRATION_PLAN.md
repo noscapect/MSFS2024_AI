@@ -82,8 +82,12 @@ ground, or tower frequency. Frequency information is read-only in this app.
 - Poll communication history and mirror new First Officer
   transmissions and ATC responses into the activity log with station and
   frequency information.
-- Keep the flow waiting until the matching clearance is found. IFR requires an
-  accepted readback; standby, unable, and unrelated clearances do not advance.
+- Keep the flow waiting until the matching clearance is found. A structured
+  IFR clearance containing the destination, departure, and operational details
+  advances the checkpoint even if SayIntentions does not add a separate
+  readback record. This prevents a compound ATC question, such as an ATIS
+  confirmation, from leaving the flow stuck. Standby, unable, incomplete, and
+  unrelated clearances do not advance.
 
 ## Security and isolation
 

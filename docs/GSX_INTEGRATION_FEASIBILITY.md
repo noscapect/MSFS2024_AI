@@ -28,8 +28,8 @@ in v0.9.5. Its scope is intentionally smaller than complete GSX automation:
   pushback/start-clearance request until GSX reports boarding complete.
 - The app requests **Prepare for Pushback and Departure** after that gated ATC
   clearance checkpoint.
-- The app displays later GSX questions and returns the user's selected answer;
-  captain choices remain under pilot control.
+- The app displays later GSX questions on both the desktop and EFB and returns
+  the user's selected answer; captain choices remain under pilot control.
 - Arrival services and deeper automation remain deferred until after v1.0.
 
 The protocol proof, settings UI, Couatl status, dynamic menu parser, ownership
@@ -202,7 +202,14 @@ on boarding completion, prepare departure/pushback, and request deboarding
 after Flow 12 detects the aircraft parked at the gate
 with parking brake set, engines off, and APU or external power available. Each
 automation is optional in the GSX integration settings so cargo or positioning
-flights can keep GSX services manual.
+flights can keep GSX services manual. Active secondary GSX menus expose their
+validated choices in the EFB, allowing prompts such as tug attachment and
+pushback direction to be answered without leaving the simulator. The desktop
+GSX card changes to **Answer GSX prompt** while a choice is pending, and the
+resizable GSX details window also exposes the choices with a persistent footer.
+The Remote Control lifecycle distinguishes GSX's hide-menu event (`2`) from
+its timeout/cancel event (`3`); hiding the stock panel must not discard the
+pending remote response.
 
 ## Sources
 

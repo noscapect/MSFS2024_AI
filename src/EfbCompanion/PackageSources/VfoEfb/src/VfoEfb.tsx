@@ -86,6 +86,8 @@ interface CompanionState {
     actionRequired: string | null;
     hasActionRequired: boolean;
     activeServices: string[];
+    promptTitle?: string | null;
+    choices?: string[];
   };
 }
 
@@ -148,12 +150,19 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
     FSComponent.createRef<HTMLDivElement>();
   private readonly gsxActionRef =
     FSComponent.createRef<HTMLDivElement>();
+  private readonly gsxPromptRef =
+    FSComponent.createRef<HTMLDivElement>();
+  private readonly gsxChoicesRef =
+    FSComponent.createRef<HTMLDivElement>();
   private readonly resultRef =
     FSComponent.createRef<HTMLDivElement>();
 
   private listener?: CommBusListener;
   private lastState?: CompanionState;
   private lastStateReceivedAt = 0;
+  private lastDesktopContactAt = 0;
+  private stateRequestPending = false;
+  private lastStateRequestAt = 0;
   private staleTimer?: number;
   private readonly receiveEnvelope =
     (payload: string): void => this.onEnvelope(payload);
@@ -277,19 +286,30 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
     if (!this.listener) {
       return;
     }
+    const now = Date.now();
+    if (now - this.lastStateRequestAt < 3000) {
+      return;
+    }
+    this.stateRequestPending = true;
+    this.lastStateRequestAt = now;
     const request = {
       protocolVersion: PROTOCOL_VERSION,
-      requestId: `state-${Date.now()}`,
+      requestId: `state-${now}`,
       action: "request_state",
     };
     this.listener
       .callSimConnect(COMMAND_EVENT, JSON.stringify(request))
-      .catch(() =>
-        this.showConnection("Desktop companion unavailable", "error")
-      );
+      .catch(() => {
+        this.stateRequestPending = false;
+        this.showConnection("Desktop companion unavailable", "error");
+      });
   }
 
-  private sendCommand(action: string, flowId?: string): void {
+  private sendCommand(
+    action: string,
+    flowId?: string,
+    choiceIndex?: number
+  ): void {
     if (!this.listener) {
       this.showResult(false, "Desktop companion is not connected.");
       return;
@@ -302,6 +322,7 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
       requestId,
       action,
       ...(flowId ? { flowId } : {}),
+      ...(choiceIndex !== undefined ? { choiceIndex } : {}),
     };
     this.showResult(true, "Sending command...");
     this.listener
@@ -325,12 +346,21 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
       return;
     }
 
+    this.lastDesktopContactAt = Date.now();
+
     if (envelope.kind === "commandResult") {
+      // Desktop builds before 0.2.6 acknowledged background state requests.
+      // Do not display or follow those acknowledgements with another refresh.
+      if (envelope.requestId.startsWith("state-")) {
+        this.stateRequestPending = false;
+        return;
+      }
       this.showResult(envelope.accepted, envelope.message);
       window.setTimeout(() => this.requestState(), 200);
       return;
     }
 
+    this.stateRequestPending = false;
     try {
       this.renderState(envelope);
       this.lastState = envelope;
@@ -452,7 +482,7 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
     select.options.length = 0;
 
     for (const flow of flows) {
-      if (flow.state === "done" || flow.state === "current") {
+      if (flow.state !== "next") {
         continue;
       }
       const option = document.createElement("option");
@@ -488,6 +518,35 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
       state.gsx.hasActionRequired
         ? "gsx-action required"
         : "gsx-action";
+
+    const choices = Array.isArray(state.gsx.choices)
+      ? state.gsx.choices
+      : [];
+    const hasPrompt = Boolean(state.gsx.promptTitle) && choices.length > 0;
+    this.gsxPromptRef.instance.textContent = hasPrompt
+      ? state.gsx.promptTitle ?? "GSX response required"
+      : "";
+    this.gsxPromptRef.instance.style.display = hasPrompt ? "block" : "none";
+
+    const choicesContainer = this.gsxChoicesRef.instance;
+    choicesContainer.textContent = "";
+    choicesContainer.style.display = hasPrompt ? "grid" : "none";
+    if (hasPrompt) {
+      choices.forEach((label, choiceIndex) => {
+        const button = document.createElement("button");
+        button.className = "gsx-choice-button";
+        button.textContent = label;
+        button.addEventListener(
+          "click",
+          () => this.sendCommand(
+            "gsx_menu_choice",
+            undefined,
+            choiceIndex
+          )
+        );
+        choicesContainer.appendChild(button);
+      });
+    }
   }
 
   private updateStaleState(): void {
@@ -497,9 +556,12 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
     if (stateAge > 2000) {
       this.requestState();
     }
+    const contactAge = this.lastDesktopContactAt === 0
+      ? Number.POSITIVE_INFINITY
+      : Date.now() - this.lastDesktopContactAt;
     if (
-      this.lastStateReceivedAt !== 0
-      && stateAge > 5000
+      this.lastDesktopContactAt !== 0
+      && contactAge > 12000
     ) {
       this.showConnection("Desktop companion not responding", "error");
       this.disableActions();
@@ -568,7 +630,7 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
       <div class="vfo-efb">
         <header class="app-header">
           <div>
-            <div class="eyebrow">MSFS 2024 - EFB build 0.2.4</div>
+            <div class="eyebrow">MSFS 2024 - EFB build 0.2.7</div>
             <h1>Virtual First Officer</h1>
           </div>
           <div ref={this.connectionRef} class="connection waiting">
@@ -697,6 +759,8 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
             <div ref={this.gsxActionRef} class="gsx-action">
               No GSX action required
             </div>
+            <div ref={this.gsxPromptRef} class="gsx-prompt"></div>
+            <div ref={this.gsxChoicesRef} class="gsx-choices"></div>
           </section>
 
           <section class="card flow-list-card">
@@ -722,7 +786,7 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
 // The class name is the EFB internal app identity and is applied to the host
 // `.efb-view` element. Version it together with the CSS scope when forcing
 // MSFS to discard a cached app and stylesheet.
-class VfoEfbV6 extends App {
+class VfoEfbV9 extends App {
   public get name(): string {
     return "Virtual First Officer";
   }
@@ -748,4 +812,4 @@ class VfoEfbV6 extends App {
   }
 }
 
-Efb.use(VfoEfbV6);
+Efb.use(VfoEfbV9);

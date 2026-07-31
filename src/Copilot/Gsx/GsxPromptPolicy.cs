@@ -2,6 +2,32 @@ namespace Msfs2024Ai.Copilot.Gsx;
 
 internal static class GsxPromptPolicy
 {
+    public static bool IsRootServicesMenu(GsxMenuSnapshot menu)
+    {
+        if (menu.IsEmpty)
+        {
+            return false;
+        }
+
+        var title = Normalize(menu.Title);
+        if (title.StartsWith("activate services", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        var rootChoiceCount = menu.Choices
+            .Select(Normalize)
+            .Count(choice =>
+                choice.Contains("request boarding")
+                || choice.Contains("request deboarding")
+                || choice.Contains("request catering")
+                || choice.Contains("request refueling")
+                || choice.Contains("prepare for pushback")
+                || choice.Contains("customize this parking position"));
+
+        return rootChoiceCount >= 3;
+    }
+
     public static bool RequiresGoodEngineStartMenu(IReadOnlyList<string> statusLines)
     {
         var status = string.Join(" ", statusLines).ToLowerInvariant();
@@ -30,5 +56,6 @@ internal static class GsxPromptPolicy
                 .ToLowerInvariant()
                 .Where(character => char.IsLetterOrDigit(character)
                                     || char.IsWhiteSpace(character))
-                .ToArray());
+                .ToArray())
+            .Replace("push back", "pushback");
 }

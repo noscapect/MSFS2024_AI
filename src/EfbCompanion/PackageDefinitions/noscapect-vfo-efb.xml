@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<AssetPackage Version="0.1.0">
+<AssetPackage Version="0.2.3">
   <ItemSettings>
     <ContentType>MISC</ContentType>
     <Title>MSFS 2024 Virtual First Officer EFB</Title>
@@ -12,13 +12,21 @@
   </Flags>
   <PackageOrderHint>MISC</PackageOrderHint>
   <AssetGroups>
+    <AssetGroup Name="ContentInfo">
+      <Type Version="0">ContentInfo</Type>
+      <Flags>
+        <FSXCompatibility>false</FSXCompatibility>
+      </Flags>
+      <AssetDir>PackageDefinitions\noscapect-vfo-efb\ContentInfo</AssetDir>
+      <OutputDir>ContentInfo\noscapect-vfo-efb</OutputDir>
+    </AssetGroup>
     <AssetGroup Name="vfo_efb_app">
       <Type Version="0">Copy</Type>
       <Flags>
         <FSXCompatibility>false</FSXCompatibility>
       </Flags>
       <AssetDir>PackageSources\VfoEfb\dist\</AssetDir>
-      <OutputDir>.\html_ui\efb_ui\efb_apps\VfoEfb\</OutputDir>
+      <OutputDir>.\html_ui\efb_ui\efb_apps\VfoEfbV5\</OutputDir>
     </AssetGroup>
   </AssetGroups>
 </AssetPackage>

@@ -11,7 +11,8 @@ still requires an in-simulator interaction pass after restarting MSFS 2024.
 The EFB app provides:
 
 - Current flow, step, crew role, waiting reason, and completion percentage
-- Start, confirm, pause, resume, and cancel controls
+- Start-next-flow, manual flow selection, confirm, pause, resume, and cancel
+  controls
 - Gate-to-gate flow status and next-flow selection
 - Aircraft phase and AGL/altitude/airspeed/vertical-speed telemetry
 - GSX live status, boarding percentage, and action-required prompts
@@ -48,7 +49,8 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass `
 
 The installer resolves `InstalledPackagesPath` from the MSFS 2024
 `UserCfg.opt`, validates that the destination remains below the Community
-directory, generates `manifest.json` and `layout.json`, and installs:
+directory, adds the required `ContentInfo`, and generates `manifest.json` and
+`layout.json` as UTF-8 without a byte-order mark before installing:
 
 ```text
 Community\noscapect-vfo-efb
@@ -58,20 +60,26 @@ Restart MSFS after installing or updating the Community package. Open the
 simulator EFB app list and select **Virtual First Officer**. Start
 `Copilot.exe` before using its controls.
 
+The current development app uses the versioned internal identity `VfoEfbV5`
+and displays EFB build `0.2.3`. MSFS applies the internal name to the host
+`.efb-view` element, and the generated stylesheet is deliberately scoped to
+`.efb-view.VfoEfbV5`. Increment this identity when a simulator-level asset
+cache must be invalidated.
+
 ## CommBus protocol
 
-Protocol version: `1`
+Protocol version: `2`
 
 | Direction | Event |
 | --- | --- |
-| EFB to desktop | `MSFS2024_AI_EFB_COMMAND_V1` |
-| EFB to desktop | `MSFS2024_AI_EFB_STATE_REQUEST_V1` |
-| Desktop to EFB | `MSFS2024_AI_EFB_STATE_V1` |
+| EFB to desktop | `VFO_EFB_COMMAND_V2` |
+| Desktop to EFB | `VFO_EFB_STATE_V2` |
 
 Allowed actions are:
 
 - `request_state`
 - `start_flow` with a current-aircraft flow ID
+- `start_next_flow`
 - `confirm`
 - `pause`
 - `resume`

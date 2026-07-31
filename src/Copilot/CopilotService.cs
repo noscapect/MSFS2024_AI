@@ -892,8 +892,10 @@ internal sealed class CopilotService : Form
 
     private enum EfbCommBusEvent
     {
-        Command = 500,
-        StateRequest = 501
+        // CommBus uses the SimConnect client-event ID namespace. Keep this
+        // directly after the standard copilot events (0-13) and away from the
+        // GSX event IDs (400-401).
+        Command = 14
     }
 
     private enum Priority
@@ -1509,10 +1511,10 @@ internal sealed class CopilotService : Form
         sender.SubscribeToCommBusEvent(
             EfbCommBusEvent.Command,
             EfbCompanionProtocol.CommandEventName);
-        sender.SubscribeToCommBusEvent(
-            EfbCommBusEvent.StateRequest,
-            EfbCompanionProtocol.StateRequestEventName);
-        AppLog.Write("MSFS EFB companion CommBus bridge ready.");
+        AppLog.Write(
+            "MSFS EFB companion CommBus command bridge ready "
+            + $"(event {EfbCompanionProtocol.CommandEventName}, "
+            + $"send ID {sender.GetLastSentPacketID()}).");
 
         sender.RequestDataOnSimObject(
             Request.AircraftState,
@@ -1871,7 +1873,15 @@ internal sealed class CopilotService : Form
                     {
                         break;
                     }
-                    ShowGsxChoiceDialog(_gsxMenu);
+                    if (GsxPromptPolicy.IsRootServicesMenu(_gsxMenu))
+                    {
+                        AppLog.Write(
+                            "GSX root services menu detected; leaving it informational.");
+                    }
+                    else
+                    {
+                        ShowGsxChoiceDialog(_gsxMenu);
+                    }
                 }
                 break;
             case 2:
@@ -7631,6 +7641,17 @@ internal sealed class CopilotService : Form
         CancelPendingSayIntentionsAtcRequest();
         _procedureRunner.Cancel();
         ClearCommandedAircraftState();
+        _pendingFireTest = null;
+        _pendingFlyByWireFireTest = null;
+        _apuFireTestCompleted = false;
+        _engine1FireTestCompleted = false;
+        _engine2FireTestCompleted = false;
+        if (_state != null)
+        {
+            _state.ApuFireTestCompleted = false;
+            _state.Engine1FireTestCompleted = false;
+            _state.Engine2FireTestCompleted = false;
+        }
         _completedProcedureIds.Clear();
         _gsxBoardingRequestedThisFlight = false;
         _gsxDepartureRequestedThisFlight = false;
@@ -17359,8 +17380,7 @@ internal sealed class CopilotService : Form
         SIMCONNECT_RECV_COMM_BUS data)
     {
         var eventId = (EfbCommBusEvent)data.uEventID;
-        if (eventId is not EfbCommBusEvent.Command
-            and not EfbCommBusEvent.StateRequest)
+        if (eventId != EfbCommBusEvent.Command)
         {
             return;
         }
@@ -17378,12 +17398,8 @@ internal sealed class CopilotService : Form
 
         var payload = string.Concat(chunks);
         chunks.Clear();
-        if (eventId == EfbCommBusEvent.StateRequest)
-        {
-            PublishEfbState(force: true);
-            return;
-        }
-
+        AppLog.Write(
+            $"Received MSFS EFB CommBus command payload ({payload.Length} chars).");
         HandleEfbCommand(payload);
     }
 
@@ -17423,6 +17439,37 @@ internal sealed class CopilotService : Form
                      || _pendingGsxEngineStartProcedure != null;
         switch (command.Action)
         {
+            case "start_next_flow":
+            {
+                if (active)
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        "Another flow is already active.");
+                    return;
+                }
+
+                var recommendation = FlowRecommendationEngine.Recommend(
+                    _state,
+                    _completedProcedureIds).Procedure;
+                if (recommendation == null
+                    || _completedProcedureIds.Contains(recommendation.Id))
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        "No next flow is available for the current aircraft.");
+                    return;
+                }
+
+                _commands.Enqueue($"procedure start {recommendation.Id}");
+                SendEfbCommandResult(
+                    command.RequestId,
+                    true,
+                    $"Starting {recommendation.Name}.");
+                break;
+            }
             case "start_flow":
             {
                 if (active)
@@ -17693,14 +17740,9 @@ internal sealed class CopilotService : Form
 
         try
         {
-            var companionTargets =
-                (SIMCONNECT_COMM_BUS_BROADCAST_TO)Enum.Parse(
-                    typeof(SIMCONNECT_COMM_BUS_BROADCAST_TO),
-                    "ALL",
-                    true);
             _simConnect.CallCommBusEvent(
                 EfbCompanionProtocol.StateEventName,
-                companionTargets,
+                SIMCONNECT_COMM_BUS_BROADCAST_TO.JS,
                 EfbCompanionProtocol.Serialize(envelope));
         }
         catch (Exception exception)
@@ -17862,8 +17904,11 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        Console.Error.WriteLine($"SimConnect exception: {exception}");
-        AppLog.Write($"SimConnect exception: {exception}");
+        var detail =
+            $"SimConnect exception: {exception} "
+            + $"(send ID {data.dwSendID}, index {data.dwIndex}).";
+        Console.Error.WriteLine(detail);
+        AppLog.Write(detail);
     }
 
     private void OnQuit(SimConnect sender, SIMCONNECT_RECV data)

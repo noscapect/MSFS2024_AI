@@ -70,6 +70,25 @@
     gap: 18px;
   }
 
+  .quick-start {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 20px;
+    margin-bottom: 18px;
+    padding: 16px 18px;
+    border: 1px solid rgba(86, 168, 255, 0.4);
+    border-radius: 12px;
+    background: rgba(24, 68, 116, 0.72);
+  }
+
+  .quick-start-copy {
+    margin-top: 4px;
+    color: #eef6ff;
+    font-size: 17px;
+    font-weight: 750;
+  }
+
   .card {
     min-width: 0;
     padding: 20px;
@@ -204,8 +223,16 @@
     cursor: pointer;
 
     &.primary,
-    &.start {
+    &.start,
+    &.next-flow {
       background: #1877d2;
+    }
+
+    &.next-flow {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 230px;
     }
 
     &.danger {
@@ -361,6 +388,15 @@
 
   @media (max-width: 850px) {
     padding: 18px;
+
+    .quick-start {
+      align-items: stretch;
+      flex-direction: column;
+    }
+
+    .next-flow {
+      width: 100%;
+    }
 
     .dashboard-grid {
       grid-template-columns: 1fr;

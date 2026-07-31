@@ -12,16 +12,16 @@ internal sealed class EfbCompanionCommand
 
 internal static class EfbCompanionProtocol
 {
-    public const int Version = 1;
-    public const string CommandEventName = "MSFS2024_AI_EFB_COMMAND_V1";
-    public const string StateRequestEventName = "MSFS2024_AI_EFB_STATE_REQUEST_V1";
-    public const string StateEventName = "MSFS2024_AI_EFB_STATE_V1";
+    public const int Version = 2;
+    public const string CommandEventName = "VFO_EFB_COMMAND_V2";
+    public const string StateEventName = "VFO_EFB_STATE_V2";
 
     private static readonly HashSet<string> AllowedActions =
         new(StringComparer.Ordinal)
         {
             "request_state",
             "start_flow",
+            "start_next_flow",
             "confirm",
             "pause",
             "resume",

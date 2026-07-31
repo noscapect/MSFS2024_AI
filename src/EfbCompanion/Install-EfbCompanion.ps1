@@ -5,8 +5,13 @@ param(
 $ErrorActionPreference = "Stop"
 $packageName = "noscapect-vfo-efb"
 $distRoot = Join-Path $PSScriptRoot "PackageSources\VfoEfb\dist"
+$contentInfoRoot = Join-Path $PSScriptRoot `
+    "PackageDefinitions\$packageName\ContentInfo"
 if (-not (Test-Path -LiteralPath $distRoot)) {
     throw "The EFB app has not been built. Run Build-EfbCompanion.ps1 first."
+}
+if (-not (Test-Path -LiteralPath $contentInfoRoot)) {
+    throw "The EFB ContentInfo assets were not found at '$contentInfoRoot'."
 }
 
 if ([string]::IsNullOrWhiteSpace($InstalledPackagesPath)) {
@@ -44,9 +49,13 @@ if (Test-Path -LiteralPath $targetFull) {
     Remove-Item -LiteralPath $targetFull -Recurse -Force
 }
 
-$appTarget = Join-Path $targetFull "html_ui\efb_ui\efb_apps\VfoEfb"
+$appTarget = Join-Path $targetFull "html_ui\efb_ui\efb_apps\VfoEfbV5"
 New-Item -ItemType Directory -Path $appTarget -Force | Out-Null
 Copy-Item -Path (Join-Path $distRoot "*") -Destination $appTarget -Recurse -Force
+$contentInfoTarget = Join-Path $targetFull "ContentInfo\$packageName"
+New-Item -ItemType Directory -Path $contentInfoTarget -Force | Out-Null
+Copy-Item -Path (Join-Path $contentInfoRoot "*") `
+    -Destination $contentInfoTarget -Recurse -Force
 
 $contentFiles = Get-ChildItem -LiteralPath $targetFull -Recurse -File |
     Where-Object { $_.Name -notin @("layout.json", "manifest.json") }
@@ -66,7 +75,7 @@ $manifest = [ordered]@{
     title = "MSFS 2024 Virtual First Officer EFB"
     manufacturer = "noscapect"
     creator = "noscapect"
-    package_version = "0.1.0"
+    package_version = "0.2.3"
     minimum_game_version = "1.7.0"
     minimum_compatibility_version = "1.0.0.0"
     export_type = "Community"
@@ -81,12 +90,18 @@ $manifest = [ordered]@{
     total_package_size = "$totalSize"
 }
 
-[ordered]@{ content = @($layoutContent) } |
-    ConvertTo-Json -Depth 6 |
-    Set-Content -LiteralPath (Join-Path $targetFull "layout.json") -Encoding UTF8
-$manifest |
-    ConvertTo-Json -Depth 6 |
-    Set-Content -LiteralPath (Join-Path $targetFull "manifest.json") -Encoding UTF8
+$utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+$layoutJson = [ordered]@{ content = @($layoutContent) } |
+    ConvertTo-Json -Depth 6
+$manifestJson = $manifest | ConvertTo-Json -Depth 6
+[IO.File]::WriteAllText(
+    (Join-Path $targetFull "layout.json"),
+    $layoutJson,
+    $utf8NoBom)
+[IO.File]::WriteAllText(
+    (Join-Path $targetFull "manifest.json"),
+    $manifestJson,
+    $utf8NoBom)
 
 Write-Output "Installed '$packageName' to '$targetFull'."
 Write-Output "Restart MSFS 2024 to load the new EFB application."

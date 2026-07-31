@@ -32,10 +32,9 @@ declare function RegisterCommBusListener(
 
 Include.addScript("/JS/Services/CommBus.js");
 
-const COMMAND_EVENT = "MSFS2024_AI_EFB_COMMAND_V1";
-const STATE_REQUEST_EVENT = "MSFS2024_AI_EFB_STATE_REQUEST_V1";
-const STATE_EVENT = "MSFS2024_AI_EFB_STATE_V1";
-const PROTOCOL_VERSION = 1;
+const COMMAND_EVENT = "VFO_EFB_COMMAND_V2";
+const STATE_EVENT = "VFO_EFB_STATE_V2";
+const PROTOCOL_VERSION = 2;
 
 interface FlowListItem {
   id: string;
@@ -79,7 +78,7 @@ interface CompanionState {
     canResume: boolean;
     canCancel: boolean;
   };
-  flows: FlowListItem[];
+  flows?: FlowListItem[];
   gsx: {
     summary: string;
     passengerProgress: string | null;
@@ -129,6 +128,8 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
     FSComponent.createRef<HTMLSelectElement>();
   private readonly startButtonRef =
     FSComponent.createRef<HTMLButtonElement>();
+  private readonly nextFlowButtonRef =
+    FSComponent.createRef<HTMLButtonElement>();
   private readonly confirmButtonRef =
     FSComponent.createRef<HTMLButtonElement>();
   private readonly pauseButtonRef =
@@ -154,8 +155,46 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
   private staleTimer?: number;
   private readonly receiveEnvelope =
     (payload: string): void => this.onEnvelope(payload);
+  private readonly handleNextFlowClick =
+    (): void => this.startNextFlow();
+  private readonly handleStartFlowClick =
+    (): void => this.startSelectedFlow();
+  private readonly handleConfirmClick =
+    (): void => this.sendCommand("confirm");
+  private readonly handlePauseClick =
+    (): void => this.sendCommand("pause");
+  private readonly handleResumeClick =
+    (): void => this.sendCommand("resume");
+  private readonly handleCancelClick =
+    (): void => this.cancelFlow();
 
   public onAfterRender(_node: VNode): void {
+    // The MSFS SDK FSComponent renderer treats raw JSX event props as string
+    // attributes. Wire native controls explicitly so Coherent receives clicks.
+    this.nextFlowButtonRef.instance.addEventListener(
+      "click",
+      this.handleNextFlowClick
+    );
+    this.startButtonRef.instance.addEventListener(
+      "click",
+      this.handleStartFlowClick
+    );
+    this.confirmButtonRef.instance.addEventListener(
+      "click",
+      this.handleConfirmClick
+    );
+    this.pauseButtonRef.instance.addEventListener(
+      "click",
+      this.handlePauseClick
+    );
+    this.resumeButtonRef.instance.addEventListener(
+      "click",
+      this.handleResumeClick
+    );
+    this.cancelButtonRef.instance.addEventListener(
+      "click",
+      this.handleCancelClick
+    );
     this.initializeCommBus();
     this.staleTimer = window.setInterval(
       () => this.updateStaleState(),
@@ -172,6 +211,30 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
   }
 
   public onClose(): void {
+    this.nextFlowButtonRef.instance.removeEventListener(
+      "click",
+      this.handleNextFlowClick
+    );
+    this.startButtonRef.instance.removeEventListener(
+      "click",
+      this.handleStartFlowClick
+    );
+    this.confirmButtonRef.instance.removeEventListener(
+      "click",
+      this.handleConfirmClick
+    );
+    this.pauseButtonRef.instance.removeEventListener(
+      "click",
+      this.handlePauseClick
+    );
+    this.resumeButtonRef.instance.removeEventListener(
+      "click",
+      this.handleResumeClick
+    );
+    this.cancelButtonRef.instance.removeEventListener(
+      "click",
+      this.handleCancelClick
+    );
     if (this.staleTimer !== undefined) {
       window.clearInterval(this.staleTimer);
       this.staleTimer = undefined;
@@ -208,8 +271,13 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
     if (!this.listener) {
       return;
     }
+    const request = {
+      protocolVersion: PROTOCOL_VERSION,
+      requestId: `state-${Date.now()}`,
+      action: "request_state",
+    };
     this.listener
-      .callSimConnect(STATE_REQUEST_EVENT, "{}")
+      .callSimConnect(COMMAND_EVENT, JSON.stringify(request))
       .catch(() =>
         this.showConnection("Desktop companion unavailable", "error")
       );
@@ -257,12 +325,28 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
       return;
     }
 
-    this.lastState = envelope;
-    this.lastStateReceivedAt = Date.now();
-    this.renderState(envelope);
+    try {
+      this.renderState(envelope);
+      this.lastState = envelope;
+      this.lastStateReceivedAt = Date.now();
+    } catch {
+      this.showConnection("EFB display update failed", "error");
+      this.showResult(
+        false,
+        "The EFB could not display the latest desktop state."
+      );
+    }
   }
 
   private renderState(state: CompanionState): void {
+    // Keep the primary launcher independent from the secondary cards. Even if
+    // an optional state section is absent, starting the next flow must remain
+    // available.
+    const flows = Array.isArray(state.flows) ? state.flows : [];
+    this.renderNextFlowAction(flows, Boolean(state.flow?.canStart));
+    this.renderFlowSelect(flows, Boolean(state.flow?.canStart));
+    this.renderFlowList(flows);
+
     this.showConnection(
       state.connected && state.aircraftReady
         ? `Connected · desktop v${state.companionVersion}`
@@ -308,14 +392,30 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
     this.resumeButtonRef.instance.disabled = !state.flow.canResume;
     this.cancelButtonRef.instance.disabled = !state.flow.canCancel;
 
-    this.renderFlowList(state.flows);
-    this.renderFlowSelect(state.flows, state.flow.canStart);
     this.renderGsx(state);
+  }
+
+  private renderNextFlowAction(
+    flows: FlowListItem[],
+    canStart: boolean
+  ): void {
+    const nextFlow =
+      flows.find(flow => flow.state === "next")
+      ?? flows.find(
+        flow => flow.state !== "done" && flow.state !== "current"
+      );
+    const button = this.nextFlowButtonRef.instance;
+    button.textContent = nextFlow
+      ? `Start ${nextFlow.name}`
+      : "Start next flow";
+    button.disabled = !canStart;
   }
 
   private renderFlowList(flows: FlowListItem[]): void {
     const container = this.flowListRef.instance;
-    container.replaceChildren();
+    // Coherent GT in MSFS does not consistently implement replaceChildren().
+    // Clearing textContent is supported by the in-simulator browser.
+    container.textContent = "";
     for (const flow of flows) {
       const row = document.createElement("div");
       row.className = `flow-row ${flow.state}`;
@@ -343,7 +443,7 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
   ): void {
     const select = this.flowSelectRef.instance;
     const previousValue = select.value;
-    select.replaceChildren();
+    select.options.length = 0;
 
     for (const flow of flows) {
       if (flow.state === "done" || flow.state === "current") {
@@ -385,9 +485,15 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
   }
 
   private updateStaleState(): void {
+    const stateAge = this.lastStateReceivedAt === 0
+      ? Number.POSITIVE_INFINITY
+      : Date.now() - this.lastStateReceivedAt;
+    if (stateAge > 2000) {
+      this.requestState();
+    }
     if (
       this.lastStateReceivedAt !== 0
-      && Date.now() - this.lastStateReceivedAt > 5000
+      && stateAge > 5000
     ) {
       this.showConnection("Desktop companion not responding", "error");
       this.disableActions();
@@ -396,6 +502,7 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
 
   private disableActions(): void {
     this.startButtonRef.instance.disabled = true;
+    this.nextFlowButtonRef.instance.disabled = true;
     this.confirmButtonRef.instance.disabled = true;
     this.pauseButtonRef.instance.disabled = true;
     this.resumeButtonRef.instance.disabled = true;
@@ -440,6 +547,10 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
     }
   }
 
+  private startNextFlow(): void {
+    this.sendCommand("start_next_flow");
+  }
+
   private cancelFlow(): void {
     if (window.confirm("Cancel the active Virtual First Officer flow?")) {
       this.sendCommand("cancel");
@@ -451,13 +562,29 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
       <div class="vfo-efb">
         <header class="app-header">
           <div>
-            <div class="eyebrow">MSFS 2024</div>
+            <div class="eyebrow">MSFS 2024 - EFB build 0.2.3</div>
             <h1>Virtual First Officer</h1>
           </div>
           <div ref={this.connectionRef} class="connection waiting">
             Connecting to desktop companion
           </div>
         </header>
+
+        <section class="quick-start">
+          <div>
+            <div class="section-label">Recommended action</div>
+            <div class="quick-start-copy">
+              Continue the gate-to-gate sequence
+            </div>
+          </div>
+          <button
+            ref={this.nextFlowButtonRef}
+            class="button next-flow"
+            disabled
+          >
+            Waiting for flow state
+          </button>
+        </section>
 
         <main class="dashboard-grid">
           <section class="card current-action">
@@ -499,7 +626,6 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
                 ref={this.confirmButtonRef}
                 class="button primary"
                 disabled
-                onClick={() => this.sendCommand("confirm")}
               >
                 Confirm action
               </button>
@@ -507,7 +633,6 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
                 ref={this.pauseButtonRef}
                 class="button secondary"
                 disabled
-                onClick={() => this.sendCommand("pause")}
               >
                 Pause
               </button>
@@ -515,7 +640,6 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
                 ref={this.resumeButtonRef}
                 class="button secondary"
                 disabled
-                onClick={() => this.sendCommand("resume")}
               >
                 Resume
               </button>
@@ -523,7 +647,6 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
                 ref={this.cancelButtonRef}
                 class="button danger"
                 disabled
-                onClick={() => this.cancelFlow()}
               >
                 Cancel
               </button>
@@ -577,7 +700,6 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
                 ref={this.startButtonRef}
                 class="button start"
                 disabled
-                onClick={() => this.startSelectedFlow()}
               >
                 Start flow
               </button>
@@ -589,7 +711,10 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
   }
 }
 
-class VirtualFirstOfficerEfb extends App {
+// The class name is the EFB internal app identity and is applied to the host
+// `.efb-view` element. Version it together with the CSS scope when forcing
+// MSFS to discard a cached app and stylesheet.
+class VfoEfbV5 extends App {
   public get name(): string {
     return "Virtual First Officer";
   }
@@ -615,4 +740,4 @@ class VirtualFirstOfficerEfb extends App {
   }
 }
 
-Efb.use(VirtualFirstOfficerEfb);
+Efb.use(VfoEfbV5);

@@ -57,16 +57,16 @@ validation before release consideration.
 ## MSFS 2024 EFB companion
 
 The development EFB app is an official MSFS 2024 EFB application installed as
-a Community package. `CopilotService` subscribes to two CommBus events:
+a Community package. `CopilotService` subscribes to one CommBus command event:
 
-- `MSFS2024_AI_EFB_COMMAND_V1`
-- `MSFS2024_AI_EFB_STATE_REQUEST_V1`
+- `VFO_EFB_COMMAND_V2`
 
 It publishes state and command results on
-`MSFS2024_AI_EFB_STATE_V1`. Only `start_flow`, `confirm`, `pause`, `resume`,
-`cancel`, and `request_state` are accepted. Flow IDs are checked against the
-current aircraft catalog, and runtime state guards are reapplied on the
-desktop side. The EFB never receives a general-purpose command endpoint.
+`VFO_EFB_STATE_V2`. Only `start_flow`, `start_next_flow`, `confirm`,
+`pause`, `resume`, `cancel`, and `request_state` are accepted. Flow IDs are
+checked against the current aircraft catalog, and runtime state guards are
+reapplied on the desktop side. The EFB never receives a general-purpose
+command endpoint.
 
 Build and installation details are in `docs/EFB_COMPANION.md`.
 

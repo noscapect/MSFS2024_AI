@@ -38,4 +38,49 @@ public sealed class GsxLiveStatusFormatterTests
         Assert.IsTrue(state.HasActionRequired);
         Assert.AreEqual("close Door 1L | Release parking brakes", state.ActionRequiredText);
     }
+
+    [TestMethod]
+    public void RootServicesMenuDoesNotCreateActionRequired()
+    {
+        var menu = new GsxMenuSnapshot(
+            "Activate Services at EBBR/Brussels National",
+            new[]
+            {
+                "Request Deboarding",
+                "Request Catering service",
+                "Request Refueling",
+                "Request Boarding",
+                "Prepare for Push-back and Departure"
+            });
+
+        var state = GsxLiveStatusFormatter.Format(
+            Array.Empty<string>(),
+            menu,
+            true,
+            true,
+            true);
+
+        Assert.IsFalse(state.HasActionRequired);
+        Assert.IsNull(state.ActionRequiredText);
+    }
+
+    [TestMethod]
+    public void OperationalMenuStillCreatesActionRequired()
+    {
+        var menu = new GsxMenuSnapshot(
+            "Select pushback direction",
+            new[] { "Straight", "Tail left", "Tail right" });
+
+        var state = GsxLiveStatusFormatter.Format(
+            Array.Empty<string>(),
+            menu,
+            true,
+            true,
+            true);
+
+        Assert.IsTrue(state.HasActionRequired);
+        Assert.AreEqual(
+            "Select: Select pushback direction",
+            state.ActionRequiredText);
+    }
 }

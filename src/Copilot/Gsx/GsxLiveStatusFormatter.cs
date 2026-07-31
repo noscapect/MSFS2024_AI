@@ -50,13 +50,7 @@ internal static class GsxLiveStatusFormatter
             return state;
         }
 
-        if (tooltipLines == null || tooltipLines.Count == 0)
-        {
-            state.SummaryText = "Ready - Couatl connected; monitoring active.";
-            return state;
-        }
-
-        var cleanLines = tooltipLines
+        var cleanLines = (tooltipLines ?? Array.Empty<string>())
             .Select(line => line.Replace("[GSX]", "").Trim())
             .Where(line => line.Length > 0)
             .ToList();
@@ -101,7 +95,10 @@ internal static class GsxLiveStatusFormatter
             }
         }
 
-        if (menu != null && !menu.IsEmpty && !string.IsNullOrWhiteSpace(menu.Title))
+        if (menu != null
+            && !menu.IsEmpty
+            && !GsxPromptPolicy.IsRootServicesMenu(menu)
+            && !string.IsNullOrWhiteSpace(menu.Title))
         {
             if (!actions.Any(a => a.IndexOf(menu.Title, StringComparison.OrdinalIgnoreCase) >= 0))
             {
@@ -128,7 +125,7 @@ internal static class GsxLiveStatusFormatter
         }
         else
         {
-            state.SummaryText = "Active - monitoring ground operations.";
+            state.SummaryText = "Ready - Couatl connected; monitoring active.";
         }
 
         return state;

@@ -42,4 +42,33 @@ public sealed class GsxPromptPolicyTests
 
         Assert.IsNull(GsxPromptPolicy.FindGoodEngineStartConfirmation(menu));
     }
+
+    [TestMethod]
+    public void RootServicesMenuIsInformational()
+    {
+        var menu = new GsxMenuSnapshot(
+            "Activate Services at EBBR/Brussels National",
+            new[]
+            {
+                "Request Deboarding",
+                "Request Catering service",
+                "Request Refueling",
+                "Request Boarding",
+                "Prepare for Push-back and Departure",
+                "Operate Jetway",
+                "Customize this Parking position"
+            });
+
+        Assert.IsTrue(GsxPromptPolicy.IsRootServicesMenu(menu));
+    }
+
+    [TestMethod]
+    public void OperationalConfirmationIsNotRootServicesMenu()
+    {
+        var menu = new GsxMenuSnapshot(
+            "Confirm good engine start",
+            new[] { "Confirm good engine start", "Abort pushback" });
+
+        Assert.IsFalse(GsxPromptPolicy.IsRootServicesMenu(menu));
+    }
 }

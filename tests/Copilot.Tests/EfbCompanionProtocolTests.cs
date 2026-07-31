@@ -10,7 +10,7 @@ public sealed class EfbCompanionProtocolTests
     public void ParsesAllowedStartFlowCommand()
     {
         const string json =
-            "{\"protocolVersion\":1,\"requestId\":\"req-1\","
+            "{\"protocolVersion\":2,\"requestId\":\"req-1\","
             + "\"action\":\"start_flow\",\"flowId\":\"power-up-initial-setup\"}";
 
         var parsed = EfbCompanionProtocol.TryParseCommand(
@@ -25,10 +25,27 @@ public sealed class EfbCompanionProtocolTests
     }
 
     [TestMethod]
+    public void ParsesAllowedStartNextFlowCommandWithoutFlowId()
+    {
+        const string json =
+            "{\"protocolVersion\":2,\"requestId\":\"next-1\","
+            + "\"action\":\"start_next_flow\"}";
+
+        var parsed = EfbCompanionProtocol.TryParseCommand(
+            json,
+            out var command,
+            out var error);
+
+        Assert.IsTrue(parsed, error);
+        Assert.AreEqual("start_next_flow", command.Action);
+        Assert.IsNull(command.FlowId);
+    }
+
+    [TestMethod]
     public void RejectsArbitraryCockpitCommand()
     {
         const string json =
-            "{\"protocolVersion\":1,\"requestId\":\"req-2\","
+            "{\"protocolVersion\":2,\"requestId\":\"req-2\","
             + "\"action\":\"external-power on\"}";
 
         var parsed = EfbCompanionProtocol.TryParseCommand(
@@ -44,7 +61,7 @@ public sealed class EfbCompanionProtocolTests
     public void RejectsUnknownProtocolVersion()
     {
         const string json =
-            "{\"protocolVersion\":2,\"requestId\":\"req-3\","
+            "{\"protocolVersion\":1,\"requestId\":\"req-3\","
             + "\"action\":\"confirm\"}";
 
         var parsed = EfbCompanionProtocol.TryParseCommand(
@@ -53,6 +70,6 @@ public sealed class EfbCompanionProtocolTests
             out var error);
 
         Assert.IsFalse(parsed);
-        StringAssert.Contains(error, "expected 1");
+        StringAssert.Contains(error, "expected 2");
     }
 }

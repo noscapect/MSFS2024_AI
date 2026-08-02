@@ -88,6 +88,7 @@ interface CompanionState {
     activeServices: string[];
     promptTitle?: string | null;
     choices?: string[];
+    canOpenMenu?: boolean;
   };
 }
 
@@ -154,6 +155,8 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
     FSComponent.createRef<HTMLDivElement>();
   private readonly gsxChoicesRef =
     FSComponent.createRef<HTMLDivElement>();
+  private readonly gsxOpenMenuButtonRef =
+    FSComponent.createRef<HTMLButtonElement>();
   private readonly resultRef =
     FSComponent.createRef<HTMLDivElement>();
 
@@ -182,6 +185,8 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
     (): void => this.sendCommand("resume");
   private readonly handleCancelClick =
     (): void => this.cancelFlow();
+  private readonly handleGsxOpenMenuClick =
+    (): void => this.sendCommand("gsx_open_menu");
 
   public onAfterRender(_node: VNode): void {
     // The MSFS SDK FSComponent renderer treats raw JSX event props as string
@@ -209,6 +214,10 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
     this.cancelButtonRef.instance.addEventListener(
       "click",
       this.handleCancelClick
+    );
+    this.gsxOpenMenuButtonRef.instance.addEventListener(
+      "click",
+      this.handleGsxOpenMenuClick
     );
     this.initializeCommBus();
     this.staleTimer = window.setInterval(
@@ -249,6 +258,10 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
     this.cancelButtonRef.instance.removeEventListener(
       "click",
       this.handleCancelClick
+    );
+    this.gsxOpenMenuButtonRef.instance.removeEventListener(
+      "click",
+      this.handleGsxOpenMenuClick
     );
     if (this.staleTimer !== undefined) {
       window.clearInterval(this.staleTimer);
@@ -337,7 +350,15 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
     try {
       envelope = JSON.parse(payload) as CompanionState | CommandResult;
     } catch {
-      this.showResult(false, "Received an invalid companion response.");
+      // A busy SimConnect frame can occasionally deliver one incomplete
+      // background snapshot. Preserve the last authoritative UI state and
+      // ask for a clean replacement instead of surfacing a pilot-facing
+      // command error.
+      this.stateRequestPending = false;
+      this.requestState();
+      if (!this.lastState) {
+        this.showConnection("Waiting for desktop state", "waiting");
+      }
       return;
     }
 
@@ -523,6 +544,9 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
       ? state.gsx.choices
       : [];
     const hasPrompt = Boolean(state.gsx.promptTitle) && choices.length > 0;
+    const openMenuButton = this.gsxOpenMenuButtonRef.instance;
+    openMenuButton.disabled = !Boolean(state.gsx.canOpenMenu);
+    openMenuButton.style.display = hasPrompt ? "none" : "block";
     this.gsxPromptRef.instance.textContent = hasPrompt
       ? state.gsx.promptTitle ?? "GSX response required"
       : "";
@@ -575,6 +599,7 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
     this.pauseButtonRef.instance.disabled = true;
     this.resumeButtonRef.instance.disabled = true;
     this.cancelButtonRef.instance.disabled = true;
+    this.gsxOpenMenuButtonRef.instance.disabled = true;
   }
 
   private showConnection(
@@ -630,7 +655,7 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
       <div class="vfo-efb">
         <header class="app-header">
           <div>
-            <div class="eyebrow">MSFS 2024 - EFB build 0.2.7</div>
+            <div class="eyebrow">MSFS 2024 - EFB build 0.2.9</div>
             <h1>Virtual First Officer</h1>
           </div>
           <div ref={this.connectionRef} class="connection waiting">
@@ -759,6 +784,13 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
             <div ref={this.gsxActionRef} class="gsx-action">
               No GSX action required
             </div>
+            <button
+              ref={this.gsxOpenMenuButtonRef}
+              class="button gsx-open-menu"
+              disabled
+            >
+              Open GSX menu
+            </button>
             <div ref={this.gsxPromptRef} class="gsx-prompt"></div>
             <div ref={this.gsxChoicesRef} class="gsx-choices"></div>
           </section>
@@ -786,7 +818,7 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
 // The class name is the EFB internal app identity and is applied to the host
 // `.efb-view` element. Version it together with the CSS scope when forcing
 // MSFS to discard a cached app and stylesheet.
-class VfoEfbV9 extends App {
+class VfoEfbV11 extends App {
   public get name(): string {
     return "Virtual First Officer";
   }
@@ -812,4 +844,4 @@ class VfoEfbV9 extends App {
   }
 }
 
-Efb.use(VfoEfbV9);
+Efb.use(VfoEfbV11);

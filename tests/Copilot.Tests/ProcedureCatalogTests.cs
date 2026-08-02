@@ -10,6 +10,35 @@ namespace Msfs2024Ai.Copilot.Tests;
 [TestClass]
 public sealed class ProcedureCatalogTests
 {
+    [TestMethod]
+    public void EveryBeforeTakeoffFlowStartsWithHoldingPointGate()
+    {
+        var flows = new[]
+        {
+            A320ProcedureLibrary.BeforeTakeoff,
+            A321ProcedureLibrary.BeforeTakeoff,
+            A330ProcedureLibrary.BeforeTakeoff,
+            FbwA320ProcedureLibrary.BeforeTakeoff,
+            B737ProcedureLibrary.BeforeTakeoff,
+            Asobo737MaxProcedureLibrary.BeforeTakeoff
+        };
+
+        foreach (var flow in flows)
+        {
+            var gate = flow.Steps[0];
+            Assert.AreEqual("holding-short", gate.Id, flow.Name);
+            Assert.IsFalse(
+                gate.IsComplete(new AircraftState()),
+                flow.Name);
+            Assert.IsTrue(
+                gate.IsComplete(new AircraftState
+                {
+                    BeforeTakeoffHoldEligible = true
+                }),
+                flow.Name);
+        }
+    }
+
     [DataTestMethod]
     [DataRow("A320neo V2")]
     [DataRow("A321")]

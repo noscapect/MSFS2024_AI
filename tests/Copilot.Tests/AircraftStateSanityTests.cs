@@ -76,4 +76,65 @@ public sealed class AircraftStateSanityTests
 
         Assert.IsTrue(state.ForwardTaxiDetected);
     }
+
+    [TestMethod]
+    public void TakeoffCalloutGatesUseExactConfiguredSpeeds()
+    {
+        var state = new AircraftState
+        {
+            TakeoffV1SpeedKnots = 140,
+            TakeoffRotateSpeedKnots = 143
+        };
+
+        state.IndicatedAirspeedKnots = 99.9;
+        Assert.IsFalse(state.HundredKnotsCalloutReached);
+        Assert.IsFalse(state.V1CalloutReached);
+
+        state.IndicatedAirspeedKnots = 100;
+        Assert.IsTrue(state.HundredKnotsCalloutReached);
+
+        state.IndicatedAirspeedKnots = 139.9;
+        Assert.IsFalse(state.V1CalloutReached);
+
+        state.IndicatedAirspeedKnots = 140;
+        Assert.IsTrue(state.V1CalloutReached);
+        Assert.IsFalse(state.RotateCalloutReached);
+
+        state.IndicatedAirspeedKnots = 142.9;
+        Assert.IsFalse(state.RotateCalloutReached);
+
+        state.IndicatedAirspeedKnots = 143;
+        Assert.IsTrue(state.RotateCalloutReached);
+    }
+
+    [TestMethod]
+    public void PhysicalGearPositionsOverrideAStaleHandleReadback()
+    {
+        var state = new AircraftState
+        {
+            GearHandlePosition = 1,
+            GearHandleDown = true,
+            LeftGearPosition = 0,
+            CenterGearPosition = 0,
+            RightGearPosition = 0
+        };
+
+        Assert.IsFalse(state.GearHandleUp);
+        Assert.IsTrue(state.GearUpVerified);
+        Assert.IsFalse(state.GearDownVerified);
+    }
+
+    [TestMethod]
+    public void GearVerificationRequiresAllThreeGearToReachTheTarget()
+    {
+        var state = new AircraftState
+        {
+            LeftGearPosition = 0,
+            CenterGearPosition = 0.5,
+            RightGearPosition = 0
+        };
+
+        Assert.IsFalse(state.GearUpVerified);
+        Assert.IsFalse(state.GearDownVerified);
+    }
 }

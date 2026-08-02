@@ -208,7 +208,7 @@ internal static class Asobo737MaxProcedureLibrary
             "6. 737 MAX Before Takeoff",
             new[]
             {
-                Observe("holding-short", "Aircraft stopped near runway", state => state.OnGround && state.GroundSpeedKnots <= 1),
+                Observe("holding-short", "Aircraft stopped at runway holding point", state => state.BeforeTakeoffHoldEligible),
                 Manual("captain-takeoff-briefing", "Takeoff briefing complete", "Captain: complete takeoff briefing.", CrewRole.Captain),
                 Manual("captain-trim-green-band", "Stabilizer trim set for takeoff", "Captain: verify stabilizer trim is set in the green takeoff range.", CrewRole.Captain),
                 Automatic("fo-autothrottle-arm", "Autothrottle ARM", state => state.BoeingAutothrottleArmed, "asobo737max autothrottle arm"),
@@ -230,9 +230,9 @@ internal static class Asobo737MaxProcedureLibrary
             new[]
             {
                 Observe("thrust-set", "Thrust set", state => state.Engine1N1Percent >= 40 && state.Engine2N1Percent >= 40),
-                Observe("hundred-knots", "100 knots", state => state.IndicatedAirspeedKnots >= 100),
-                Observe("v1", "V1", state => state.IndicatedAirspeedKnots >= state.TakeoffV1SpeedKnots),
-                Observe("rotate", "Rotate", state => state.IndicatedAirspeedKnots >= state.TakeoffRotateSpeedKnots),
+                Observe("hundred-knots", "100 knots", state => state.HundredKnotsCalloutReached),
+                Observe("v1", "V1", state => state.V1CalloutReached),
+                Observe("rotate", "Rotate", state => state.RotateCalloutReached),
                 Observe("airborne", "Positive climb", state => !state.OnGround && state.AltitudeAboveGroundFeet >= 35 && state.VerticalSpeedFeetPerMinute > 100),
                 Automatic("fo-gear-up", "Landing gear UP", state => state.GearHandleUp, "asobo737max gear up"),
                 Observe("acceleration-altitude", "Acceleration altitude passed", state => !state.OnGround && state.AltitudeAboveGroundFeet >= 1500),

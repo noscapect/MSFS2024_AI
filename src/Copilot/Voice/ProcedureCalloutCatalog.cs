@@ -25,6 +25,9 @@ internal static class ProcedureCalloutCatalog
             "fo-rotate" or "rotate" => "Rotate",
             "positive-climb" or "airborne" => "Positive climb",
             "fo-gear-up" => "Landing gear up",
+            "fo-ground-spoilers-disarm" => state?.IsPmdg737 == true
+                ? "Speedbrake down"
+                : "Ground spoilers disarmed",
             "fo-gear-down" => "Landing gear down",
             "fo-approaching-minimums" => "Approaching minimums",
             "fo-minimums" => "Minimums",

@@ -50,6 +50,7 @@ internal sealed class CopilotService : Form
     private readonly Dictionary<EfbCommBusEvent, List<string>> _efbCommBusChunks =
         new();
     private DateTime _lastEfbStateRequestResponseUtc = DateTime.MinValue;
+    private DateTime _lastEfbStatePublishedUtc = DateTime.MinValue;
     private readonly string? _oneShotCommand;
     private readonly bool _showUi;
     private readonly CopilotSettings _settings;
@@ -76,6 +77,8 @@ internal sealed class CopilotService : Form
     private bool _gsxGoodEngineStartPromptPending;
     private bool _gsxGoodEngineStartWaitingLogged;
     private ProcedureDefinition? _pendingGsxEngineStartProcedure;
+    private string? _pendingGsxArrivalStand;
+    private string? _selectedGsxArrivalStand;
     private bool _gsxMenuOpen;
     private GsxMenuSnapshot _gsxMenu =
         new(string.Empty, Array.Empty<string>());
@@ -103,6 +106,10 @@ internal sealed class CopilotService : Form
     private bool _replayActive;
     private readonly HashSet<string> _completedProcedureIds =
         new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _calloutsSpokenAtCommand =
+        new(StringComparer.OrdinalIgnoreCase);
+    private bool _forwardTaxiObservedThisFlight;
+    private bool _pendingAutomaticBeforeTakeoffFlow;
     private SimConnect? _simConnect;
     private AircraftState? _state;
     private PendingExternalPowerProcedure? _pendingProcedure;
@@ -564,6 +571,7 @@ internal sealed class CopilotService : Form
     private enum Definition
     {
         AircraftState,
+        FlightCalloutState,
         GsxRemoteControl = 400,
         GsxMenuOpen = 401,
         GsxMenuChoice = 402
@@ -572,6 +580,7 @@ internal sealed class CopilotService : Form
     private enum Request
     {
         AircraftState,
+        FlightCalloutState = 500,
         MobiFlightResponse,
         MobiFlightRuntimeResponse = 110,
         NativeBattery1 = 111,
@@ -1006,6 +1015,9 @@ internal sealed class CopilotService : Form
         public double RightSpoilerPosition;
         public double FlapsHandleIndex;
         public double GearHandle;
+        public double LeftGearPosition;
+        public double CenterGearPosition;
+        public double RightGearPosition;
         public double PitchDegrees;
         public double AutopilotMaster;
         public double AutopilotApproachHold;
@@ -1457,6 +1469,9 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "SPOILERS RIGHT POSITION", "Percent", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "FLAPS HANDLE INDEX", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "GEAR HANDLE POSITION", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "GEAR LEFT POSITION", "Percent Over 100", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "GEAR CENTER POSITION", "Percent Over 100", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "GEAR RIGHT POSITION", "Percent Over 100", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "PLANE PITCH DEGREES", "Degrees", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "AUTOPILOT MASTER", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "AUTOPILOT APPROACH HOLD", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
@@ -1496,6 +1511,13 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "L:INI_IGNITION_KNOB", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "L:INI_TURNOFF_LIGHT_SWITCH", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.RegisterDataDefineStruct<AircraftData>(Definition.AircraftState);
+        sender.AddToDataDefinition(Definition.FlightCalloutState, "SIM ON GROUND", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.FlightCalloutState, "AIRSPEED INDICATED", "Knots", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.FlightCalloutState, "VERTICAL SPEED", "Feet per minute", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.FlightCalloutState, "PLANE ALT ABOVE GROUND", "Feet", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.FlightCalloutState, "TURB ENG CORRECTED N1:1", "Percent", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.FlightCalloutState, "TURB ENG CORRECTED N1:2", "Percent", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.RegisterDataDefineStruct<FlightCalloutData>(Definition.FlightCalloutState);
         sender.MapClientEventToSimEvent(CopilotEvent.SetExternalPower, "SET_EXTERNAL_POWER");
         sender.MapClientEventToSimEvent(CopilotEvent.SetBeacon, "BEACON_LIGHTS_SET");
         sender.MapClientEventToSimEvent(CopilotEvent.StartApu, "APU_STARTER");
@@ -1529,6 +1551,15 @@ internal sealed class CopilotService : Form
             SIMCONNECT_DATA_REQUEST_FLAG.DEFAULT,
             0,
             0,
+            0);
+        sender.RequestDataOnSimObject(
+            Request.FlightCalloutState,
+            Definition.FlightCalloutState,
+            SimConnect.SIMCONNECT_OBJECT_ID_USER,
+            SIMCONNECT_PERIOD.VISUAL_FRAME,
+            SIMCONNECT_DATA_REQUEST_FLAG.DEFAULT,
+            0,
+            2,
             0);
 
         var commandTimer = new System.Windows.Forms.Timer { Interval = 100 };
@@ -1860,6 +1891,10 @@ internal sealed class CopilotService : Form
         switch (eventData)
         {
             case 1:
+                // A new GSX question supersedes any dialog created for the
+                // previous menu. This helper clears the tracked dialog before
+                // closing it, so the old question is not sent as cancelled.
+                CloseGsxChoiceDialog();
                 _gsxMenu = _gsxFileReader?.ReadMenu()
                            ?? new GsxMenuSnapshot(
                                string.Empty,
@@ -1872,6 +1907,7 @@ internal sealed class CopilotService : Form
                         + string.Join(" | ", _gsxMenu.Choices));
                 }
                 TrySelectPendingGsxAction();
+                TryAutoSelectGsxArrivalStand();
                 if (_gsxMenuOpen)
                 {
                     if (TryAutoConfirmGsxGoodEngineStart())
@@ -1888,6 +1924,8 @@ internal sealed class CopilotService : Form
                         ShowGsxChoiceDialog(_gsxMenu);
                     }
                 }
+                UpdateDashboard();
+                PublishEfbState(force: true);
                 break;
             case 2:
                 // The GSX SDK defines event 2 as hideMenu(), not as a
@@ -1898,7 +1936,14 @@ internal sealed class CopilotService : Form
                 break;
             case 3:
                 _gsxMenuOpen = false;
+                _gsxMenu = new GsxMenuSnapshot(
+                    string.Empty,
+                    Array.Empty<string>());
                 CloseGsxChoiceDialog();
+                AppLog.Write(
+                    "GSX prompt timed out or was cancelled; cleared the cached response.");
+                UpdateDashboard();
+                PublishEfbState(force: true);
                 break;
             case 4:
                 // Closing the stock toolbar panel does not cancel a question
@@ -2177,6 +2222,10 @@ internal sealed class CopilotService : Form
         if (_pendingGsxActionDeadlineUtc.HasValue
             && DateTime.UtcNow >= _pendingGsxActionDeadlineUtc.Value)
         {
+            if (_pendingGsxAction == GsxDepartureAction.Boarding)
+            {
+                _gsxBoardingRequestedThisFlight = false;
+            }
             AppendDashboardLog(
                 "GSX did not provide the expected service menu; use GSX manually or retry.");
             _pendingGsxAction = null;
@@ -2232,6 +2281,10 @@ internal sealed class CopilotService : Form
             return;
         }
 
+        if (_pendingGsxAction == GsxDepartureAction.Boarding)
+        {
+            _gsxBoardingRequestedThisFlight = false;
+        }
         AppendDashboardLog(
             "GSX did not provide the expected service menu; use GSX manually or retry.");
         _pendingGsxAction = null;
@@ -4500,6 +4553,27 @@ internal sealed class CopilotService : Form
         {
             return;
         }
+        if ((Request)data.dwRequestID == Request.FlightCalloutState)
+        {
+            if (data.dwData.Length > 0
+                && _state != null
+                && string.Equals(
+                    _procedureRunner.Definition?.Id,
+                    "takeoff-climb",
+                    StringComparison.OrdinalIgnoreCase)
+                && IsProcedureActive(_procedureRunner.Status))
+            {
+                var callout = (FlightCalloutData)data.dwData[0];
+                _state.OnGround = callout.OnGround != 0;
+                _state.IndicatedAirspeedKnots = callout.IndicatedAirspeed;
+                _state.VerticalSpeedFeetPerMinute = callout.VerticalSpeed;
+                _state.AltitudeAboveGroundFeet = callout.AltitudeAboveGround;
+                _state.Engine1N1Percent = callout.Engine1N1;
+                _state.Engine2N1Percent = callout.Engine2N1;
+                _procedureRunner.Update(_state);
+            }
+            return;
+        }
         if ((Request)data.dwRequestID != Request.AircraftState || data.dwData.Length == 0)
         {
             return;
@@ -5116,6 +5190,9 @@ internal sealed class CopilotService : Form
                 : _nativeGearHandlePosition.HasValue
                     ? _nativeGearHandlePosition.Value >= 0.5
                     : raw.GearHandle != 0,
+            LeftGearPosition = raw.LeftGearPosition,
+            CenterGearPosition = raw.CenterGearPosition,
+            RightGearPosition = raw.RightGearPosition,
             PitchDegrees = raw.PitchDegrees,
             AutopilotMasterOn = raw.AutopilotMaster != 0,
             BoeingAutothrottleArmed = isAsobo737Max
@@ -5414,6 +5491,16 @@ internal sealed class CopilotService : Form
             PmdgExtinguisherTest1Completed = _pmdgExtinguisherTest1Completed,
             PmdgExtinguisherTest2Completed = _pmdgExtinguisherTest2Completed
         };
+        if (_state.ForwardTaxiDetected && _state.GroundSpeedKnots >= 3)
+        {
+            _forwardTaxiObservedThisFlight = true;
+        }
+        _state.BeforeTakeoffHoldEligible =
+            _forwardTaxiObservedThisFlight
+            && _state.OnGround
+            && _state.Engine1Running
+            && _state.Engine2Running
+            && _state.GroundSpeedKnots <= 0.5;
         UpdateTelemetrySanity(_state);
         UpdateCockpitDisplayReadiness(_state);
         _flightTelemetryStore.Record(_state, DateTime.UtcNow);
@@ -5423,6 +5510,7 @@ internal sealed class CopilotService : Form
         TryRestoreProcedureSession();
         _procedureRunner.Update(_state);
         TryStartPendingGsxEngineFlow();
+        TryStartPendingBeforeTakeoffFlow();
         UpdateCruiseSeatbeltMonitoring();
         if (_procedureRunner.Status == ProcedureStatus.Completed
             && _procedureRunner.Definition != null)
@@ -6450,12 +6538,15 @@ internal sealed class CopilotService : Form
                 SetTcasAltitudeReporting(true);
                 break;
             case "gear up":
+                SpeakCurrentProcedureStepAtCommand();
                 SetGearUp();
                 break;
             case "gear down":
+                SpeakCurrentProcedureStepAtCommand();
                 SetGearDown();
                 break;
             case "ground-spoilers disarm":
+                SpeakCurrentProcedureStepAtCommand();
                 SetGroundSpoilersDisarmed();
                 break;
             case "altimeters standard":
@@ -6498,6 +6589,7 @@ internal sealed class CopilotService : Form
                 SetFlapsExtended(4);
                 break;
             case "flaps clean":
+                SpeakCurrentProcedureStepAtCommand();
                 SetFlapsClean();
                 break;
             case "autobrake max":
@@ -6867,6 +6959,22 @@ internal sealed class CopilotService : Form
             return;
         }
 
+        if (!CanStartProcedureNow(definition, _state, out var startReason))
+        {
+            AppendDashboardLog(startReason);
+            Console.Error.WriteLine(startReason);
+            FinishOneShot(3);
+            return;
+        }
+
+        if (string.Equals(
+                definition.Id,
+                "before-takeoff",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            _pendingAutomaticBeforeTakeoffFlow = false;
+        }
+
         if (string.Equals(
                 definition.Id,
                 "engine-start-sequence",
@@ -6899,6 +7007,7 @@ internal sealed class CopilotService : Form
             && !_state.IsA320NeoV2;
         _smoothCruiseSinceUtc = null;
         _nextCruiseSeatbeltCommandUtc = DateTime.MinValue;
+        _calloutsSpokenAtCommand.Clear();
         _procedureRunner.Start(definition, _state);
         FinishProcedureOneShotIfTerminal();
     }
@@ -6908,6 +7017,60 @@ internal sealed class CopilotService : Form
         && _settings.GsxAutomaticallyPrepareDeparture
         && _gsxInstallation != null
         && _gsxCouatlStarted;
+
+    private static bool CanStartProcedureNow(
+        ProcedureDefinition definition,
+        AircraftState state,
+        out string reason)
+    {
+        if (string.Equals(
+                definition.Id,
+                "before-takeoff",
+                StringComparison.OrdinalIgnoreCase)
+            && !state.BeforeTakeoffHoldEligible)
+        {
+            reason =
+                "Flow 6 is locked until the aircraft has taxied forward and stopped at the runway holding point.";
+            return false;
+        }
+
+        reason = string.Empty;
+        return true;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    private struct FlightCalloutData
+    {
+        public double OnGround;
+        public double IndicatedAirspeed;
+        public double VerticalSpeed;
+        public double AltitudeAboveGround;
+        public double Engine1N1;
+        public double Engine2N1;
+    }
+
+    private void TryStartPendingBeforeTakeoffFlow()
+    {
+        if (!_pendingAutomaticBeforeTakeoffFlow
+            || _state == null
+            || !_state.BeforeTakeoffHoldEligible
+            || IsProcedureActive(_procedureRunner.Status))
+        {
+            return;
+        }
+
+        var definition = ProcedureCatalog.Find(_state, "before-takeoff");
+        if (definition == null || _completedProcedureIds.Contains(definition.Id))
+        {
+            _pendingAutomaticBeforeTakeoffFlow = false;
+            return;
+        }
+
+        _pendingAutomaticBeforeTakeoffFlow = false;
+        AppendDashboardLog(
+            "Runway holding point detected after taxi; starting Flow 6.");
+        _commands.Enqueue($"procedure start {definition.Id}");
+    }
 
     private static bool IsPushbackUnderway(AircraftState state) =>
         GsxDepartureCoordinator.IsPushbackUnderway(
@@ -7670,6 +7833,8 @@ internal sealed class CopilotService : Form
             _state.Engine2FireTestCompleted = false;
         }
         _completedProcedureIds.Clear();
+        _forwardTaxiObservedThisFlight = false;
+        _pendingAutomaticBeforeTakeoffFlow = false;
         _gsxBoardingRequestedThisFlight = false;
         _gsxBoardingCompletedThisFlight = false;
         _gsxDepartureRequestedThisFlight = false;
@@ -7678,6 +7843,8 @@ internal sealed class CopilotService : Form
         _gsxDepartureRequestAcceptedUtc = null;
         ClearGsxGoodEngineStartPrompt();
         _pendingGsxEngineStartProcedure = null;
+        _pendingGsxArrivalStand = null;
+        _selectedGsxArrivalStand = null;
         _pendingGsxAction = null;
         _pendingGsxActionDeadlineUtc = null;
         _procedureSession.ResetProgress(DateTime.UtcNow);
@@ -8456,9 +8623,22 @@ internal sealed class CopilotService : Form
             : GetAutomaticNextFlow(completedDefinition.Id);
         if (nextFlow != null)
         {
-            AppendDashboardLog(
-                $"{completedDefinition!.Name} complete; {nextFlow.Name} will start automatically.");
-            _commands.Enqueue($"procedure start {nextFlow.Id}");
+            if (string.Equals(
+                    nextFlow.Id,
+                    "before-takeoff",
+                    StringComparison.OrdinalIgnoreCase)
+                && _state?.BeforeTakeoffHoldEligible != true)
+            {
+                _pendingAutomaticBeforeTakeoffFlow = true;
+                AppendDashboardLog(
+                    $"{completedDefinition!.Name} complete; {nextFlow.Name} will start after taxi when the aircraft stops at the runway holding point.");
+            }
+            else
+            {
+                AppendDashboardLog(
+                    $"{completedDefinition!.Name} complete; {nextFlow.Name} will start automatically.");
+                _commands.Enqueue($"procedure start {nextFlow.Id}");
+            }
         }
     }
 
@@ -8548,6 +8728,30 @@ internal sealed class CopilotService : Form
         UpdateDashboard();
     }
 
+    private void SpeakCurrentProcedureStepAtCommand()
+    {
+        var step = _procedureRunner.CurrentStep;
+        if (step == null
+            || !_settings.EnableStandardCallouts
+            || (_voiceCalloutQueue == null
+                && !_settings.UseSayIntentionsVoiceCallouts))
+        {
+            return;
+        }
+
+        var phrase = ProcedureCalloutCatalog.ForStep(
+            step.Id,
+            _state,
+            _settings.CalloutDetail);
+        if (phrase == null || !_calloutsSpokenAtCommand.Add(step.Id))
+        {
+            return;
+        }
+
+        DispatchVoiceCallout(phrase, GetCalloutPriority(step.Id), step.Id);
+        AppendDashboardLog($"Voice callout at command: {phrase}");
+    }
+
     private void SpeakProcedureCallout(ProcedureStep step)
     {
         if (!_settings.EnableStandardCallouts
@@ -8557,6 +8761,10 @@ internal sealed class CopilotService : Form
         }
         if (step.Id == "fo-reverse-callout"
             && _state?.ReverseThrustEngaged != true)
+        {
+            return;
+        }
+        if (_calloutsSpokenAtCommand.Remove(step.Id))
         {
             return;
         }
@@ -8606,6 +8814,13 @@ internal sealed class CopilotService : Form
         int priority,
         string? stepId = null)
     {
+        if (SayIntentionsVoicePolicy.RequiresLowLatencyLocalVoice(stepId)
+            && _voiceCalloutQueue != null)
+        {
+            _voiceCalloutQueue.Enqueue(phrase, priority);
+            return;
+        }
+
         var sayIntentionsFlight = _sayIntentionsFlight;
         if (_settings.UseSayIntentionsVoiceCallouts && sayIntentionsFlight != null)
         {
@@ -11594,7 +11809,7 @@ internal sealed class CopilotService : Form
             FinishOneShot(3);
             return;
         }
-        if (!_state.GearHandleDown)
+        if (_state.GearUpVerified)
         {
             AppendDashboardLog("Landing gear already UP.");
             FinishOneShot();
@@ -11608,7 +11823,7 @@ internal sealed class CopilotService : Form
         SendMobiFlightCommand("MF.DummyCmd");
         BeginNativeAction(
             "Landing gear",
-            state => !state.GearHandleDown,
+            state => state.GearUpVerified,
             true,
             TimeSpan.FromSeconds(12));
     }
@@ -11621,7 +11836,7 @@ internal sealed class CopilotService : Form
             FinishOneShot(3);
             return;
         }
-        if (_state.GearHandleDown)
+        if (_state.GearDownVerified)
         {
             AppendDashboardLog("Landing gear already DOWN.");
             FinishOneShot();
@@ -11635,7 +11850,7 @@ internal sealed class CopilotService : Form
         SendMobiFlightCommand("MF.DummyCmd");
         BeginNativeAction(
             "Landing gear",
-            state => state.GearHandleDown,
+            state => state.GearDownVerified,
             true,
             TimeSpan.FromSeconds(15));
     }
@@ -14255,6 +14470,7 @@ internal sealed class CopilotService : Form
         {
             var communications = await _sayIntentionsClient
                 .GetCommunicationsAsync(flight, cancellationToken);
+            CaptureSayIntentionsArrivalStand(flight, communications);
             if (!string.Equals(
                     _sayIntentionsCommunicationSessionKey,
                     flight.SessionKey,
@@ -14336,6 +14552,122 @@ internal sealed class CopilotService : Form
             AppLog.Write(
                 $"SayIntentions communication-history refresh failed: {ex.Message}");
         }
+    }
+
+    private void CaptureSayIntentionsArrivalStand(
+        SayIntentionsFlightContext flight,
+        IReadOnlyList<SayIntentionsCommunication> communications)
+    {
+        if (!CanCoordinateArrivalStandWithGsx())
+        {
+            return;
+        }
+
+        var assignedStand = communications
+            .Where(item => item.Channel.StartsWith(
+                "COM",
+                StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(item => item.Id)
+            .Select(item => GsxArrivalGateCoordinator.ExtractAssignedStand(
+                item.OutgoingMessage))
+            .FirstOrDefault(value => value != null);
+
+        if (assignedStand == null
+            && !string.IsNullOrWhiteSpace(flight.DestinationIcao)
+            && string.Equals(
+                flight.CurrentAirport,
+                flight.DestinationIcao,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            assignedStand = GsxArrivalGateCoordinator.NormalizeStand(
+                flight.AssignedGate);
+        }
+
+        if (assignedStand == null
+            || string.Equals(
+                assignedStand,
+                _selectedGsxArrivalStand,
+                StringComparison.OrdinalIgnoreCase)
+            || string.Equals(
+                assignedStand,
+                _pendingGsxArrivalStand,
+                StringComparison.OrdinalIgnoreCase))
+        {
+            return;
+        }
+
+        _pendingGsxArrivalStand = assignedStand;
+        _selectedGsxArrivalStand = null;
+        AppendDashboardLog(
+            $"SayIntentions assigned Gate {assignedStand}; waiting to synchronize the GSX destination.");
+        AppLog.Write(
+            $"Captured SayIntentions arrival stand {assignedStand} for optional GSX synchronization.");
+        TryAutoSelectGsxArrivalStand();
+    }
+
+    private bool CanCoordinateArrivalStandWithGsx()
+    {
+        var flowId = _procedureRunner.Definition?.Id;
+        var arrivalFlowActive = string.Equals(
+                                    flowId,
+                                    "after-landing-taxi",
+                                    StringComparison.OrdinalIgnoreCase)
+                                || string.Equals(
+                                    flowId,
+                                    "parking-shutdown",
+                                    StringComparison.OrdinalIgnoreCase);
+        return GsxArrivalGateCoordinator.IsBridgeAvailable(
+            _settings.EnableGsxIntegration
+            && _gsxInstallation != null
+            && _gsxCouatlStarted,
+            _gsxOwnsRemoteControl,
+            _sayIntentionsFlight != null,
+            _state?.OnGround == true,
+            arrivalFlowActive);
+    }
+
+    private bool TryAutoSelectGsxArrivalStand()
+    {
+        if (!CanCoordinateArrivalStandWithGsx()
+            || !_gsxMenuOpen
+            || _gsxMenu.IsEmpty
+            || _pendingGsxArrivalStand == null)
+        {
+            return false;
+        }
+
+        var selection = GsxArrivalGateCoordinator.FindSelection(
+            _gsxMenu,
+            _pendingGsxArrivalStand);
+        if (selection == null)
+        {
+            return false;
+        }
+
+        var target = _pendingGsxArrivalStand;
+        var label = _gsxMenu.Choices[selection.ChoiceIndex];
+        CloseGsxChoiceDialog();
+        SetGsxValue(Definition.GsxMenuChoice, selection.ChoiceIndex);
+        _gsxMenuOpen = false;
+
+        if (selection.CompletesSelection)
+        {
+            _selectedGsxArrivalStand = target;
+            _pendingGsxArrivalStand = null;
+            AppendDashboardLog(
+                $"GSX destination synchronized to assigned Gate {target}.");
+            AppLog.Write(
+                $"GSX arrival stand selection completed: {label}.");
+        }
+        else
+        {
+            AppendDashboardLog(
+                $"Opening the GSX terminal group for assigned Gate {target}.");
+            AppLog.Write(
+                $"GSX arrival stand selection advanced through: {label}.");
+        }
+
+        return true;
     }
 
     private async Task<bool> TryCompleteCurrentSayIntentionsAtcStepFromHistoryAsync(
@@ -15520,7 +15852,7 @@ internal sealed class CopilotService : Form
     {
         var gsx = GsxLiveStatusFormatter.Format(
             _gsxTooltip,
-            _gsxMenu,
+            _gsxMenuOpen ? _gsxMenu : null,
             _settings.EnableGsxIntegration,
             _gsxInstallation != null,
             _gsxCouatlStarted);
@@ -15544,10 +15876,11 @@ internal sealed class CopilotService : Form
         }
 
         var gsx = GetGsxLiveState();
-        var boardingExpected = _settings.GsxAutomaticallyRequestBoarding
-                               || _gsxBoardingRequestedThisFlight
-                               || gsx.BoardingInProgress;
-        return boardingExpected && !_gsxBoardingCompletedThisFlight;
+        return GsxDepartureCoordinator.ShouldBlockPushbackClearance(
+            _gsxCouatlStarted,
+            _gsxBoardingRequestedThisFlight,
+            gsx.BoardingInProgress,
+            _gsxBoardingCompletedThisFlight);
     }
 
     private bool SimBriefConfigured =>
@@ -17672,6 +18005,18 @@ internal sealed class CopilotService : Form
                     return;
                 }
 
+                if (!CanStartProcedureNow(
+                        recommendation,
+                        _state,
+                        out var startReason))
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        startReason);
+                    return;
+                }
+
                 _commands.Enqueue($"procedure start {recommendation.Id}");
                 SendEfbCommandResult(
                     command.RequestId,
@@ -17723,11 +18068,62 @@ internal sealed class CopilotService : Form
                     return;
                 }
 
+                if (!CanStartProcedureNow(
+                        definition,
+                        _state,
+                        out var startReason))
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        startReason);
+                    return;
+                }
+
                 _commands.Enqueue($"procedure start {definition.Id}");
                 SendEfbCommandResult(
                     command.RequestId,
                     true,
                     $"Starting {definition.Name}.");
+                break;
+            }
+            case "gsx_open_menu":
+            {
+                if (!_settings.EnableGsxIntegration
+                    || _gsxInstallation == null
+                    || !_gsxCouatlStarted)
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        "GSX is not currently available.");
+                    return;
+                }
+
+                if (_gsxRemoteControlActive && !_gsxOwnsRemoteControl)
+                {
+                    SendEfbCommandResult(
+                        command.RequestId,
+                        false,
+                        "GSX remote control is currently owned by another add-on.");
+                    return;
+                }
+
+                if (!_gsxOwnsRemoteControl)
+                {
+                    SetGsxValue(Definition.GsxRemoteControl, 1);
+                    _gsxOwnsRemoteControl = true;
+                    _gsxRemoteControlActive = true;
+                    _gsxOwnershipLease.MarkOwned(DateTime.UtcNow);
+                    UpdateGsxStatus(true);
+                }
+
+                SetGsxValue(Definition.GsxMenuOpen, 1);
+                SendEfbCommandResult(
+                    command.RequestId,
+                    true,
+                    "Opening the current GSX menu.");
+                AppLog.Write("EFB requested the current GSX menu.");
                 break;
             }
             case "gsx_menu_choice":
@@ -17857,6 +18253,14 @@ internal sealed class CopilotService : Form
             return;
         }
 
+        var now = DateTime.UtcNow;
+        if (!force
+            && now - _lastEfbStatePublishedUtc < TimeSpan.FromMilliseconds(750))
+        {
+            return;
+        }
+        _lastEfbStatePublishedUtc = now;
+
         var envelope = BuildEfbStateEnvelope();
         SendEfbEnvelope(envelope);
     }
@@ -17959,7 +18363,14 @@ internal sealed class CopilotService : Form
                 ["completedSteps"] = completedSteps,
                 ["totalSteps"] = totalSteps,
                 ["waitingFor"] = waitingFor,
-                ["canStart"] = state != null && !procedureActive,
+                ["canStart"] =
+                    state != null
+                    && !procedureActive
+                    && recommendation != null
+                    && CanStartProcedureNow(
+                        recommendation,
+                        state,
+                        out _),
                 ["canConfirm"] =
                     _procedureRunner.Status
                         == ProcedureStatus.WaitingForManualAction
@@ -17994,7 +18405,12 @@ internal sealed class CopilotService : Form
                     && !_gsxMenu.IsEmpty
                     && !GsxPromptPolicy.IsRootServicesMenu(_gsxMenu)
                         ? _gsxMenu.Choices.ToArray()
-                        : Array.Empty<string>()
+                        : Array.Empty<string>(),
+                ["canOpenMenu"] =
+                    _settings.EnableGsxIntegration
+                    && _gsxInstallation != null
+                    && _gsxCouatlStarted
+                    && (!_gsxRemoteControlActive || _gsxOwnsRemoteControl)
             }
         };
     }

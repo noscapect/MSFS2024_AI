@@ -242,7 +242,7 @@ internal static class B737ProcedureLibrary
             "6. 737 Before Takeoff",
             new[]
             {
-                Observe("holding-short", "Aircraft stopped near runway", state => state.OnGround && state.GroundSpeedKnots <= 1),
+                Observe("holding-short", "Aircraft stopped at runway holding point", state => state.BeforeTakeoffHoldEligible),
                 Manual("captain-takeoff-briefing", "Takeoff briefing complete", "Captain: complete takeoff briefing.", CrewRole.Captain),
                 Manual("captain-trim-green-band", "Stabilizer trim set for takeoff", "Captain: verify stabilizer trim is set in the green takeoff range.", CrewRole.Captain),
                 Automatic("fo-autothrottle-arm", "Autothrottle ARM", _ => true, "pmdg mcp autothrottle arm", requireCommandExecution: true),
@@ -263,9 +263,9 @@ internal static class B737ProcedureLibrary
             new[]
             {
                 Observe("thrust-set", "Thrust set", state => state.Engine1N1Percent >= 40 && state.Engine2N1Percent >= 40),
-                Observe("hundred-knots", "100 knots", state => state.IndicatedAirspeedKnots >= 100),
-                Observe("v1", "V1", state => state.IndicatedAirspeedKnots >= state.TakeoffV1SpeedKnots),
-                Observe("rotate", "Rotate", state => state.IndicatedAirspeedKnots >= state.TakeoffRotateSpeedKnots),
+                Observe("hundred-knots", "100 knots", state => state.HundredKnotsCalloutReached),
+                Observe("v1", "V1", state => state.V1CalloutReached),
+                Observe("rotate", "Rotate", state => state.RotateCalloutReached),
                 Observe("airborne", "Positive climb", state => !state.OnGround && state.AltitudeAboveGroundFeet >= 35),
                 Automatic("fo-autobrake-off", "Autobrake OFF", state => state.AutobrakeLevel.HasValue && Math.Abs(state.AutobrakeLevel.Value - 1) < 0.1, "pmdg autobrake off", requireCommandExecution: true),
                 Automatic("fo-gear-up", "Landing gear UP", state => state.GearHandleUp, "pmdg gear up"),

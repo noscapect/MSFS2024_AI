@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<AssetPackage Version="0.2.7">
+<AssetPackage Version="0.2.9">
   <ItemSettings>
     <ContentType>MISC</ContentType>
     <Title>MSFS 2024 Virtual First Officer EFB</Title>
@@ -26,7 +26,7 @@
         <FSXCompatibility>false</FSXCompatibility>
       </Flags>
       <AssetDir>PackageSources\VfoEfb\dist\</AssetDir>
-      <OutputDir>.\html_ui\efb_ui\efb_apps\VfoEfbV9\</OutputDir>
+      <OutputDir>.\html_ui\efb_ui\efb_apps\VfoEfbV11\</OutputDir>
     </AssetGroup>
   </AssetGroups>
 </AssetPackage>

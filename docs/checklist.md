@@ -190,14 +190,15 @@ This flow requires no app confirmations during takeoff.
    N1.
 2. **Monitor:** Takeoff roll once indicated airspeed exceeds 40 knots on the
    ground.
-3. **Monitor/callout:** “One hundred knots” at 100 knots while on the ground.
+3. **Monitor/callout:** “One hundred knots” at exactly 100 knots using the
+   high-rate takeoff feed.
 4. **Monitor/callout:** “V one” at the configured V1 while on the ground.
 5. **Monitor/callout:** “Rotate” at the configured VR.
 6. **Monitor/callout:** “Positive climb” only after liftoff with vertical
    speed above 100 feet per minute.
 7. **F/O automatic:** Disarm ground spoilers.
 8. **F/O automatic/callout:** Raise landing gear and say “Landing gear up”
-   after verified UP readback.
+   when the command is issued; continue verifying retraction independently.
 9. **F/O automatic:** Set nose light OFF.
 10. **Monitor:** AP1 step completes when AP1 is engaged or the aircraft reaches
     400 feet AGL.

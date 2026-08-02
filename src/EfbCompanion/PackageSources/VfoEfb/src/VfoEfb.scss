@@ -345,6 +345,13 @@
     line-height: 1.35;
   }
 
+  .gsx-open-menu {
+    width: 100%;
+    margin-top: 10px;
+    border-color: rgba(86, 168, 255, 0.45);
+    background: rgba(24, 119, 210, 0.32);
+  }
+
   .gsx-choices {
     display: none;
     grid-template-columns: repeat(2, minmax(0, 1fr));

@@ -2,6 +2,16 @@ namespace Msfs2024Ai.Copilot.SayIntentions;
 
 internal static class SayIntentionsVoicePolicy
 {
+    public static bool RequiresLowLatencyLocalVoice(string? stepId) =>
+        stepId is "captain-takeoff" or "thrust-set"
+            or "fo-100-knots" or "hundred-knots"
+            or "fo-v1" or "v1"
+            or "fo-rotate" or "rotate"
+            or "positive-climb" or "airborne"
+            or "fo-ground-spoilers-disarm"
+            or "fo-gear-up"
+            or "fo-flaps" or "fo-flaps-up";
+
     public static bool BypassesQueue(string? stepId) =>
         stepId is "captain-takeoff" or "thrust-set"
             or "fo-100-knots" or "hundred-knots"

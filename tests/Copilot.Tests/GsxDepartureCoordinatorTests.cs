@@ -6,6 +6,29 @@ namespace Msfs2024Ai.Copilot.Tests;
 [TestClass]
 public sealed class GsxDepartureCoordinatorTests
 {
+    [DataTestMethod]
+    [DataRow(false, false, false, false, false)]
+    [DataRow(false, true, false, false, false)]
+    [DataRow(true, false, false, false, false)]
+    [DataRow(true, true, false, false, true)]
+    [DataRow(true, false, true, false, true)]
+    [DataRow(true, true, true, true, false)]
+    public void PushbackBlockRequiresLiveGsxBoarding(
+        bool connected,
+        bool requested,
+        bool inProgress,
+        bool completed,
+        bool expected)
+    {
+        Assert.AreEqual(
+            expected,
+            GsxDepartureCoordinator.ShouldBlockPushbackClearance(
+                connected,
+                requested,
+                inProgress,
+                completed));
+    }
+
     [TestMethod]
     public void FindChoice_SelectsBoardingButNotDeboarding()
     {

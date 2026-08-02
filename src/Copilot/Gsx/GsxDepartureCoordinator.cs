@@ -9,6 +9,15 @@ internal enum GsxDepartureAction
 
 internal static class GsxDepartureCoordinator
 {
+    public static bool ShouldBlockPushbackClearance(
+        bool gsxConnected,
+        bool boardingRequested,
+        bool boardingInProgress,
+        bool boardingCompleted) =>
+        gsxConnected
+        && (boardingRequested || boardingInProgress)
+        && !boardingCompleted;
+
     public static bool IsPushbackUnderway(
         bool onGround,
         bool parkingBrakeSet,

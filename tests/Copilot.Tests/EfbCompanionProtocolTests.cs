@@ -59,6 +59,22 @@ public sealed class EfbCompanionProtocolTests
     }
 
     [TestMethod]
+    public void ParsesGsxOpenMenuCommand()
+    {
+        const string json =
+            "{\"protocolVersion\":2,\"requestId\":\"gsx-open-1\","
+            + "\"action\":\"gsx_open_menu\"}";
+
+        var parsed = EfbCompanionProtocol.TryParseCommand(
+            json,
+            out var command,
+            out var error);
+
+        Assert.IsTrue(parsed, error);
+        Assert.AreEqual("gsx_open_menu", command.Action);
+    }
+
+    [TestMethod]
     public void RejectsGsxMenuChoiceWithoutIndex()
     {
         const string json =

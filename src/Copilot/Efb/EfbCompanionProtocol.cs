@@ -23,6 +23,7 @@ internal static class EfbCompanionProtocol
             "request_state",
             "start_flow",
             "start_next_flow",
+            "gsx_open_menu",
             "gsx_menu_choice",
             "confirm",
             "pause",

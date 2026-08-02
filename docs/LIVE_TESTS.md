@@ -149,6 +149,50 @@ now requires positive longitudinal aircraft velocity, and EFB `start_flow`
 requests are accepted only for the recommendation engine's next incomplete
 flow.
 
+## 2026-08-01 - GSX tug prompt lifecycle
+
+During FBW A320 boarding, GSX opened `Attach Pushback Tug now?` after the
+handling-operator question. The desktop retained the older dialog, and after
+the tug prompt timed out its cached title still appeared as an EFB action even
+though no valid choices remained. New GSX menus now replace older dialogs,
+timeout/cancel event `3` clears cached prompt state, and EFB build 0.2.8 adds an
+in-app **Open GSX menu** command for recovering a hidden or expired question.
+
+The same test session was still displaying cached EFB build 0.2.7 and showed
+`Received an invalid companion response` during high-rate FBW engine-start
+telemetry. Build 0.2.9 coalesces routine desktop state publication to 750 ms
+and treats an isolated malformed background snapshot as recoverable transport
+noise rather than a failed command.
+
+Flow 5-to-6 auto-chaining also exposed that forward taxi alone was being used
+as the trigger for Before Takeoff. Flow 6 now requires forward taxi at 3 knots
+or more followed by a stop with both engines running; start commands and the
+first procedure step enforce the same holding-point latch.
+
+The subsequent FBW takeoff showed the one-second main telemetry feed dispatching
+V1 and Rotate in the same sample. Gear-up speech waited roughly 12 seconds for
+physical retraction, and flap speech waited for full clean verification. A
+small visual-frame telemetry definition now drives the takeoff milestones at
+their exact configured thresholds. Takeoff and initial-climb speech is routed
+locally for deterministic latency, while gear, spoiler, and flap
+callouts occur when their commands are issued and retain independent readback
+verification.
+
+## 2026-08-02 - Optional arrival-stand handoff
+
+The EHAM arrival exposed an integration gap: SayIntentions assigned Gate C6,
+but VFO sent GSX only the terminal group `Gate C`, after which GSX reported a
+different parking position. The optional arrival bridge now extracts the exact
+stand from the ATC taxi clearance, walks GSX's dynamic terminal hierarchy, and
+accepts only the exact stand. Missing or disabled integrations do not block or
+alter the gate-to-gate procedures; GSX-only selection stays manual.
+
+The subsequent FBW A320 departure exposed a stale generic `GEAR HANDLE
+POSITION` readback: the cockpit lever and landing gear moved UP, but native
+verification timed out and held Flow 7. Gear actions now verify the actual
+left, center, and right gear positions, retaining handle state only as a
+fallback when physical position telemetry is unavailable.
+
 ## 2026-07-20 - v0.9.5 stabilization release
 
 The optional GSX Pro departure coordinator now uses the official

@@ -211,6 +211,17 @@ The Remote Control lifecycle distinguishes GSX's hide-menu event (`2`) from
 its timeout/cancel event (`3`); hiding the stock panel must not discard the
 pending remote response.
 
+During the arrival taxi flows, an optional bridge can synchronize a destination
+stand assigned by SayIntentions with GSX's position-selection menus. It waits
+for a specific stand such as `C6`, advances through the matching terminal group,
+and selects only an exact stand match. It never answers follow-me, towing, or
+other unrelated questions. The bridge activates only when both integrations
+are live and VFO owns GSX Remote Control. GSX-only flights retain the dynamic
+manual selector, SayIntentions-only flights continue without ground-service
+automation, and flights with neither integration remain fully supported.
+An installed but disconnected GSX instance, or a boarding request that times
+out before GSX accepts it, cannot block the pushback-clearance checkpoint.
+
 ## Sources
 
 - [FSDreamTeam GSX Pro product and feature documentation](https://www.fsdreamteam.com/products_gsxpro.html)

@@ -17,6 +17,7 @@ internal sealed class AircraftState
         && GroundSpeedKnots > 0.5
         && (!LongitudinalVelocityKnots.HasValue
             || LongitudinalVelocityKnots.Value > 0.5);
+    public bool BeforeTakeoffHoldEligible { get; set; }
     public bool Engine1Running { get; set; }
     public bool Engine2Running { get; set; }
     public bool Engine1StarterActive { get; set; }
@@ -109,6 +110,12 @@ internal sealed class AircraftState
     public int TakeoffV1SpeedKnots { get; set; }
     public int TakeoffRotateSpeedKnots { get; set; }
     public int? TakeoffV2SpeedKnots { get; set; }
+    public bool HundredKnotsCalloutReached =>
+        IndicatedAirspeedKnots >= 100;
+    public bool V1CalloutReached =>
+        IndicatedAirspeedKnots >= TakeoffV1SpeedKnots;
+    public bool RotateCalloutReached =>
+        IndicatedAirspeedKnots >= TakeoffRotateSpeedKnots;
     public string SimBriefFlightNumber { get; set; } = "";
     public string SimBriefOriginIcao { get; set; } = "";
     public string SimBriefDestinationIcao { get; set; } = "";
@@ -179,6 +186,9 @@ internal sealed class AircraftState
     public bool RunwayTurnoffLightsOn { get; set; }
     public double? GearHandlePosition { get; set; }
     public bool GearHandleDown { get; set; }
+    public double? LeftGearPosition { get; set; }
+    public double? CenterGearPosition { get; set; }
+    public double? RightGearPosition { get; set; }
     public double PitchDegrees { get; set; }
     public bool AutopilotMasterOn { get; set; }
     public bool BoeingAutothrottleArmed { get; set; }
@@ -385,6 +395,22 @@ internal sealed class AircraftState
         GearHandlePosition.HasValue
             ? GearHandlePosition.Value <= 0.1
             : !GearHandleDown;
+    public bool GearUpVerified =>
+        GearPositionsAvailable
+            ? LeftGearPosition!.Value <= 0.01
+              && CenterGearPosition!.Value <= 0.01
+              && RightGearPosition!.Value <= 0.01
+            : GearHandleUp;
+    public bool GearDownVerified =>
+        GearPositionsAvailable
+            ? LeftGearPosition!.Value >= 0.99
+              && CenterGearPosition!.Value >= 0.99
+              && RightGearPosition!.Value >= 0.99
+            : GearHandleDown;
+    private bool GearPositionsAvailable =>
+        LeftGearPosition.HasValue
+        && CenterGearPosition.HasValue
+        && RightGearPosition.HasValue;
     public bool Engine1FuelFlowDetected =>
         Engine1FuelFlowPph > 0
         || IsPmdg737

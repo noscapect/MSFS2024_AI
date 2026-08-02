@@ -45,6 +45,12 @@ public sealed class ProcedureCalloutCatalogTests
                 "fo-flaps-full",
                 new AircraftState(),
                 CalloutDetail.Standard));
+        Assert.AreEqual(
+            "Ground spoilers disarmed",
+            ProcedureCalloutCatalog.ForStep(
+                "fo-ground-spoilers-disarm",
+                new AircraftState { Title = "FlyByWire A32NX" },
+                CalloutDetail.Standard));
     }
 
     [TestMethod]

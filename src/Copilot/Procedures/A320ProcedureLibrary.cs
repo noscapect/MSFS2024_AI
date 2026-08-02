@@ -308,6 +308,7 @@ internal static class A320ProcedureLibrary
             "6. Before Takeoff",
             new[]
             {
+                Observe("holding-short", "Aircraft stopped at runway holding point", state => state.BeforeTakeoffHoldEligible),
                 Manual("captain-briefing", "Takeoff briefing complete", "Captain: confirm the takeoff briefing is complete.", CrewRole.Captain),
                 Observe(
                     "fo-cabin-call",
@@ -366,20 +367,17 @@ internal static class A320ProcedureLibrary
                 Observe(
                     "fo-100-knots",
                     "100 Knots",
-                    state => state.OnGround && state.IndicatedAirspeedKnots >= 100,
+                    state => state.OnGround && state.HundredKnotsCalloutReached,
                     recoveryComplete: state => !state.OnGround),
                 Observe(
                     "fo-v1",
                     "V1",
-                    state => state.OnGround
-                             && state.IndicatedAirspeedKnots
-                                >= state.TakeoffV1SpeedKnots,
+                    state => state.OnGround && state.V1CalloutReached,
                     recoveryComplete: state => !state.OnGround),
                 Observe(
                     "fo-rotate",
                     "Rotate",
-                    state => state.IndicatedAirspeedKnots
-                             >= state.TakeoffRotateSpeedKnots,
+                    state => state.RotateCalloutReached,
                     recoveryComplete: state => !state.OnGround),
                 Observe(
                     "positive-climb",

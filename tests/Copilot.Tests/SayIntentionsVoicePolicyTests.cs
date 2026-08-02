@@ -59,4 +59,19 @@ public sealed class SayIntentionsVoicePolicyTests
     {
         Assert.IsFalse(SayIntentionsVoicePolicy.BypassesQueue("fo-flaps-one"));
     }
+
+    [DataTestMethod]
+    [DataRow("fo-100-knots")]
+    [DataRow("fo-v1")]
+    [DataRow("fo-rotate")]
+    [DataRow("positive-climb")]
+    [DataRow("fo-ground-spoilers-disarm")]
+    [DataRow("fo-gear-up")]
+    [DataRow("fo-flaps")]
+    public void TakeoffAndInitialClimbCallsRequireLocalLowLatencyVoice(
+        string stepId)
+    {
+        Assert.IsTrue(
+            SayIntentionsVoicePolicy.RequiresLowLatencyLocalVoice(stepId));
+    }
 }

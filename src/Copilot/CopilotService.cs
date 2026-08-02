@@ -14662,7 +14662,7 @@ internal sealed class CopilotService : Form
         else
         {
             AppendDashboardLog(
-                $"Opening the GSX terminal group for assigned Gate {target}.");
+                $"Advancing the GSX position menu toward assigned Gate {target}.");
             AppLog.Write(
                 $"GSX arrival stand selection advanced through: {label}.");
         }
@@ -18156,7 +18156,7 @@ internal sealed class CopilotService : Form
                 SendEfbCommandResult(
                     command.RequestId,
                     true,
-                    $"Sent '{choiceLabel}' to GSX.");
+                    $"Transmitted '{choiceLabel}' to GSX; GSX controls the resulting manoeuvre.");
                 break;
             }
             case "confirm":
@@ -18389,6 +18389,7 @@ internal sealed class CopilotService : Form
             ["gsx"] = new Dictionary<string, object?>
             {
                 ["summary"] = gsx.SummaryText,
+                ["passengerOperation"] = gsx.PassengerOperationText,
                 ["passengerProgress"] = gsx.PassengerProgressText,
                 ["passengerPercent"] = gsx.PassengerPercent ?? 0,
                 ["actionRequired"] = gsx.ActionRequiredText,

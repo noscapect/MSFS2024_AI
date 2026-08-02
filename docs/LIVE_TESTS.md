@@ -193,6 +193,11 @@ verification timed out and held Flow 7. Gear actions now verify the actual
 left, center, and right gear positions, retaining handle state only as a
 fallback when physical position telemetry is unavailable.
 
+During arrival servicing, GSX progress text such as `50/148 passengers
+deboarded` was incorrectly displayed as boarding because `deboarded` contains
+the substring `boarded`. The service formatter and EFB build 0.2.10 now carry
+an explicit Boarding/Deboarding operation and label progress accordingly.
+
 ## 2026-07-20 - v0.9.5 stabilization release
 
 The optional GSX Pro departure coordinator now uses the official

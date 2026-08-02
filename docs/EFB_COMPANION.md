@@ -2,9 +2,10 @@
 
 ## Status
 
-The EFB companion is in the current unreleased source. Its TypeScript build,
-Community package layout, desktop bridge, and protocol tests are complete. It
-still requires an in-simulator interaction pass after restarting MSFS 2024.
+The optional EFB companion ships with desktop release 0.9.6 as EFB build
+0.2.10. Its TypeScript build, Community package layout, desktop bridge, and
+protocol tests are complete; continued in-simulator field validation remains
+part of normal beta testing.
 
 ## What it does
 
@@ -70,8 +71,8 @@ Restart MSFS after installing or updating the Community package. Open the
 simulator EFB app list and select **Virtual First Officer**. Start
 `Copilot.exe` before using its controls.
 
-The current development app uses the versioned internal identity `VfoEfbV11`
-and displays EFB build `0.2.9`. MSFS applies the internal name to the host
+The current app uses the versioned internal identity `VfoEfbV11`
+and displays EFB build `0.2.10`. MSFS applies the internal name to the host
 `.efb-view` element, and the generated stylesheet is deliberately scoped to
 `.efb-view.VfoEfbV11`. Increment this identity when a simulator-level asset
 cache must be invalidated.

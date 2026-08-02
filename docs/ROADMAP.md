@@ -4,17 +4,16 @@ This roadmap records intentionally deferred product work. It is not a promise
 that experimental features belong in the next public release. Stable aircraft
 profiles remain protected by their aircraft-specific regression tests.
 
-## Current development: dashboard UX and in-simulator EFB
+## Current stabilization
 
-The latest public release remains v0.9.5. The Asobo 737 MAX development
-profile, first dashboard redesign, and EFB companion have been merged to `main`
-without publishing a new release. Active work continues on
-`feature/ux-efb-refinement`. MAX support is retained as experimental, but active
-MAX development is paused.
+The latest public release is v0.9.6. It includes the dashboard redesign, the
+optional EFB companion, expanded optional GSX coordination, and the Asobo 737
+MAX profile under an explicit experimental warning. Active MAX development is
+paused while UX, EFB, and integration reliability are stabilized on `main`.
 
 Priorities are:
 
-1. Live-validate the new MSFS 2024 EFB companion after a simulator restart,
+1. Continue live validation of the MSFS 2024 EFB companion,
    including start, confirm, pause, resume, cancel, reconnect, and stale-state
    behavior.
 2. Keep the EFB a narrow remote over the versioned CommBus protocol; do not
@@ -40,9 +39,9 @@ by SayIntentions.
 
 ## Post-1.0 enhancements
 
-1. GSX arrival services and deeper ground-service coordination. The optional
-   departure coordinator first released in v0.9.5 uses the official
-   bidirectional Remote Control SDK.
+1. Deeper GSX arrival services and ground-service coordination. The optional
+   coordinator uses the official bidirectional Remote Control SDK; v0.9.6
+   already includes exact arrival-stand handoff and deboarding coordination.
 2. Interactive checklist and crew-audio improvements.
 
 ## Post-1.0 features

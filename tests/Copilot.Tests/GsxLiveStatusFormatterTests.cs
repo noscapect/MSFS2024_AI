@@ -17,13 +17,35 @@ public sealed class GsxLiveStatusFormatterTests
 
         var state = GsxLiveStatusFormatter.Format(tooltips, null, true, true, true);
 
-        Assert.AreEqual("180 / 220 passengers (82%)", state.PassengerProgressText);
+        Assert.AreEqual("Boarding", state.PassengerOperationText);
+        Assert.AreEqual("180 / 220 passengers boarded (82%)", state.PassengerProgressText);
         Assert.AreEqual(82, state.PassengerPercent);
         Assert.AreEqual(180, state.PassengerCurrent);
         Assert.AreEqual(220, state.PassengerTotal);
         Assert.IsTrue(state.BoardingInProgress);
         Assert.IsFalse(state.BoardingComplete);
         Assert.IsTrue(state.SummaryText.Contains("180 / 220 passengers"));
+    }
+
+    [TestMethod]
+    public void FormatsDeboardingWithoutMisclassifyingItAsBoarding()
+    {
+        var state = GsxLiveStatusFormatter.Format(
+            new[] { "[GSX] 50/148 passengers deboarded" },
+            null,
+            true,
+            true,
+            true);
+
+        Assert.AreEqual("Deboarding", state.PassengerOperationText);
+        Assert.AreEqual(
+            "50 / 148 passengers deboarded (34%)",
+            state.PassengerProgressText);
+        Assert.AreEqual(34, state.PassengerPercent);
+        Assert.IsTrue(state.DeboardingInProgress);
+        Assert.IsFalse(state.BoardingInProgress);
+        Assert.IsFalse(state.BoardingComplete);
+        Assert.IsTrue(state.SummaryText.StartsWith("Deboarding in progress"));
     }
 
     [TestMethod]

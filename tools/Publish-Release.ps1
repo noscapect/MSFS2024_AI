@@ -71,6 +71,12 @@ if ($LASTEXITCODE -ne 0) {
     throw "Automated tests failed."
 }
 
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+    -File .\src\EfbCompanion\Build-EfbCompanion.ps1
+if ($LASTEXITCODE -ne 0) {
+    throw "EFB companion build failed."
+}
+
 $artifactRoot = Join-Path $workspace "artifacts\release"
 $packageName = "MSFS2024-AI-First-Officer-$tag"
 $stageRoot = Join-Path $artifactRoot $packageName
@@ -86,7 +92,19 @@ Copy-Item -LiteralPath (Join-Path $outputRoot "Copilot.exe") -Destination $stage
 Copy-Item -LiteralPath (Join-Path $outputRoot "Copilot.exe.config") -Destination $stageRoot
 Copy-Item -LiteralPath (Join-Path $outputRoot "Microsoft.FlightSimulator.SimConnect.dll") -Destination $stageRoot
 Copy-Item -LiteralPath (Join-Path $outputRoot "SimConnect.dll") -Destination $stageRoot
+Copy-Item -LiteralPath (Join-Path $outputRoot "Assets") -Destination $stageRoot -Recurse
 Copy-Item -LiteralPath (Join-Path $workspace "README.md") -Destination $stageRoot
+Copy-Item -LiteralPath (Join-Path $workspace "docs\RELEASE_NOTES.md") -Destination $stageRoot
+
+$efbPackagesRoot = Join-Path $stageRoot "EFB Community Package"
+New-Item -ItemType Directory -Force `
+    -Path (Join-Path $efbPackagesRoot "Community") | Out-Null
+powershell.exe -NoProfile -ExecutionPolicy Bypass `
+    -File .\src\EfbCompanion\Install-EfbCompanion.ps1 `
+    -InstalledPackagesPath $efbPackagesRoot
+if ($LASTEXITCODE -ne 0) {
+    throw "EFB Community package staging failed."
+}
 
 $installText = @"
 MSFS 2024 Virtual First Officer $version
@@ -100,6 +118,16 @@ Requirements:
 
 The required Microsoft SimConnect client libraries are included. Start MSFS
 2024, load a supported aircraft, and run Copilot.exe.
+
+Optional in-simulator EFB companion:
+1. Close MSFS 2024.
+2. Copy the noscapect-vfo-efb folder from
+   "EFB Community Package\Community" into your MSFS 2024 Community folder.
+3. Start MSFS 2024, open the aircraft EFB app library, and select
+   "Virtual First Officer".
+
+The desktop app remains fully functional without the EFB, GSX Pro,
+SayIntentions, or SimBrief. Every integration is optional.
 
 Project:
 https://github.com/$Repository
@@ -130,15 +158,23 @@ $previousTag = git tag --sort=-creatordate |
     Select-Object -First 1
 $logRange = if ($previousTag) { "$previousTag..HEAD" } else { "HEAD" }
 $changes = git log $logRange --pretty=format:"- %s"
+$releaseNotesPath = Join-Path $workspace "docs\RELEASE_NOTES.md"
+$highlights = if (Test-Path -LiteralPath $releaseNotesPath) {
+    Get-Content -LiteralPath $releaseNotesPath -Raw
+}
+else {
+    "## Changes`n`n$changes"
+}
 $releaseNotes = @"
 ## MSFS 2024 Virtual First Officer $version
 
-$changes
+$highlights
 
 ### Installation
 
 Download the ZIP, extract all files into one folder, and follow `INSTALL.txt`.
 The matching Microsoft SimConnect client libraries are included.
+The optional MSFS 2024 EFB Community package is included in the archive.
 
 ### Verification
 

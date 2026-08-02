@@ -68,7 +68,7 @@ The dashboard should show `PMDG SDK OK` after the aircraft is loaded.
 The repository contains a dedicated Asobo 737 MAX profile using native
 SimConnect Input Events and aircraft-specific procedures. Flows 1–6 have
 received iterative live testing, but the MAX profile is not yet gate-to-gate
-validated and is not part of the v0.9.5 release package. Support is
+validated. It is included in v0.9.6 only as an explicitly
 **experimental**, and further MAX development is paused while work focuses on
 the desktop UX redesign and MSFS 2024 EFB companion.
 
@@ -94,9 +94,9 @@ Keep all DLLs beside `Copilot.exe`. Windows may show a SmartScreen warning for
 an unsigned community application; verify that the download came from this
 repository before allowing it to run.
 
-### In-simulator EFB companion (development)
+### In-simulator EFB companion
 
-The current unreleased source includes a native MSFS 2024 EFB app. It displays
+The v0.9.6 release includes an optional native MSFS 2024 EFB app. It displays
 the current flow and step, allows the pilot to start, confirm, pause, resume, or
 cancel a flow, and surfaces aircraft telemetry and GSX boarding progress
 without Alt-Tabbing.
@@ -105,7 +105,10 @@ The EFB remains a thin remote: `Copilot.exe` must be running and continues to
 own all procedure, verification, aircraft-control, GSX, and SayIntentions
 logic. The EFB cannot send arbitrary cockpit commands.
 
-Developer build and installation instructions are in
+The release ZIP contains the ready-to-install Community package under
+`EFB Community Package\Community`. Close MSFS, copy `noscapect-vfo-efb` into
+the simulator's Community folder, and restart MSFS. Developer build and
+installation instructions are in
 [EFB Companion](docs/EFB_COMPANION.md).
 
 ## First flight

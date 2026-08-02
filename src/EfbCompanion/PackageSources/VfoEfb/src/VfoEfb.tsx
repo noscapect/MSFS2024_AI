@@ -81,6 +81,7 @@ interface CompanionState {
   flows?: FlowListItem[];
   gsx: {
     summary: string;
+    passengerOperation?: string;
     passengerProgress: string | null;
     passengerPercent: number;
     actionRequired: string | null;
@@ -145,6 +146,8 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
     FSComponent.createRef<HTMLButtonElement>();
   private readonly gsxSummaryRef =
     FSComponent.createRef<HTMLDivElement>();
+  private readonly gsxOperationRef =
+    FSComponent.createRef<HTMLSpanElement>();
   private readonly gsxPassengerRef =
     FSComponent.createRef<HTMLSpanElement>();
   private readonly gsxProgressRef =
@@ -527,6 +530,8 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
 
   private renderGsx(state: CompanionState): void {
     this.gsxSummaryRef.instance.textContent = state.gsx.summary;
+    this.gsxOperationRef.instance.textContent =
+      state.gsx.passengerOperation ?? "Passengers";
     this.gsxPassengerRef.instance.textContent =
       state.gsx.passengerProgress ?? "Passenger progress unavailable";
     this.gsxProgressRef.instance.style.width =
@@ -655,7 +660,7 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
       <div class="vfo-efb">
         <header class="app-header">
           <div>
-            <div class="eyebrow">MSFS 2024 - EFB build 0.2.9</div>
+            <div class="eyebrow">MSFS 2024 - EFB build 0.2.10</div>
             <h1>Virtual First Officer</h1>
           </div>
           <div ref={this.connectionRef} class="connection waiting">
@@ -773,7 +778,7 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
               Waiting for GSX status
             </div>
             <div class="progress-header">
-              <span>Boarding</span>
+              <span ref={this.gsxOperationRef}>Passengers</span>
               <span ref={this.gsxPassengerRef}>
                 Passenger progress unavailable
               </span>

@@ -1,10 +1,10 @@
 # MSFS 2024 Virtual First Officer - Project Status and Handoff
 
 This file is the primary technical handoff for continuing development. The
-latest public release remains **v0.9.5** from July 20, 2026. Unreleased
-development on `main` additionally contains the experimental Asobo 737 MAX
-profile, dashboard redesign, and MSFS 2024 EFB companion. Continued UX and EFB
-work belongs on `feature/ux-efb-refinement`. The flows implemented in the
+current public release is **v0.9.6** from August 2, 2026. It contains the
+dashboard redesign, optional MSFS 2024 EFB companion, expanded optional GSX
+coordination, and the Asobo 737 MAX profile under an explicit experimental
+warning. The flows implemented in the
 application are authoritative; supporting documents must follow the application
 when they differ.
 
@@ -29,9 +29,9 @@ software, not an autopilot, and the pilot must always be able to take over.
 
 ## Current release
 
-- Public version: **0.9.5**
+- Public version: **0.9.6**
 - Repository: <https://github.com/noscapect/MSFS2024_AI>
-- Latest release: <https://github.com/noscapect/MSFS2024_AI/releases/tag/v0.9.5>
+- Latest release: <https://github.com/noscapect/MSFS2024_AI/releases/tag/v0.9.6>
 - Main project: `src/Copilot/Copilot.csproj`
 - UI/runtime: WinForms, .NET Framework 4.7.2, x64
 - Release executable: `src/Copilot/bin/Release/net472/Copilot.exe`
@@ -47,23 +47,22 @@ dotnet build .\src\Copilot\Copilot.csproj -c Release --no-restore
 dotnet test .\tests\Copilot.Tests\Copilot.Tests.csproj -c Release --no-restore
 ```
 
-The v0.9.5 release was built with no warnings or errors and passed its full
-release suite. Current unreleased development passes 248 tests.
-
-No newer public release has been built. The Asobo 737 MAX merge is source-only
-and must complete its remaining safety instrumentation and gate-to-gate live
-validation before release consideration.
+The v0.9.6 release is built and tested from `main`; its automated suite passes
+290 tests. The Asobo 737 MAX profile
+is packaged only as experimental support and must complete its remaining
+safety instrumentation and gate-to-gate live validation before that warning
+can be removed.
 
 ## MSFS 2024 EFB companion
 
-The development EFB app is an official MSFS 2024 EFB application installed as
+The optional EFB app is an official MSFS 2024 EFB application installed as
 a Community package. `CopilotService` subscribes to one CommBus command event:
 
 - `VFO_EFB_COMMAND_V2`
 
 It publishes state and command results on
 `VFO_EFB_STATE_V2`. Only `start_flow`, `start_next_flow`, `confirm`,
-`pause`, `resume`, `cancel`, `request_state`, and a validated
+`pause`, `resume`, `cancel`, `request_state`, `gsx_open_menu`, and a validated
 `gsx_menu_choice` are accepted. Flow IDs are checked against the current
 aircraft catalog; GSX choice indexes are checked against the currently open,
 non-root GSX prompt; and runtime state guards are reapplied on the desktop
@@ -260,8 +259,8 @@ verify the exchange without controlling the radios.
 
 ## GSX integration
 
-GSX Pro departure integration is available as optional beta functionality in
-v0.9.5. GSX remains the owner of all passenger, fuel,
+GSX Pro integration is available as optional beta functionality in v0.9.6.
+GSX remains the owner of all passenger, fuel,
 cargo, catering, door, timing, airport-profile, and aircraft-profile choices.
 The Virtual First Officer only coordinates natural departure milestones.
 
@@ -289,11 +288,16 @@ unknown existing owner is never overridden silently. `Manage GSX` exposes an
 explicit recovery action for legacy stale locks after the user confirms that
 no other GSX remote-control add-on or EFB is active.
 
+Arrival coordination can pass a SayIntentions-assigned exact stand to GSX,
+advance paged GSX position menus, and request deboarding after parking. It
+remains a bounded handoff: it does not infer a stand when the integration has
+not supplied one, and GSX remains responsible for executing the service.
+
 The app must not hardcode GSX menu indexes, duplicate an active GSX operation,
 take Remote Control away from another add-on, or prevent a flight when GSX is
-unavailable. Follow-up parking-brake handling and good-engine-start responses
-still require more live validation before automation. Arrival integration is
-deliberately deferred until after v1.0.
+unavailable. Pushback direction and other GSX menu selections are requests to
+GSX, not proof that GSX executed the requested manoeuvre. Deeper arrival
+service automation remains deferred until after v1.0.
 
 ## Architecture and stability boundary
 

@@ -75,6 +75,26 @@ public sealed class GsxArrivalGateCoordinatorTests
     }
 
     [TestMethod]
+    public void TerminalMenuAdvancesToNextPageWhenExactStandIsNotVisible()
+    {
+        var menu = new GsxMenuSnapshot(
+            "All Gate D positions",
+            new[]
+            {
+                "Gate D 2 - Medium",
+                "Gate D 16 - Medium",
+                "Next Page ▶",
+                "↑ Back"
+            });
+
+        var selection = GsxArrivalGateCoordinator.FindSelection(menu, "D24");
+
+        Assert.IsNotNull(selection);
+        Assert.AreEqual(2, selection!.ChoiceIndex);
+        Assert.IsFalse(selection.CompletesSelection);
+    }
+
+    [TestMethod]
     public void UnrelatedGsxQuestionIsNeverAnswered()
     {
         var menu = new GsxMenuSnapshot(

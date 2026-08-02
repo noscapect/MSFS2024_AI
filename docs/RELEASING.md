@@ -14,10 +14,12 @@ The script:
 3. Requires a clean Git working tree.
 4. Builds the Release application.
 5. Runs the automated tests, including released-aircraft isolation contracts.
-6. Packages the application and installation instructions.
-7. Generates a SHA-256 checksum.
-8. Creates and pushes the matching `vX.Y.Z` Git tag.
-9. Creates the public GitHub release and uploads both assets.
+6. Builds and type-checks the MSFS 2024 EFB companion.
+7. Packages the desktop application, aircraft fallback assets, optional EFB
+   Community package, and installation instructions.
+8. Generates a SHA-256 checksum.
+9. Creates and pushes the matching `vX.Y.Z` Git tag.
+10. Creates the public GitHub release and uploads both assets.
 
 GitHub authentication is read from the existing Windows Git credential for
 `https://github.com`. The access token is never printed or written into the
@@ -30,3 +32,5 @@ client libraries copied into the application output during the build:
 - `SimConnect.dll`
 
 Users do not need to install the full MSFS 2024 SDK to run a release.
+The SDK is required only on the release-development machine to build the EFB
+package.

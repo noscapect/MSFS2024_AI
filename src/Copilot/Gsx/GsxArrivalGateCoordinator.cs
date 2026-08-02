@@ -88,6 +88,21 @@ internal static class GsxArrivalGateCoordinator
             }
         }
 
+        if (menu.Title.StartsWith(
+                "All Gate ",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            for (var index = 0; index < menu.Choices.Count; index++)
+            {
+                if (menu.Choices[index].IndexOf(
+                        "Next Page",
+                        StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return new GsxArrivalGateSelection(index, false);
+                }
+            }
+        }
+
         var terminal = new string(stand.TakeWhile(char.IsLetter).ToArray());
         if (terminal.Length == 0 || !LooksLikePositionSelection(menu))
         {

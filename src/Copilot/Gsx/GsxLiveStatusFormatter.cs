@@ -12,8 +12,10 @@ internal sealed class GsxLiveState
     public int? PassengerPercent { get; set; }
     public int? PassengerCurrent { get; set; }
     public int? PassengerTotal { get; set; }
+    public string PassengerOperationText { get; set; } = "Passengers";
     public bool BoardingInProgress { get; set; }
     public bool BoardingComplete { get; set; }
+    public bool DeboardingInProgress { get; set; }
     public string? ActionRequiredText { get; set; }
     public bool HasActionRequired => !string.IsNullOrWhiteSpace(ActionRequiredText);
     public IReadOnlyList<string> ActiveServices { get; set; } = Array.Empty<string>();
@@ -62,6 +64,16 @@ internal static class GsxLiveStatusFormatter
         var boardingLines = cleanLines
             .Where(MentionsBoarding)
             .ToList();
+        var deboardingLines = cleanLines
+            .Where(MentionsDeboarding)
+            .ToList();
+        var isDeboarding = deboardingLines.Count > 0;
+        var isBoarding = !isDeboarding && boardingLines.Count > 0;
+        state.PassengerOperationText = isDeboarding
+            ? "Deboarding"
+            : isBoarding
+                ? "Boarding"
+                : "Passengers";
 
         // Parse passenger progress if present
         foreach (var line in cleanLines)
@@ -73,12 +85,20 @@ internal static class GsxLiveStatusFormatter
                 state.PassengerCurrent = current;
                 state.PassengerTotal = total;
                 state.PassengerPercent = percent;
-                state.PassengerProgressText = $"{current} / {total} passengers ({percent}%)";
+                var operation = isDeboarding
+                    ? " deboarded"
+                    : isBoarding
+                        ? " boarded"
+                        : string.Empty;
+                state.PassengerProgressText =
+                    $"{current} / {total} passengers{operation} ({percent}%)";
                 break;
             }
         }
 
         state.BoardingComplete =
+            isBoarding
+            &&
             state.PassengerCurrent.HasValue
             && state.PassengerTotal.HasValue
             && state.PassengerCurrent.Value >= state.PassengerTotal.Value;
@@ -92,6 +112,11 @@ internal static class GsxLiveStatusFormatter
         }
         state.BoardingInProgress = boardingLines.Count > 0
                                    && !state.BoardingComplete;
+        state.DeboardingInProgress = isDeboarding
+                                     && !deboardingLines.Any(line =>
+                                         line.IndexOf("deboarding complete", StringComparison.OrdinalIgnoreCase) >= 0
+                                         || line.IndexOf("deboarding completed", StringComparison.OrdinalIgnoreCase) >= 0
+                                         || line.IndexOf("all passengers deboarded", StringComparison.OrdinalIgnoreCase) >= 0);
 
         // Parse actions required
         var actions = new List<string>();
@@ -133,10 +158,11 @@ internal static class GsxLiveStatusFormatter
         }
 
         // Summary string
-        if (state.PassengerProgressText != null
-            && cleanLines.Any(
-                line => line.IndexOf("boarding", StringComparison.OrdinalIgnoreCase) >= 0
-                        || line.IndexOf("boarded", StringComparison.OrdinalIgnoreCase) >= 0))
+        if (state.PassengerProgressText != null && isDeboarding)
+        {
+            state.SummaryText = $"Deboarding in progress ({state.PassengerProgressText})";
+        }
+        else if (state.PassengerProgressText != null && isBoarding)
         {
             state.SummaryText = $"Boarding in progress ({state.PassengerProgressText})";
         }
@@ -153,7 +179,11 @@ internal static class GsxLiveStatusFormatter
     }
 
     private static bool MentionsBoarding(string line) =>
-        line.IndexOf("deboarding", StringComparison.OrdinalIgnoreCase) < 0
+        !MentionsDeboarding(line)
         && (line.IndexOf("boarding", StringComparison.OrdinalIgnoreCase) >= 0
             || line.IndexOf("passengers boarded", StringComparison.OrdinalIgnoreCase) >= 0);
+
+    private static bool MentionsDeboarding(string line) =>
+        line.IndexOf("deboarding", StringComparison.OrdinalIgnoreCase) >= 0
+        || line.IndexOf("passengers deboarded", StringComparison.OrdinalIgnoreCase) >= 0;
 }

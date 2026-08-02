@@ -11,6 +11,7 @@ internal enum AircraftVariant
     IniBuildsA320NeoV2,
     IniBuildsA321Lr,
     IniBuildsA330,
+    IniBuildsA310,
     FlyByWireA320Neo,
     FlyByWireA380XExperimental,
     Pmdg737800,
@@ -64,6 +65,11 @@ internal static class AircraftVariantResolver
             || value.IndexOf("iniBuilds A330", StringComparison.OrdinalIgnoreCase) >= 0)
         {
             return AircraftVariant.IniBuildsA330;
+        }
+
+        if (value.IndexOf("A310", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return AircraftVariant.IniBuildsA310;
         }
 
         if (string.Equals(value, "A321", StringComparison.OrdinalIgnoreCase)

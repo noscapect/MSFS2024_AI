@@ -8,6 +8,11 @@ warning. The flows implemented in the
 application are authoritative; supporting documents must follow the application
 when they differ.
 
+Current post-release development adds an iniBuilds A310-300 procedure and
+checklist framework. It is not part of v0.9.6 and remains experimental, with
+validated preliminary-panel actions now automated
+until its native MSFS 2024 controls and readbacks are live-validated.
+
 Suggested opening prompt for a new development chat:
 
 > Continue the project described in `C:\CODE\MSFS2024_AI\PROJECT.md`. Read
@@ -47,11 +52,10 @@ dotnet build .\src\Copilot\Copilot.csproj -c Release --no-restore
 dotnet test .\tests\Copilot.Tests\Copilot.Tests.csproj -c Release --no-restore
 ```
 
-The v0.9.6 release is built and tested from `main`; its automated suite passes
-290 tests. The Asobo 737 MAX profile
-is packaged only as experimental support and must complete its remaining
-safety instrumentation and gate-to-gate live validation before that warning
-can be removed.
+The v0.9.6 release passed 290 automated tests. Current post-release development
+passes 303 tests. The Asobo 737 MAX profile is packaged only as experimental
+support and must complete its remaining safety instrumentation and gate-to-gate
+live validation before that warning can be removed.
 
 ## MSFS 2024 EFB companion
 
@@ -79,6 +83,7 @@ Build and installation details are in `docs/EFB_COMPANION.md`.
 | FlyByWire A32NX for MSFS 2024 | Gate-to-gate live validated | SimConnect and MobiFlight WASM |
 | PMDG 737-800 | Gate-to-gate live validated | SimConnect and PMDG SDK data broadcast |
 | iniBuilds A330-300 (GE) | Gate-to-gate implemented and live tested; continue field validation | SimConnect and MobiFlight WASM |
+| iniBuilds A310-300 | Dedicated twelve-flow framework; validated preliminary-panel actions are automated and remaining native controls are being mapped | SimConnect base state plus A310-native command/readback telemetry |
 | Asobo 737 MAX 8 | Development beta; Flows 1–6 iteratively live tested, Flow 7 not cleared | SimConnect Input Events, SimVars, and MobiFlight WASM |
 
 Unsupported aircraft are identified but never controlled with guessed generic
@@ -315,6 +320,7 @@ Important layers and files:
 - `src/Copilot/Procedures/A321ProcedureLibrary.cs` - iniBuilds A321LR
 - `src/Copilot/Procedures/FbwA320ProcedureLibrary.cs` - FlyByWire A32NX
 - `src/Copilot/Procedures/A330ProcedureLibrary.cs` - iniBuilds A330
+- `src/Copilot/Procedures/A310ProcedureLibrary.cs` - iniBuilds A310-300
 - `src/Copilot/Procedures/B737ProcedureLibrary.cs` - PMDG 737-800
 - `src/Copilot/Procedures/Asobo737MaxProcedureLibrary.cs` - Asobo 737 MAX 8
 - `src/Copilot/AircraftAdapters/Asobo737Max/Asobo737MaxControlProfile.cs` -

@@ -14,6 +14,7 @@ public sealed class Flow12TurnaroundChoiceTests
             A320ProcedureLibrary.GateToGate[11],
             A321ProcedureLibrary.GateToGate[11],
             A330ProcedureLibrary.GateToGate[11],
+            A310ProcedureLibrary.GateToGate[11],
             FbwA320ProcedureLibrary.GateToGate[11],
             B737ProcedureLibrary.GateToGate[11]
         };

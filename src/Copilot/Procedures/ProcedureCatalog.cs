@@ -38,6 +38,11 @@ internal static class ProcedureCatalog
                 A330ProcedureLibrary.GateToGate,
                 A330ProcedureLibrary.Find,
                 A330ChecklistLibrary.FindForProcedure);
+            case AircraftVariant.IniBuildsA310:
+                return new AircraftProcedureLibrary(
+                    A310ProcedureLibrary.GateToGate,
+                    A310ProcedureLibrary.Find,
+                    A310ChecklistLibrary.FindForProcedure);
             case AircraftVariant.IniBuildsA321Lr:
                 return new AircraftProcedureLibrary(
                 A321ProcedureLibrary.GateToGate,

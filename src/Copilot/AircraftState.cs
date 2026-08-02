@@ -35,6 +35,21 @@ internal sealed class AircraftState
     public double? FbwEngine2State { get; set; }
     public bool Battery1On { get; set; }
     public bool Battery2On { get; set; }
+    public bool Battery3On { get; set; }
+    public bool A310HydraulicPanelSafe { get; set; }
+    public bool A310WipersAndWeatherRadarOff { get; set; }
+    public bool A310ApuFireTestCompleted { get; set; }
+    public bool A310AnnunciatorTestCompleted { get; set; }
+    public bool A310InitialExteriorLightsSet { get; set; }
+    public bool A310PreflightSignsSet { get; set; }
+    public bool A310AutoflightComputersSet { get; set; }
+    public bool A310PreflightHeatSet { get; set; }
+    public bool A310EmergencyExitArmed { get; set; }
+    public bool A310CargoSmokeTestCompleted { get; set; }
+    public bool A310EgpwsTestCompleted { get; set; }
+    public bool A310PreflightPedestalSet { get; set; }
+    public bool A310ApuPowerAndBleedSet { get; set; }
+    public bool A310TransponderXpdrSet { get; set; }
     public double Battery1Voltage { get; set; }
     public double Battery2Voltage { get; set; }
     public bool ApuBatteryOn { get; set; }
@@ -266,6 +281,8 @@ internal sealed class AircraftState
 
     public bool IsIniBuildsA330 => Variant == AircraftVariant.IniBuildsA330;
 
+    public bool IsIniBuildsA310 => Variant == AircraftVariant.IniBuildsA310;
+
     public bool IsIniBuildsA320Family =>
         IsA320NeoV2 || IsIniBuildsA321Lr;
 
@@ -294,13 +311,15 @@ internal sealed class AircraftState
     public bool IsSupportedBoeing737 => IsPmdg737800 || IsAsobo737Max8;
 
     public bool IsSupportedAircraft =>
-        IsSupportedA320 || IsSupportedBoeing737;
+        IsSupportedA320 || IsIniBuildsA310 || IsSupportedBoeing737;
 
     public string AircraftFamilyLabel =>
         IsSupportedBoeing737
             ? IsAsobo737Max8
                 ? "Asobo 737 MAX 8"
                 : "PMDG 737-800"
+            : IsIniBuildsA310
+                ? "iniBuilds A310-300"
             : IsIniBuildsA330
                 ? "iniBuilds A330"
             : IsFlyByWireA380X

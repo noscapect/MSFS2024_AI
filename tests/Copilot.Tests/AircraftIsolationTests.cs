@@ -12,6 +12,8 @@ public sealed class AircraftIsolationTests
     [DataRow("A321", (int)AircraftVariant.IniBuildsA321Lr)]
     [DataRow("A321LR", (int)AircraftVariant.IniBuildsA321Lr)]
     [DataRow("A330-300 (GE)", (int)AircraftVariant.IniBuildsA330)]
+    [DataRow("Airbus A310-300", (int)AircraftVariant.IniBuildsA310)]
+    [DataRow("A310-300 GE", (int)AircraftVariant.IniBuildsA310)]
     [DataRow("Airbus A320neo FlyByWire", (int)AircraftVariant.FlyByWireA320Neo)]
     [DataRow("FlyByWire A32NX", (int)AircraftVariant.FlyByWireA320Neo)]
     [DataRow("737-800 PAX BW TC", (int)AircraftVariant.Pmdg737800)]
@@ -36,6 +38,7 @@ public sealed class AircraftIsolationTests
             state.IsA320NeoV2,
             state.IsIniBuildsA321Lr,
             state.IsIniBuildsA330,
+            state.IsIniBuildsA310,
             state.IsFlyByWireA320Neo,
             state.IsFlyByWireA380X,
             state.IsPmdg737800,
@@ -54,6 +57,7 @@ public sealed class AircraftIsolationTests
         AssertDedicatedLibrary("A320neo V2", A320ProcedureLibrary.GateToGate);
         AssertDedicatedLibrary("A321", A321ProcedureLibrary.GateToGate);
         AssertDedicatedLibrary("A330-300 (GE)", A330ProcedureLibrary.GateToGate);
+        AssertDedicatedLibrary("Airbus A310-300", A310ProcedureLibrary.GateToGate);
         AssertDedicatedLibrary("FlyByWire A32NX", FbwA320ProcedureLibrary.GateToGate);
         AssertDedicatedLibrary("PMDG 737-800", B737ProcedureLibrary.GateToGate);
         AssertDedicatedLibrary("737 Max 8 Passengers", Asobo737MaxProcedureLibrary.GateToGate);
@@ -67,6 +71,7 @@ public sealed class AircraftIsolationTests
             A320ProcedureLibrary.GateToGate,
             A321ProcedureLibrary.GateToGate,
             A330ProcedureLibrary.GateToGate,
+            A310ProcedureLibrary.GateToGate,
             FbwA320ProcedureLibrary.GateToGate,
             B737ProcedureLibrary.GateToGate,
             Asobo737MaxProcedureLibrary.GateToGate

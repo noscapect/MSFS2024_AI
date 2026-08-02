@@ -18,6 +18,7 @@ public sealed class ProcedureCatalogTests
             A320ProcedureLibrary.BeforeTakeoff,
             A321ProcedureLibrary.BeforeTakeoff,
             A330ProcedureLibrary.BeforeTakeoff,
+            A310ProcedureLibrary.BeforeTakeoff,
             FbwA320ProcedureLibrary.BeforeTakeoff,
             B737ProcedureLibrary.BeforeTakeoff,
             Asobo737MaxProcedureLibrary.BeforeTakeoff

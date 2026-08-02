@@ -56,6 +56,9 @@ internal static class AircraftApproachProfiles
     private static readonly AircraftApproachProfile IniA330 = Profile(
         "inibuilds-a330", "iniBuilds A330",
         16, 10000, 230, 11, 3500, 195, 8, 2500, 210, 5, 1800, 185, 177);
+    private static readonly AircraftApproachProfile IniA310 = Profile(
+        "inibuilds-a310-300", "iniBuilds A310-300",
+        9, 3000, 245, 7, 2000, 210, 5, 1800, 195, 4, 1200, 180, 180);
     private static readonly AircraftApproachProfile Pmdg737 = Profile(
         "pmdg-737-800", "PMDG 737-800",
         15, 10000, 230, 12, 4000, 190, 7, 2500, 200, 5, 1800, 190, 190);
@@ -71,6 +74,7 @@ internal static class AircraftApproachProfiles
         var title = aircraftTitle ?? "";
         if (title.IndexOf("A321", StringComparison.OrdinalIgnoreCase) >= 0) return IniA321;
         if (title.IndexOf("A330", StringComparison.OrdinalIgnoreCase) >= 0) return IniA330;
+        if (title.IndexOf("A310", StringComparison.OrdinalIgnoreCase) >= 0) return IniA310;
         if (title.IndexOf("737-800", StringComparison.OrdinalIgnoreCase) >= 0
             || title.IndexOf("738", StringComparison.OrdinalIgnoreCase) >= 0) return Pmdg737;
         if (title.IndexOf("737 Max", StringComparison.OrdinalIgnoreCase) >= 0

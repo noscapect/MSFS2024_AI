@@ -23,6 +23,11 @@ verify MAX FMC takeoff flaps, stabilizer trim, elevator response, pilot yoke
 input, STS/MCAS commands, or the aircraft takeoff-configuration warning.
 The pilot must verify those items directly before commencing takeoff.
 
+The iniBuilds A310-300 uses a separate legacy-Airbus catalog in
+`A310ProcedureLibrary`. Its researched twelve-flow content and current manual
+control boundary are documented in `docs/A310_SUPPORT_PLAN.md`; it does not
+inherit the detailed modern-Airbus steps below.
+
 An interrupted active flow is saved locally and restored at its exact step
 after restart. During restoration, transient milestones that have already
 passed are recovered from current aircraft state rather than awaited again.

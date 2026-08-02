@@ -68,6 +68,7 @@ Boeing aircraft profiles:
 - iniBuilds A320neo V2
 - iniBuilds A321LR
 - iniBuilds A330-300 (GE)
+- iniBuilds A310-300 (experimental native adapter; preliminary-panel mapping active)
 - FlyByWire A32NX for MSFS 2024
 - PMDG 737-800
 - Asobo 737 MAX 8 (development beta)
@@ -105,13 +106,24 @@ Dormant FlyByWire A380X research code may exist in the repository for future
 development, but the aircraft is not exposed as a supported public profile.
 
 PMDG 737-800 support is implemented as a separate Boeing aircraft family.
-Airbus aircraft use separate A320, A321, A330, and FBW procedure libraries;
+Airbus aircraft use separate A320, A321, A330, A310, and FBW procedure libraries;
 Boeing procedures live in `B737ProcedureLibrary`. `ProcedureCatalog` selects
 the correct catalog from the loaded aircraft so the user still sees one app.
 PMDG cockpit state is read from
 the official `PMDG_NG3_Data` client-data area and controls are sent through
 `PMDG_NG3_Control` or aircraft-confirmed PMDG `ROTOR_BRAKE` switch events
 where required.
+
+The A310 is a legacy-Airbus boundary, not part of `IsSupportedA320` or the
+modern iniBuilds Airbus command family. `A310ProcedureLibrary`,
+`A310ChecklistLibrary`, and `A310ControlProfile` own its procedures,
+checklists, and native-state research. Its preliminary-panel F/O sequence now
+maps the batteries, wipers/radar, APU fire test, IRS, oxygen, annunciator test,
+and initial exterior lights to A310-only commands and native panel readbacks.
+Flow 2 extends this boundary to signs, ATS/flight-control computers, heat,
+emergency lights, smoke/EGPWS tests, and the preflight pedestal.
+Other commands become eligible only after A310-native validation. See
+`docs/A310_SUPPORT_PLAN.md`.
 
 The Asobo 737 MAX is a second, independent Boeing profile. It uses
 `Asobo737MaxProcedureLibrary`, `Asobo737MaxChecklistLibrary`, and

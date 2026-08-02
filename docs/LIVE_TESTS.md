@@ -1,5 +1,14 @@
 # Live test evidence
 
+## 2026-08-02 - iniBuilds A310-300 framework research
+
+The official Microsoft-hosted iniBuilds A310 manual and the locally installed
+MSFS 2024 streamed A310 package were reviewed before creating the profile. A
+dedicated twelve-flow catalog, checklist library, SimBrief A310 contract,
+approach schedule and native-state boundary now exist. No cockpit command is
+classified as automatic yet: live capture must prove the A310 event and an
+independent readback first. See `A310_SUPPORT_PLAN.md`.
+
 ## 2026-07-28 - Asobo 737 MAX Flow 3 selector corrections
 
 ### Flow 7 takeoff incident

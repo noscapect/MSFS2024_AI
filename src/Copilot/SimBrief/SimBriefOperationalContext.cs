@@ -14,6 +14,7 @@ internal static class SimBriefOperationalContext
             AircraftVariant.Asobo737Max8 => new[] { "B38M", "B737" },
             AircraftVariant.IniBuildsA321Lr => new[] { "A21N", "A321" },
             AircraftVariant.IniBuildsA330 => new[] { "A333" },
+            AircraftVariant.IniBuildsA310 => new[] { "A310" },
             AircraftVariant.IniBuildsA320NeoV2 or AircraftVariant.FlyByWireA320Neo =>
                 new[] { "A20N" },
             _ => Array.Empty<string>()
@@ -94,6 +95,21 @@ internal static class SimBriefOperationalContext
                 && boeingFlaps is 1 or 2 or 5 or 10 or 15 or 25)
             {
                 return boeingFlaps;
+            }
+            return null;
+        }
+
+        if (variant == AircraftVariant.IniBuildsA310)
+        {
+            var digits = new string(value!.Where(char.IsDigit).ToArray());
+            if (digits.StartsWith("150", StringComparison.Ordinal)
+                || digits.StartsWith("1515", StringComparison.Ordinal)) return 15;
+            if (digits.StartsWith("2020", StringComparison.Ordinal)) return 20;
+            if (digits.StartsWith("3040", StringComparison.Ordinal)) return 40;
+            if (int.TryParse(digits, out var a310Flaps)
+                && a310Flaps is 15 or 20 or 40)
+            {
+                return a310Flaps;
             }
             return null;
         }

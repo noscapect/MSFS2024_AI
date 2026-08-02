@@ -13,21 +13,24 @@ paused while UX, EFB, and integration reliability are stabilized on `main`.
 
 Priorities are:
 
-1. Continue live validation of the MSFS 2024 EFB companion,
+1. Capture and live-validate native MSFS 2024 A310 controls/readbacks against
+   the dedicated researched flow framework without reusing modern-Airbus
+   mappings.
+2. Continue live validation of the MSFS 2024 EFB companion,
    including start, confirm, pause, resume, cancel, reconnect, and stale-state
    behavior.
-2. Keep the EFB a narrow remote over the versioned CommBus protocol; do not
+3. Keep the EFB a narrow remote over the versioned CommBus protocol; do not
    duplicate procedure or aircraft-control logic in JavaScript.
-3. Retain the completed dashboard redesign, GSX passenger progress, and
+4. Retain the completed dashboard redesign, GSX passenger progress, and
    collapsible diagnostics on the desktop app.
-4. Preserve the MAX limitations and release gates documented in
+5. Preserve the MAX limitations and release gates documented in
    `ASOBO_737_MAX_SUPPORT_STATUS.md`; do not resume Flow 7 testing without an
    explicit decision to restart MAX development.
-5. Protect completed aircraft profiles with their existing isolation and
+6. Protect completed aircraft profiles with their existing isolation and
    contract tests.
-6. Continue live validation of optional SimBrief, SayIntentions, and GSX
+7. Continue live validation of optional SimBrief, SayIntentions, and GSX
    behavior without making them mandatory for normal flows.
-7. Keep customer-facing diagnostics concise while retaining bounded flight
+8. Keep customer-facing diagnostics concise while retaining bounded flight
    recordings for support.
 
 The EFB may expose existing flow controls and operational state, but must not

@@ -4,6 +4,7 @@ using Msfs2024Ai.Copilot.AircraftAdapters.FbwA320;
 using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA320;
 using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA321;
 using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA330;
+using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA310;
 using Msfs2024Ai.Copilot.AircraftIdentity;
 using Msfs2024Ai.Copilot.Checklists;
 using Msfs2024Ai.Copilot.Controls;
@@ -196,6 +197,33 @@ internal sealed class CopilotService : Form
         && _nativeTransponderStandby.HasValue;
     private bool? _nativeBattery1On;
     private bool? _nativeBattery2On;
+    private bool? _a310Battery1Auto;
+    private bool? _a310Battery2Auto;
+    private bool? _a310Battery3Auto;
+    private float? _a310HydraulicEngine1;
+    private float? _a310HydraulicEngine1A;
+    private float? _a310HydraulicEngine2;
+    private float? _a310HydraulicEngine2B;
+    private float? _a310HydraulicElectric;
+    private float? _a310CaptainWiper;
+    private float? _a310FirstOfficerWiper;
+    private float? _a310WeatherRadarSystem;
+    private float? _a310Irs1;
+    private float? _a310Irs2;
+    private float? _a310Irs3;
+    private float? _a310OxygenSupply;
+    private float? _a310ApuFireTest;
+    private float? _a310ApuLoopTest;
+    private float? _a310AnnunciatorTest;
+    private bool _a310ApuFireTestObserved;
+    private bool _a310ApuLoopTestObserved;
+    private bool _a310AnnunciatorTestObserved;
+    private readonly float?[] _a310InitialLightStates = new float?[8];
+    private readonly float?[] _a310Flow2States = new float?[24];
+    private bool _a310CargoSmokeTestObserved;
+    private bool _a310CargoSmokeIndicationsObserved;
+    private bool _a310EgpwsTestObserved;
+    private readonly float?[] _a310Flow3ApuStates = new float?[5];
     private bool? _fbwBattery1Auto;
     private bool? _fbwBattery2Auto;
     private bool? _fbwBattery1AutoTyped;
@@ -326,6 +354,7 @@ internal sealed class CopilotService : Form
     private float? _nativeTcasMode;
     private float? _nativeTransponderStandby;
     private bool? _a330ApuBatteryInputEventOn;
+    private readonly double?[] _a310ApuInputStates = new double?[4];
     private bool? _asobo737MaxBatteryInputEventOn;
     private bool? _asobo737MaxBatteryCoverInputEventOn;
     private ulong? _asobo737MaxBatteryInputEventHash;
@@ -374,6 +403,7 @@ internal sealed class CopilotService : Form
     private double? _asobo737MaxTransponderModeInputState;
     private double? _asobo737MaxTransponderOperatingModeInputState;
     private bool _asobo737MaxInputEventsEnumerated;
+    private bool _a310InputEventsEnumerated;
     private bool _asobo737MaxFireTestsInProgress;
     private static readonly string[] Asobo737MaxFuelPumpInputEventNames =
     {
@@ -456,6 +486,10 @@ internal sealed class CopilotService : Form
         9344724743939237602UL, // AIRLINER_APU_START
         8638866639146676618UL  // AIRLINER_AIR_APU_BLEED
     };
+    private const ulong A310ApuMasterInputEventHash = 2081785778858810395UL; // AIRLINER_APU_MASTERSWITCH
+    private const ulong A310ApuStartInputEventHash = 9344724743939237602UL; // AIRLINER_APU_START
+    private const ulong A310ApuGeneratorInputEventHash = 11164808654641869089UL; // AIRLINER_APU_GEN
+    private const ulong A310ApuBleedInputEventHash = 3757581603635492448UL; // AIRLINER_APU_BLEEDSWITCH
     private readonly double?[] _a330ApuInputStates = new double?[3];
     private const ulong A330TransponderModeInputEventHash = 14182293921746398447UL;
     private double? _a330TransponderModeInputState;
@@ -754,6 +788,66 @@ internal sealed class CopilotService : Form
         Asobo737MaxAutothrottleInputEvent = 278,
         Asobo737MaxTransponderOperatingModeInputEvent = 279,
         Asobo737MaxTransponderModeInputEvent = 280,
+        A310Battery1Auto = 281,
+        A310Battery2Auto = 282,
+        A310Battery3Auto = 283,
+        A310HydraulicEngine1 = 284,
+        A310HydraulicEngine1A = 285,
+        A310HydraulicEngine2 = 286,
+        A310HydraulicEngine2B = 287,
+        A310HydraulicElectric = 288,
+        A310CaptainWiper = 289,
+        A310FirstOfficerWiper = 290,
+        A310WeatherRadarSystem = 291,
+        A310Irs1 = 292,
+        A310Irs2 = 293,
+        A310Irs3 = 294,
+        A310OxygenSupply = 295,
+        A310ApuFireTest = 296,
+        A310ApuLoopTest = 297,
+        A310AnnunciatorTest = 298,
+        A310NavLogoLight = 302,
+        A310BeaconLight = 303,
+        A310TaxiLight = 304,
+        A310LeftLandingLight = 305,
+        A310RightLandingLight = 306,
+        A310WingLight = 307,
+        A310LeftRunwayTurnoffLight = 308,
+        A310RightRunwayTurnoffLight = 309,
+        A310Flow2Seatbelts = 310,
+        A310Flow2NoSmoking = 311,
+        A310Flow2Ats1 = 312,
+        A310Flow2Ats2 = 313,
+        A310Flow2PitchTrim1 = 314,
+        A310Flow2PitchTrim2 = 315,
+        A310Flow2YawDamper1 = 316,
+        A310Flow2YawDamper2 = 317,
+        A310Flow2WindowHeat1 = 318,
+        A310Flow2WindowHeat2 = 319,
+        A310Flow2WindowHeat3 = 320,
+        A310Flow2WindowHeat4 = 321,
+        A310Flow2ProbeHeatCaptain = 322,
+        A310Flow2ProbeHeatFirstOfficer = 323,
+        A310Flow2ProbeHeatStandby = 324,
+        A310Flow2EmergencyExit = 325,
+        A310Flow2CargoSmokeTest = 326,
+        A310Flow2EgpwsTest = 327,
+        A310Flow2Autobrake = 328,
+        A310Flow2RudderTrim = 329,
+        A310Flow2TcasMode = 330,
+        A310Flow2CargoSmokeForward = 331,
+        A310Flow2CargoSmokeAft = 332,
+        A310Flow2CargoSmokeBulk = 333,
+        A310Flow3ApuMaster = 334,
+        A310Flow3ApuStart = 335,
+        A310Flow3ApuAvailable = 336,
+        A310Flow3ApuBleed = 337,
+        A310Flow3ApuGenerator = 338,
+        A310EnumerateInputEvents = 339,
+        A310ApuMasterInputEvent = 340,
+        A310ApuStartInputEvent = 341,
+        A310ApuGeneratorInputEvent = 342,
+        A310ApuBleedInputEvent = 343,
         PmdgNg3Data = 300,
         PmdgNg3Control = 301
     }
@@ -873,6 +967,61 @@ internal sealed class CopilotService : Form
         FbwA380ExternalPower3OnTyped = 206,
         FbwA380ExternalPower4AvailableTyped = 207,
         FbwA380ExternalPower4OnTyped = 208,
+        A310Battery1Auto = 211,
+        A310Battery2Auto = 212,
+        A310Battery3Auto = 213,
+        A310HydraulicEngine1 = 214,
+        A310HydraulicEngine1A = 215,
+        A310HydraulicEngine2 = 216,
+        A310HydraulicEngine2B = 217,
+        A310HydraulicElectric = 218,
+        A310CaptainWiper = 219,
+        A310FirstOfficerWiper = 220,
+        A310WeatherRadarSystem = 221,
+        A310Irs1 = 222,
+        A310Irs2 = 223,
+        A310Irs3 = 224,
+        A310OxygenSupply = 225,
+        A310ApuFireTest = 226,
+        A310ApuLoopTest = 227,
+        A310AnnunciatorTest = 228,
+        A310NavLogoLight = 229,
+        A310BeaconLight = 230,
+        A310TaxiLight = 231,
+        A310LeftLandingLight = 232,
+        A310RightLandingLight = 233,
+        A310WingLight = 234,
+        A310LeftRunwayTurnoffLight = 235,
+        A310RightRunwayTurnoffLight = 236,
+        A310Flow2Seatbelts = 237,
+        A310Flow2NoSmoking = 238,
+        A310Flow2Ats1 = 239,
+        A310Flow2Ats2 = 240,
+        A310Flow2PitchTrim1 = 241,
+        A310Flow2PitchTrim2 = 242,
+        A310Flow2YawDamper1 = 243,
+        A310Flow2YawDamper2 = 244,
+        A310Flow2WindowHeat1 = 245,
+        A310Flow2WindowHeat2 = 246,
+        A310Flow2WindowHeat3 = 247,
+        A310Flow2WindowHeat4 = 248,
+        A310Flow2ProbeHeatCaptain = 249,
+        A310Flow2ProbeHeatFirstOfficer = 250,
+        A310Flow2ProbeHeatStandby = 251,
+        A310Flow2EmergencyExit = 252,
+        A310Flow2CargoSmokeTest = 253,
+        A310Flow2EgpwsTest = 254,
+        A310Flow2Autobrake = 255,
+        A310Flow2RudderTrim = 256,
+        A310Flow2TcasMode = 257,
+        A310Flow2CargoSmokeForward = 258,
+        A310Flow2CargoSmokeAft = 259,
+        A310Flow2CargoSmokeBulk = 260,
+        A310Flow3ApuMaster = 261,
+        A310Flow3ApuStart = 262,
+        A310Flow3ApuAvailable = 263,
+        A310Flow3ApuBleed = 264,
+        A310Flow3ApuGenerator = 265,
         PmdgNg3Data = unchecked((int)PmdgNg3DataDefinition),
         PmdgNg3Control = unchecked((int)PmdgNg3ControlDefinition)
     }
@@ -1703,6 +1852,33 @@ internal sealed class CopilotService : Form
                 return;
             }
 
+            if (_state?.IsIniBuildsA310 == true)
+            {
+                try
+                {
+                    sender.GetInputEvent(Request.A310ApuMasterInputEvent, A310ApuMasterInputEventHash);
+                    sender.GetInputEvent(Request.A310ApuStartInputEvent, A310ApuStartInputEventHash);
+                    sender.GetInputEvent(Request.A310ApuGeneratorInputEvent, A310ApuGeneratorInputEventHash);
+                    sender.GetInputEvent(Request.A310ApuBleedInputEvent, A310ApuBleedInputEventHash);
+                }
+                catch (Exception exception)
+                {
+                    AppLog.Write($"A310 APU InputEvent poll failed: {exception.Message}");
+                }
+                if (!_a310InputEventsEnumerated)
+                {
+                    try
+                    {
+                        sender.EnumerateInputEvents(Request.A310EnumerateInputEvents);
+                    }
+                    catch (Exception exception)
+                    {
+                        AppLog.Write($"A310 InputEvent enumeration failed: {exception.Message}");
+                    }
+                }
+                return;
+            }
+
             if (_state?.IsIniBuildsA330 != true)
             {
                 return;
@@ -2444,6 +2620,25 @@ internal sealed class CopilotService : Form
             return;
         }
 
+        if (request is >= Request.A310ApuMasterInputEvent and <= Request.A310ApuBleedInputEvent)
+        {
+            var index = (int)request - (int)Request.A310ApuMasterInputEvent;
+            var previous = _a310ApuInputStates[index];
+            _a310ApuInputStates[index] = numericValue.Value;
+            if (!previous.HasValue || Math.Abs(previous.Value - numericValue.Value) >= 0.01)
+            {
+                var label = index switch
+                {
+                    0 => "master",
+                    1 => "start",
+                    2 => "generator",
+                    _ => "bleed"
+                };
+                AppLog.Write($"A310 APU {label} InputEvent={numericValue.Value:0.###}.");
+            }
+            return;
+        }
+
         if (request is >= Request.A330FuelPump1InputEvent and <= Request.A330FuelPump6InputEvent)
         {
             var pumpIndex = (int)request - (int)Request.A330FuelPump1InputEvent;
@@ -3007,6 +3202,28 @@ internal sealed class CopilotService : Form
     private void OnEnumerateInputEvents(SimConnect sender, SIMCONNECT_RECV_ENUMERATE_INPUT_EVENTS data)
     {
         var request = (Request)data.dwRequestID;
+        if (request == Request.A310EnumerateInputEvents)
+        {
+            _a310InputEventsEnumerated = true;
+            foreach (var item in data.rgData ?? Array.Empty<object>())
+            {
+                if (item is not SIMCONNECT_INPUT_EVENT_DESCRIPTOR descriptor)
+                {
+                    continue;
+                }
+                var name = descriptor.Name ?? string.Empty;
+                if (name.IndexOf("APU", StringComparison.OrdinalIgnoreCase) >= 0
+                    || name.IndexOf("AUX", StringComparison.OrdinalIgnoreCase) >= 0
+                    || name.IndexOf("START", StringComparison.OrdinalIgnoreCase) >= 0
+                    || name.IndexOf("FUEL", StringComparison.OrdinalIgnoreCase) >= 0
+                    || name.IndexOf("PUMP", StringComparison.OrdinalIgnoreCase) >= 0
+                    || name.IndexOf("INNER", StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    AppLog.Write($"A310 system InputEvent candidate: {name} hash={descriptor.Hash}.");
+                }
+            }
+            return;
+        }
         if (request != Request.Asobo737MaxEnumerateInputEvents)
         {
             return;
@@ -3244,6 +3461,148 @@ internal sealed class CopilotService : Form
 
         if (request == Request.PmdgNg3Control)
         {
+            return;
+        }
+
+        if (request is >= Request.A310NavLogoLight and <= Request.A310RightRunwayTurnoffLight)
+        {
+            var value = ((MobiFlightFloat)data.dwData[0]).Value;
+            var index = (int)request - (int)Request.A310NavLogoLight;
+            var labels = new[]
+            {
+                "NAV/LOGO", "beacon", "nose", "left landing", "right landing",
+                "wing", "left runway-turnoff", "right runway-turnoff"
+            };
+            SetLoggedFloat(ref _a310InitialLightStates[index], value, $"A310 {labels[index]} light selector");
+            ApplyNativeAircraftState();
+            return;
+        }
+
+        if (request is >= Request.A310Flow2Seatbelts and <= Request.A310Flow2CargoSmokeBulk)
+        {
+            var value = ((MobiFlightFloat)data.dwData[0]).Value;
+            var index = (int)request - (int)Request.A310Flow2Seatbelts;
+            var labels = new[]
+            {
+                "seat-belt selector", "no-smoking selector", "ATS 1", "ATS 2",
+                "pitch-trim computer 1", "pitch-trim computer 2", "yaw damper 1", "yaw damper 2",
+                "window heat 1", "window heat 2", "window heat 3", "window heat 4",
+                "captain probe heat", "first-officer probe heat", "standby probe heat",
+                "emergency-exit lights", "cargo-smoke test", "EGPWS test", "autobrake",
+                "rudder trim", "TCAS pedestal mode", "forward cargo SMOKE indication",
+                "aft cargo SMOKE indication", "bulk cargo SMOKE indication"
+            };
+            SetLoggedFloat(ref _a310Flow2States[index], value, $"A310 {labels[index]}");
+            if (request == Request.A310Flow2CargoSmokeTest)
+            {
+                _a310CargoSmokeTestObserved |= Math.Abs(value) > 0.5f;
+            }
+            else if (request == Request.A310Flow2EgpwsTest)
+            {
+                _a310EgpwsTestObserved |= Math.Abs(value) > 0.5f;
+            }
+            if (request is >= Request.A310Flow2CargoSmokeForward
+                and <= Request.A310Flow2CargoSmokeBulk)
+            {
+                _a310CargoSmokeIndicationsObserved |= value > 0.5f;
+            }
+            ApplyNativeAircraftState();
+            return;
+        }
+
+        if (request is >= Request.A310Flow3ApuMaster and <= Request.A310Flow3ApuGenerator)
+        {
+            var value = ((MobiFlightFloat)data.dwData[0]).Value;
+            var index = (int)request - (int)Request.A310Flow3ApuMaster;
+            var labels = new[]
+            {
+                "APU master", "APU start", "APU available", "APU bleed", "APU generator"
+            };
+            SetLoggedFloat(ref _a310Flow3ApuStates[index], value, $"A310 {labels[index]}");
+            ApplyNativeAircraftState();
+            return;
+        }
+
+        if (request is >= Request.A310Battery1Auto and <= Request.A310AnnunciatorTest)
+        {
+            var value = ((MobiFlightFloat)data.dwData[0]).Value;
+            if (request == Request.A310Battery1Auto)
+            {
+                SetLoggedBool(ref _a310Battery1Auto, value, "A310 BAT 1 AUTO");
+            }
+            else if (request == Request.A310Battery2Auto)
+            {
+                SetLoggedBool(ref _a310Battery2Auto, value, "A310 BAT 2 AUTO");
+            }
+            else if (request == Request.A310Battery3Auto)
+            {
+                SetLoggedBool(ref _a310Battery3Auto, value, "A310 BAT 3 AUTO");
+            }
+            else if (request == Request.A310HydraulicEngine1)
+            {
+                SetLoggedFloat(ref _a310HydraulicEngine1, value, "A310 hydraulic ENG 1 selector");
+            }
+            else if (request == Request.A310HydraulicEngine1A)
+            {
+                SetLoggedFloat(ref _a310HydraulicEngine1A, value, "A310 hydraulic ENG 1 A selector");
+            }
+            else if (request == Request.A310HydraulicEngine2)
+            {
+                SetLoggedFloat(ref _a310HydraulicEngine2, value, "A310 hydraulic ENG 2 selector");
+            }
+            else if (request == Request.A310HydraulicEngine2B)
+            {
+                SetLoggedFloat(ref _a310HydraulicEngine2B, value, "A310 hydraulic ENG 2 B selector");
+            }
+            else if (request == Request.A310HydraulicElectric)
+            {
+                SetLoggedFloat(ref _a310HydraulicElectric, value, "A310 hydraulic electric pumps");
+            }
+            else if (request == Request.A310CaptainWiper)
+            {
+                SetLoggedFloat(ref _a310CaptainWiper, value, "A310 captain wiper selector");
+            }
+            else if (request == Request.A310FirstOfficerWiper)
+            {
+                SetLoggedFloat(ref _a310FirstOfficerWiper, value, "A310 first-officer wiper selector");
+            }
+            else if (request == Request.A310WeatherRadarSystem)
+            {
+                SetLoggedFloat(ref _a310WeatherRadarSystem, value, "A310 weather-radar system selector");
+            }
+            else if (request == Request.A310Irs1)
+            {
+                SetLoggedFloat(ref _a310Irs1, value, "A310 IRS 1 selector");
+            }
+            else if (request == Request.A310Irs2)
+            {
+                SetLoggedFloat(ref _a310Irs2, value, "A310 IRS 2 selector");
+            }
+            else if (request == Request.A310Irs3)
+            {
+                SetLoggedFloat(ref _a310Irs3, value, "A310 IRS 3 selector");
+            }
+            else if (request == Request.A310OxygenSupply)
+            {
+                SetLoggedFloat(ref _a310OxygenSupply, value, "A310 crew oxygen supply");
+            }
+            else if (request == Request.A310ApuFireTest)
+            {
+                SetLoggedFloat(ref _a310ApuFireTest, value, "A310 APU SQUIB test");
+                _a310ApuFireTestObserved |= value > 0.5f;
+            }
+            else if (request == Request.A310ApuLoopTest)
+            {
+                SetLoggedFloat(ref _a310ApuLoopTest, value, "A310 APU LOOP test");
+                _a310ApuLoopTestObserved |= Math.Abs(value) > 0.5f;
+            }
+            else
+            {
+                SetLoggedFloat(ref _a310AnnunciatorTest, value, "A310 annunciator test");
+                _a310AnnunciatorTestObserved |= value > 0.5f;
+            }
+
+            ApplyNativeAircraftState();
             return;
         }
 
@@ -3797,6 +4156,61 @@ internal sealed class CopilotService : Form
         RegisterMobiFlightFloat(sender, ClientDataDefinition.FbwA380ExternalPower4OnTyped, Request.FbwA380ExternalPower4OnTyped, 97 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.NativeEngineModeSelector, Request.NativeEngineModeSelector, 98 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.NativeA320RunwayTurnoffSelector, Request.NativeA320RunwayTurnoffSelector, 99 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Battery1Auto, Request.A310Battery1Auto, 100 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Battery2Auto, Request.A310Battery2Auto, 101 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Battery3Auto, Request.A310Battery3Auto, 102 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310HydraulicEngine1, Request.A310HydraulicEngine1, 103 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310HydraulicEngine1A, Request.A310HydraulicEngine1A, 104 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310HydraulicEngine2, Request.A310HydraulicEngine2, 105 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310HydraulicEngine2B, Request.A310HydraulicEngine2B, 106 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310HydraulicElectric, Request.A310HydraulicElectric, 107 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310CaptainWiper, Request.A310CaptainWiper, 108 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310FirstOfficerWiper, Request.A310FirstOfficerWiper, 109 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310WeatherRadarSystem, Request.A310WeatherRadarSystem, 110 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Irs1, Request.A310Irs1, 111 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Irs2, Request.A310Irs2, 112 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Irs3, Request.A310Irs3, 113 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310OxygenSupply, Request.A310OxygenSupply, 114 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310ApuFireTest, Request.A310ApuFireTest, 115 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310ApuLoopTest, Request.A310ApuLoopTest, 116 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310AnnunciatorTest, Request.A310AnnunciatorTest, 117 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310NavLogoLight, Request.A310NavLogoLight, 118 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310BeaconLight, Request.A310BeaconLight, 119 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310TaxiLight, Request.A310TaxiLight, 120 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310LeftLandingLight, Request.A310LeftLandingLight, 121 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310RightLandingLight, Request.A310RightLandingLight, 122 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310WingLight, Request.A310WingLight, 123 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310LeftRunwayTurnoffLight, Request.A310LeftRunwayTurnoffLight, 124 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310RightRunwayTurnoffLight, Request.A310RightRunwayTurnoffLight, 125 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2Seatbelts, Request.A310Flow2Seatbelts, 126 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2NoSmoking, Request.A310Flow2NoSmoking, 127 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2Ats1, Request.A310Flow2Ats1, 128 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2Ats2, Request.A310Flow2Ats2, 129 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2PitchTrim1, Request.A310Flow2PitchTrim1, 130 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2PitchTrim2, Request.A310Flow2PitchTrim2, 131 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2YawDamper1, Request.A310Flow2YawDamper1, 132 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2YawDamper2, Request.A310Flow2YawDamper2, 133 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2WindowHeat1, Request.A310Flow2WindowHeat1, 134 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2WindowHeat2, Request.A310Flow2WindowHeat2, 135 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2WindowHeat3, Request.A310Flow2WindowHeat3, 136 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2WindowHeat4, Request.A310Flow2WindowHeat4, 137 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2ProbeHeatCaptain, Request.A310Flow2ProbeHeatCaptain, 138 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2ProbeHeatFirstOfficer, Request.A310Flow2ProbeHeatFirstOfficer, 139 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2ProbeHeatStandby, Request.A310Flow2ProbeHeatStandby, 140 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2EmergencyExit, Request.A310Flow2EmergencyExit, 141 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2CargoSmokeTest, Request.A310Flow2CargoSmokeTest, 142 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2EgpwsTest, Request.A310Flow2EgpwsTest, 143 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2Autobrake, Request.A310Flow2Autobrake, 144 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2RudderTrim, Request.A310Flow2RudderTrim, 145 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2TcasMode, Request.A310Flow2TcasMode, 146 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2CargoSmokeForward, Request.A310Flow2CargoSmokeForward, 147 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2CargoSmokeAft, Request.A310Flow2CargoSmokeAft, 148 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow2CargoSmokeBulk, Request.A310Flow2CargoSmokeBulk, 149 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow3ApuMaster, Request.A310Flow3ApuMaster, 150 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow3ApuStart, Request.A310Flow3ApuStart, 151 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow3ApuAvailable, Request.A310Flow3ApuAvailable, 152 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow3ApuBleed, Request.A310Flow3ApuBleed, 153 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow3ApuGenerator, Request.A310Flow3ApuGenerator, 154 * sizeof(float));
         _mobiFlightRuntimeReady = true;
         _mobiFlightRuntimeInitializedUtc = DateTime.UtcNow;
         SendMobiFlightRuntimeCommand("MF.SimVars.Clear");
@@ -3954,6 +4368,73 @@ internal sealed class CopilotService : Form
             "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_EXT_PWR_4_PB_IS_ON, Bool)");
         SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_IGNITION_KNOB)");
         SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A320RunwayTurnoffProfile.ReadbackLVar})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.Battery1State})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.Battery2State})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.Battery3State})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.HydraulicEngine1State})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.HydraulicEngine1AState})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.HydraulicEngine2State})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.HydraulicEngine2BState})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.HydraulicElectricState})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.CaptainWiperState})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.FirstOfficerWiperState})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.WeatherRadarSystemState})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.Irs1State})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.Irs2State})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.Irs3State})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.OxygenLowPressureSupplyState})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.ApuFireTestState})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.ApuLoopTestSwitchState})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.AnnunciatorLightTestState})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.NavLogoLightState})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.BeaconLightState})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.TaxiLightState})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.LeftLandingLightState})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.RightLandingLightState})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.WingLightState})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.LeftRunwayTurnoffLightState})");
+        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.RightRunwayTurnoffLightState})");
+        foreach (var stateName in new[]
+        {
+            A310ControlProfile.SeatbeltsState,
+            A310ControlProfile.NoSmokingState,
+            A310ControlProfile.AtsMaster1State,
+            A310ControlProfile.AtsMaster2State,
+            A310ControlProfile.PitchTrim1State,
+            A310ControlProfile.PitchTrim2State,
+            A310ControlProfile.YawDamper1State,
+            A310ControlProfile.YawDamper2State,
+            A310ControlProfile.WindowHeat1State,
+            A310ControlProfile.WindowHeat2State,
+            A310ControlProfile.WindowHeat3State,
+            A310ControlProfile.WindowHeat4State,
+            A310ControlProfile.ProbeHeatCaptainState,
+            A310ControlProfile.ProbeHeatFirstOfficerState,
+            A310ControlProfile.ProbeHeatStandbyState,
+            A310ControlProfile.EmergencyExitState,
+            A310ControlProfile.CargoSmokeTestState,
+            A310ControlProfile.EgpwsTestState,
+            A310ControlProfile.AutobrakeState,
+            A310ControlProfile.RudderTrimState,
+            A310ControlProfile.TcasPedestalModeState,
+            A310ControlProfile.CargoSmokeForwardIndicationState,
+            A310ControlProfile.CargoSmokeAftIndicationState,
+            A310ControlProfile.CargoSmokeBulkIndicationState
+        })
+        {
+            SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{stateName})");
+        }
+        foreach (var stateName in new[]
+        {
+            A310ControlProfile.ApuMasterState,
+            A310ControlProfile.ApuStartButtonState,
+            A310ControlProfile.ApuAvailableState,
+            A310ControlProfile.ApuBleedState,
+            A310ControlProfile.ApuGeneratorState
+        })
+        {
+            SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{stateName})");
+        }
         SendMobiFlightRuntimeCommand("MF.DummyCmd");
         AppLog.Write("FBW runtime offsets registered: ADIRS 1/2/3=56/57/58, typed=59/60/61, crew oxygen=63/64, NAV/LOGO=65/66, strobe=67/68.");
         AppendDashboardLog("iniBuilds native state monitoring connected.");
@@ -3988,6 +4469,50 @@ internal sealed class CopilotService : Form
         if (_state == null)
         {
             return;
+        }
+
+        if (_state.IsIniBuildsA310)
+        {
+            if (_a310Battery1Auto.HasValue)
+            {
+                _state.Battery1On = _a310Battery1Auto.Value;
+            }
+            if (_a310Battery2Auto.HasValue)
+            {
+                _state.Battery2On = _a310Battery2Auto.Value;
+            }
+            if (_a310Battery3Auto.HasValue)
+            {
+                _state.Battery3On = _a310Battery3Auto.Value;
+            }
+            _state.A310HydraulicPanelSafe = A310HydraulicPanelSafe();
+            _state.A310WipersAndWeatherRadarOff = A310WipersAndWeatherRadarOff();
+            _state.A310ApuFireTestCompleted =
+                _a310ApuFireTestObserved && _a310ApuLoopTestObserved;
+            _state.A310AnnunciatorTestCompleted = _a310AnnunciatorTestObserved;
+            _state.A310InitialExteriorLightsSet = A310InitialExteriorLightsSet();
+            _state.A310PreflightSignsSet = A310PreflightSignsSet();
+            _state.A310AutoflightComputersSet = A310AutoflightComputersSet();
+            _state.A310PreflightHeatSet = A310PreflightHeatSet();
+            _state.A310EmergencyExitArmed = A310EmergencyExitArmed();
+            _state.A310CargoSmokeTestCompleted = _a310CargoSmokeTestObserved;
+            _state.A310EgpwsTestCompleted = _a310EgpwsTestObserved;
+            _state.A310PreflightPedestalSet = A310PreflightPedestalSet();
+            _state.ApuMasterSwitchOn = _a310Flow3ApuStates[0] > 0.5f;
+            _state.ApuStartButtonOn = _a310Flow3ApuStates[1] > 0.5f;
+            _state.ApuAvailable = _a310Flow3ApuStates[2] > 0.5f;
+            _state.ApuBleedOn = _a310Flow3ApuStates[3] > 0.5f;
+            _state.ApuGeneratorSwitchOn = _a310Flow3ApuStates[4] > 0.5f;
+            _state.A310ApuPowerAndBleedSet = A310ApuPowerAndBleedSet();
+            _state.A310TransponderXpdrSet = A310TransponderXpdrSet();
+            if (_a310InitialLightStates[1].HasValue)
+            {
+                _state.BeaconOn = _a310InitialLightStates[1] > 0.5f;
+            }
+            _state.Adirs1SelectorState = _a310Irs1 ?? _state.Adirs1SelectorState;
+            _state.Adirs2SelectorState = _a310Irs2 ?? _state.Adirs2SelectorState;
+            _state.Adirs3SelectorState = _a310Irs3 ?? _state.Adirs3SelectorState;
+            _state.CrewOxygenOn = _a310OxygenSupply > 0.5f;
         }
 
         if (_state.IsIniBuildsAirbusFamily && _nativeBattery1On.HasValue)
@@ -4621,6 +5146,7 @@ internal sealed class CopilotService : Form
         var aircraftVariant = AircraftVariantResolver.Resolve(
             raw.Title,
             EnableExperimentalFlyByWireA380X);
+        var isIniBuildsA310 = aircraftVariant == AircraftVariant.IniBuildsA310;
         var isIniBuildsA330 = aircraftVariant == AircraftVariant.IniBuildsA330;
         var isIniBuildsAirbusFamily =
             aircraftVariant is AircraftVariant.IniBuildsA320NeoV2
@@ -4804,7 +5330,9 @@ internal sealed class CopilotService : Form
                 raw.Engine2IgnitionSwitch),
             FbwEngine1State = _fbwEngine1State,
             FbwEngine2State = _fbwEngine2State,
-            Battery1On = isIniBuildsAirbusFamily
+            Battery1On = isIniBuildsA310
+                ? _a310Battery1Auto == true
+                : isIniBuildsAirbusFamily
                 ? _nativeBattery1On ?? raw.Battery1 != 0
                 : isFlyByWireAirbus
                     ? ResolveFbwBatteryState(
@@ -4817,7 +5345,9 @@ internal sealed class CopilotService : Form
                 : isAsobo737Max
                     ? _asobo737MaxBatteryCoverInputEventOn == true
                 : raw.Battery1 != 0,
-            Battery2On = isIniBuildsAirbusFamily
+            Battery2On = isIniBuildsA310
+                ? _a310Battery2Auto == true
+                : isIniBuildsAirbusFamily
                 ? _nativeBattery2On ?? raw.Battery2 != 0
                 : isFlyByWireAirbus
                     ? ResolveFbwBatteryState(
@@ -4830,6 +5360,24 @@ internal sealed class CopilotService : Form
                 : isAsobo737Max
                     ? _asobo737MaxBatteryCoverInputEventOn == true
                 : raw.Battery2 != 0,
+            Battery3On = isIniBuildsA310 && _a310Battery3Auto == true,
+            A310HydraulicPanelSafe = isIniBuildsA310 && A310HydraulicPanelSafe(),
+            A310WipersAndWeatherRadarOff = isIniBuildsA310 && A310WipersAndWeatherRadarOff(),
+            A310ApuFireTestCompleted = isIniBuildsA310
+                && _a310ApuFireTestObserved
+                && _a310ApuLoopTestObserved,
+            A310AnnunciatorTestCompleted = isIniBuildsA310 && _a310AnnunciatorTestObserved,
+            A310InitialExteriorLightsSet = isIniBuildsA310 && A310InitialExteriorLightsSet(),
+            A310PreflightSignsSet = isIniBuildsA310 && A310PreflightSignsSet(),
+            A310AutoflightComputersSet = isIniBuildsA310 && A310AutoflightComputersSet(),
+            A310PreflightHeatSet = isIniBuildsA310 && A310PreflightHeatSet(),
+            A310EmergencyExitArmed = isIniBuildsA310 && A310EmergencyExitArmed(),
+            A310CargoSmokeTestCompleted = isIniBuildsA310
+                && _a310CargoSmokeTestObserved,
+            A310EgpwsTestCompleted = isIniBuildsA310 && _a310EgpwsTestObserved,
+            A310PreflightPedestalSet = isIniBuildsA310 && A310PreflightPedestalSet(),
+            A310ApuPowerAndBleedSet = isIniBuildsA310 && A310ApuPowerAndBleedSet(),
+            A310TransponderXpdrSet = isIniBuildsA310 && A310TransponderXpdrSet(),
             Battery1Voltage = raw.Battery1Voltage,
             Battery2Voltage = raw.Battery2Voltage,
             ApuBatteryOn = !isIniBuildsA330
@@ -4908,7 +5456,9 @@ internal sealed class CopilotService : Form
                 : isPmdg737 && pmdg != null
                     ? pmdg.ParkingBrakeAnnunciated || raw.ParkingBrake != 0
                 : raw.ParkingBrake != 0,
-            BeaconOn = isPmdg737 && pmdg != null
+            BeaconOn = isIniBuildsA310 && _a310InitialLightStates[1].HasValue
+                ? _a310InitialLightStates[1] > 0.5f
+                : isPmdg737 && pmdg != null
                 ? pmdg.AntiCollisionOn
                 : isAsobo737Max && _asobo737MaxAntiCollisionInputState.HasValue
                     ? Asobo737MaxControlProfile.IsAntiCollisionOn(
@@ -4952,7 +5502,9 @@ internal sealed class CopilotService : Form
                 : _nativeApuMasterSwitch.HasValue
                     ? _nativeApuMasterSwitch.Value != 0
                     : raw.ApuMasterSwitch != 0,
-            ApuAvailable = isFlyByWireAirbus
+            ApuAvailable = isIniBuildsA310
+                ? _a310Flow3ApuStates[2] > 0.5f
+                : isFlyByWireAirbus
                 ? _fbwApuStartAvailable == true
                 : isIniBuildsA330
                     ? _nativeApuAvailable.HasValue
@@ -4975,7 +5527,9 @@ internal sealed class CopilotService : Form
             ApuSpoolingOrAvailable = isPmdg737 && pmdg != null
                 ? pmdg.ApuEgtNeedle > 0 || pmdgApuAvailable
                 : raw.ApuRpm > 5 || raw.ApuStarter > 0,
-            ApuBleedOn = isFlyByWireAirbus
+            ApuBleedOn = isIniBuildsA310
+                ? _a310Flow3ApuStates[3] > 0.5f
+                : isFlyByWireAirbus
                 ? _fbwApuBleedButton == true
                 : isIniBuildsA330 && _a330ApuInputStates[2].HasValue
                     ? _a330ApuInputStates[2]!.Value >= 0.5
@@ -5014,7 +5568,9 @@ internal sealed class CopilotService : Form
                 : 0,
             ApuFlapPercent = _nativeApuFlapPercent ?? 0,
             ApuGeneratorActive = raw.ApuGeneratorActive != 0,
-            ApuGeneratorSwitchOn = _nativeApuGeneratorOn.HasValue
+            ApuGeneratorSwitchOn = isIniBuildsA310
+                ? _a310Flow3ApuStates[4] > 0.5f
+                : _nativeApuGeneratorOn.HasValue
                                    && !isPmdg737
                                    ? _nativeApuGeneratorOn.Value != 0
                                    : isPmdg737 && pmdg != null
@@ -5212,7 +5768,9 @@ internal sealed class CopilotService : Form
             Nav2ActiveFrequencyMhz = raw.Nav2ActiveFrequency,
             Nav1CourseDegrees = raw.Nav1Course,
             Nav2CourseDegrees = raw.Nav2Course,
-            Adirs1SelectorState = isFlyByWireAirbus
+            Adirs1SelectorState = isIniBuildsA310
+                ? _a310Irs1 ?? 0
+                : isFlyByWireAirbus
                 ? ResolveFbwSelectorState(_fbwCommandedAdirs1Selector, _fbwCommandedAdirs1SelectorUtc, _fbwAdirs1SelectorTyped, _fbwAdirs1Selector)
                 : isIniBuildsA330 && _a330AdirsInputStates[0].HasValue
                     ? _a330AdirsInputStates[0]!.Value
@@ -5222,7 +5780,9 @@ internal sealed class CopilotService : Form
                         _pmdgCommandedLeftIrsModeUtc,
                         pmdg.IrsLeftMode)
                 : _nativeAdirs1State ?? 0,
-            Adirs2SelectorState = isFlyByWireAirbus
+            Adirs2SelectorState = isIniBuildsA310
+                ? _a310Irs2 ?? 0
+                : isFlyByWireAirbus
                 ? ResolveFbwSelectorState(_fbwCommandedAdirs2Selector, _fbwCommandedAdirs2SelectorUtc, _fbwAdirs2SelectorTyped, _fbwAdirs2Selector)
                 : isIniBuildsA330 && _a330AdirsInputStates[1].HasValue
                     ? _a330AdirsInputStates[1]!.Value
@@ -5232,7 +5792,9 @@ internal sealed class CopilotService : Form
                         _pmdgCommandedRightIrsModeUtc,
                         pmdg.IrsRightMode)
                 : _nativeAdirs2State ?? 0,
-            Adirs3SelectorState = isFlyByWireAirbus
+            Adirs3SelectorState = isIniBuildsA310
+                ? _a310Irs3 ?? 0
+                : isFlyByWireAirbus
                 ? ResolveFbwSelectorState(_fbwCommandedAdirs3Selector, _fbwCommandedAdirs3SelectorUtc, _fbwAdirs3SelectorTyped, _fbwAdirs3Selector)
                 : isIniBuildsA330 && _a330AdirsInputStates[2].HasValue
                     ? _a330AdirsInputStates[2]!.Value
@@ -5249,7 +5811,9 @@ internal sealed class CopilotService : Form
             IrsLeftFault = isPmdg737 && pmdg != null && pmdg.IrsLeftFault,
             IrsRightFault = isPmdg737 && pmdg != null && pmdg.IrsRightFault,
             IrsAligned = !isPmdg737 || pmdg?.IrsAligned == true,
-            CrewOxygenOn = isFlyByWireAirbus
+            CrewOxygenOn = isIniBuildsA310
+                ? _a310OxygenSupply > 0.5f
+                : isFlyByWireAirbus
                 ? FbwStateResolvers.ResolveCrewOxygen(
                     _fbwCommandedCrewOxygen,
                     _fbwCommandedCrewOxygenUtc,
@@ -6161,6 +6725,7 @@ internal sealed class CopilotService : Form
             || _oneShotCommand.StartsWith("nose-light ", StringComparison.OrdinalIgnoreCase)
             || _oneShotCommand.StartsWith("landing-lights ", StringComparison.OrdinalIgnoreCase)
             || _oneShotCommand.StartsWith("tcas-mode ", StringComparison.OrdinalIgnoreCase)
+            || _oneShotCommand.StartsWith("a310 ", StringComparison.OrdinalIgnoreCase)
             || _oneShotCommand.StartsWith("asobo737max ", StringComparison.OrdinalIgnoreCase);
         if (requiresAircraftAdapter && !_mobiFlightReady)
         {
@@ -6173,6 +6738,34 @@ internal sealed class CopilotService : Form
                         >= TimeSpan.FromSeconds(2),
             var command when command.StartsWith("battery-1 ") => _mobiFlightRuntimeReady,
             var command when command.StartsWith("battery-2 ") => _mobiFlightRuntimeReady,
+            "a310 batteries auto" =>
+                _a310Battery1Auto.HasValue
+                && _a310Battery2Auto.HasValue
+                && _a310Battery3Auto.HasValue,
+            "a310 wipers-radar off" =>
+                _a310CaptainWiper.HasValue
+                && _a310FirstOfficerWiper.HasValue
+                && _a310WeatherRadarSystem.HasValue,
+            "a310 apu-fire-test" => _a310ApuFireTest.HasValue && _a310ApuLoopTest.HasValue,
+            "a310 irs nav" => _a310Irs1.HasValue && _a310Irs2.HasValue && _a310Irs3.HasValue,
+            "a310 oxygen on" => _a310OxygenSupply.HasValue,
+            "a310 annunciator-test" => _a310AnnunciatorTest.HasValue,
+            "a310 initial-lights" => _a310InitialLightStates.All(value => value.HasValue),
+            "a310 preflight-signs" => A310Flow2ReadbacksAvailable(0, 2),
+            "a310 autoflight-computers" => A310Flow2ReadbacksAvailable(2, 6),
+            "a310 preflight-heat" => A310Flow2ReadbacksAvailable(8, 7),
+            "a310 emergency-exit arm" => A310Flow2ReadbacksAvailable(15, 1),
+            "a310 cargo-smoke-test" =>
+                A310Flow2ReadbacksAvailable(16, 1)
+                && A310Flow2ReadbacksAvailable(21, 3),
+            "a310 egpws-test" => A310Flow2ReadbacksAvailable(17, 1),
+            "a310 preflight-pedestal" =>
+                A310Flow2ReadbacksAvailable(18, 3) && _a310WeatherRadarSystem.HasValue,
+            "a310 apu start" => _a310Flow3ApuStates.All(value => value.HasValue),
+            "a310 apu power-bleed" => _a310Flow3ApuStates.All(value => value.HasValue),
+            "a310 beacon on" => _a310InitialLightStates[1].HasValue,
+            "a310 transponder xpdr" => _a310Flow2States[20].HasValue,
+            "a310 external-power off" => _a310Flow3ApuStates.All(value => value.HasValue),
             var command when command.StartsWith("nav-logo ") => _mobiFlightRuntimeReady,
             var command when command.StartsWith("apu-") =>
                 _state?.IsFlyByWireAirbus == true
@@ -6292,6 +6885,18 @@ internal sealed class CopilotService : Form
     private void ExecuteCommand(string command)
     {
         var normalized = command.Trim().ToLowerInvariant();
+        if (normalized.StartsWith("a310 ", StringComparison.Ordinal))
+        {
+            if (_state?.IsIniBuildsA310 != true)
+            {
+                AppendDashboardLog("Blocked A310 cockpit command: a different aircraft profile is active.");
+                AppLog.Write($"Blocked A310 command outside its aircraft profile: {normalized}.");
+                FinishOneShot(2);
+                return;
+            }
+
+            normalized = normalized.Substring("a310 ".Length);
+        }
         if (normalized.StartsWith("a330 ", StringComparison.Ordinal))
         {
             if (_state?.IsIniBuildsA330 != true)
@@ -6391,7 +6996,15 @@ internal sealed class CopilotService : Form
                 SetExternalPower(false);
                 break;
             case "beacon on":
-                SetBeacon(true);
+                if (_state?.IsIniBuildsA310 == true)
+                {
+                    SendA310ControlValue(A310ControlProfile.BeaconLightState, 1, "beacon ON");
+                    FinishOneShot();
+                }
+                else
+                {
+                    SetBeacon(true);
+                }
                 break;
             case "beacon off":
                 SetBeacon(false);
@@ -6413,6 +7026,60 @@ internal sealed class CopilotService : Form
                 break;
             case "battery-2 off":
                 SetBattery(2, false);
+                break;
+            case "batteries auto" when _state?.IsIniBuildsA310 == true:
+                SetA310BatteriesAuto();
+                break;
+            case "wipers-radar off" when _state?.IsIniBuildsA310 == true:
+                SetA310WipersAndWeatherRadarOff();
+                break;
+            case "apu-fire-test" when _state?.IsIniBuildsA310 == true:
+                RunA310ApuFireTest();
+                break;
+            case "irs nav" when _state?.IsIniBuildsA310 == true:
+                SetA310IrsNav();
+                break;
+            case "oxygen on" when _state?.IsIniBuildsA310 == true:
+                SendA310ControlValue(A310ControlProfile.OxygenLowPressureSupplyState, 1, "crew oxygen supply ON");
+                FinishOneShot();
+                break;
+            case "annunciator-test" when _state?.IsIniBuildsA310 == true:
+                RunA310AnnunciatorTest();
+                break;
+            case "initial-lights" when _state?.IsIniBuildsA310 == true:
+                SetA310InitialExteriorLights();
+                break;
+            case "preflight-signs" when _state?.IsIniBuildsA310 == true:
+                SetA310PreflightSigns();
+                break;
+            case "autoflight-computers" when _state?.IsIniBuildsA310 == true:
+                SetA310AutoflightComputers();
+                break;
+            case "preflight-heat" when _state?.IsIniBuildsA310 == true:
+                SetA310PreflightHeat();
+                break;
+            case "emergency-exit arm" when _state?.IsIniBuildsA310 == true:
+                SendA310ControlValue(A310ControlProfile.EmergencyExitState, 1, "emergency-exit lights ARMED");
+                FinishOneShot();
+                break;
+            case "cargo-smoke-test" when _state?.IsIniBuildsA310 == true:
+                RunA310CargoSmokeTest();
+                break;
+            case "egpws-test" when _state?.IsIniBuildsA310 == true:
+                RunA310EgpwsTest();
+                break;
+            case "preflight-pedestal" when _state?.IsIniBuildsA310 == true:
+                SetA310PreflightPedestal();
+                break;
+            case "apu start" when _state?.IsIniBuildsA310 == true:
+                StartA310Apu();
+                break;
+            case "apu power-bleed" when _state?.IsIniBuildsA310 == true:
+                SetA310ApuPowerAndBleed();
+                break;
+            case "transponder xpdr" when _state?.IsIniBuildsA310 == true:
+                SendA310ControlValue(A310ControlProfile.TcasPedestalModeState, 2, "transponder XPDR");
+                FinishOneShot();
                 break;
             case "apu-master on":
                 SetApuMaster(true);
@@ -7037,6 +7704,76 @@ internal sealed class CopilotService : Form
         reason = string.Empty;
         return true;
     }
+
+    private bool A310HydraulicPanelSafe() =>
+        _a310HydraulicEngine1.HasValue
+        && _a310HydraulicEngine1A.HasValue
+        && _a310HydraulicEngine2.HasValue
+        && _a310HydraulicEngine2B.HasValue
+        && _a310HydraulicElectric.HasValue
+        && Math.Abs(_a310HydraulicEngine1.Value - 1) < 0.1
+        && Math.Abs(_a310HydraulicEngine1A.Value - 1) < 0.1
+        && Math.Abs(_a310HydraulicEngine2.Value - 1) < 0.1
+        && Math.Abs(_a310HydraulicEngine2B.Value - 1) < 0.1
+        && Math.Abs(_a310HydraulicElectric.Value) < 0.1;
+
+    private bool A310WipersAndWeatherRadarOff() =>
+        _a310CaptainWiper.HasValue
+        && _a310FirstOfficerWiper.HasValue
+        && _a310WeatherRadarSystem.HasValue
+        && Math.Abs(_a310CaptainWiper.Value) < 0.1
+        && Math.Abs(_a310FirstOfficerWiper.Value) < 0.1
+        && Math.Abs(_a310WeatherRadarSystem.Value - 1) < 0.1;
+
+    private bool A310InitialExteriorLightsSet() =>
+        _a310InitialLightStates.All(value => value.HasValue)
+        && Math.Abs(_a310InitialLightStates[0]!.Value - 1) < 0.1
+        && Math.Abs(_a310InitialLightStates[1]!.Value) < 0.1
+        && Math.Abs(_a310InitialLightStates[2]!.Value - 2) < 0.1
+        && Math.Abs(_a310InitialLightStates[3]!.Value - 2) < 0.1
+        && Math.Abs(_a310InitialLightStates[4]!.Value - 2) < 0.1
+        && _a310InitialLightStates.Skip(5).All(value => Math.Abs(value!.Value) < 0.1);
+
+    private bool A310PreflightSignsSet() =>
+        A310Flow2StatesMatch(0, 2, 1);
+
+    private bool A310AutoflightComputersSet() =>
+        A310Flow2StatesMatch(2, 6, 1);
+
+    private bool A310PreflightHeatSet() =>
+        A310Flow2StatesMatch(8, 7, 1);
+
+    private bool A310EmergencyExitArmed() =>
+        _a310Flow2States[15].HasValue
+        && Math.Abs(_a310Flow2States[15]!.Value - 1) < 0.1;
+
+    private bool A310PreflightPedestalSet() =>
+        _a310Flow2States[18].HasValue
+        && _a310Flow2States[19].HasValue
+        && _a310Flow2States[20].HasValue
+        && _a310WeatherRadarSystem.HasValue
+        && Math.Abs(_a310Flow2States[18]!.Value) < 0.1
+        && Math.Abs(_a310Flow2States[19]!.Value) < 0.1
+        && Math.Abs(_a310Flow2States[20]!.Value) < 0.1
+        && Math.Abs(_a310WeatherRadarSystem.Value - 1) < 0.1;
+
+    private bool A310Flow2StatesMatch(int start, int count, float target) =>
+        _a310Flow2States
+            .Skip(start)
+            .Take(count)
+            .All(value => value.HasValue && Math.Abs(value.Value - target) < 0.1);
+
+    private bool A310Flow2ReadbacksAvailable(int start, int count) =>
+        _a310Flow2States.Skip(start).Take(count).All(value => value.HasValue);
+
+    private bool A310ApuPowerAndBleedSet() =>
+        _a310Flow3ApuStates[2] > 0.5f
+        && _a310Flow3ApuStates[3] > 0.5f
+        && _a310Flow3ApuStates[4] > 0.5f;
+
+    private bool A310TransponderXpdrSet() =>
+        _a310Flow2States[20].HasValue
+        && Math.Abs(_a310Flow2States[20]!.Value - 2) < 0.1;
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     private struct FlightCalloutData
@@ -9620,6 +10357,37 @@ internal sealed class CopilotService : Form
             catch (Exception ex) when (ex is COMException or InvalidOperationException)
             {
                 AppLog.Write($"Scheduled InputEvent {inputEventHash}={value:0.###} failed: {ex.Message}");
+            }
+
+            _nativePulseTimers.Remove(timer);
+            timer.Dispose();
+        };
+        _nativePulseTimers.Add(timer);
+        timer.Start();
+    }
+
+    private void ScheduleSystemEvent(
+        CopilotEvent eventId,
+        uint data0,
+        uint data1,
+        int delayMs,
+        string label)
+    {
+        var timer = new System.Windows.Forms.Timer { Interval = delayMs };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            try
+            {
+                if (_simConnect != null)
+                {
+                    TransmitSystemEvent(eventId, data0, data1);
+                    AppLog.Write($"{label} system event sent.");
+                }
+            }
+            catch (Exception ex) when (ex is COMException or InvalidOperationException)
+            {
+                AppLog.Write($"Scheduled {label} system event failed: {ex.Message}");
             }
 
             _nativePulseTimers.Remove(timer);
@@ -12928,6 +13696,29 @@ internal sealed class CopilotService : Form
             return;
         }
 
+        if (_state.IsIniBuildsA310)
+        {
+            if (!_mobiFlightRuntimeReady)
+            {
+                AppendDashboardLog(
+                    "A310 external-power command blocked: the MobiFlight WASM bridge is not ready.");
+                FinishOneShot(4);
+                return;
+            }
+
+            // The A310 does not reliably respond to SET_EXTERNAL_POWER. Its overhead
+            // pushbutton uses the simulator's toggle event, so only pulse it after the
+            // native readback above confirms that the requested state differs.
+            SendMobiFlightCommand("MF.SimVars.Set.1 (>K:TOGGLE_EXTERNAL_POWER)");
+            SendMobiFlightCommand("MF.DummyCmd");
+            BeginNativeAction(
+                "A310 external power",
+                state => state.ExternalPowerOn == desiredOn,
+                desiredOn,
+                TimeSpan.FromSeconds(10));
+            return;
+        }
+
         TransmitExternalPowerCommand(1, desiredOn);
         if (_state.IsIniBuildsA330)
         {
@@ -12958,7 +13749,9 @@ internal sealed class CopilotService : Form
 
     private static string? ValidateExternalPowerProcedure(AircraftState state, bool desiredOn)
     {
-        if (!state.IsIniBuildsAirbusFamily && !state.IsAsobo737Max8)
+        if (!state.IsIniBuildsAirbusFamily
+            && !state.IsIniBuildsA310
+            && !state.IsAsobo737Max8)
         {
             return "the loaded aircraft is not supported for external-power automation.";
         }
@@ -13393,9 +14186,12 @@ internal sealed class CopilotService : Form
                 : $"Operational phase: {OperationalPhaseDetector.Detect(_state)}");
     }
 
-    private static void PrintCapabilities()
+    private void PrintCapabilities()
     {
-        foreach (var capability in A320Capabilities.All)
+        var capabilities = _state?.IsIniBuildsA310 == true
+            ? A310ControlProfile.Capabilities
+            : A320Capabilities.All;
+        foreach (var capability in capabilities)
         {
             Console.WriteLine(
                 $"{capability.Id,-18} {capability.Support,-14} {capability.Name} ({capability.InterfaceName})");
@@ -14552,6 +15348,353 @@ internal sealed class CopilotService : Form
             AppLog.Write(
                 $"SayIntentions communication-history refresh failed: {ex.Message}");
         }
+    }
+
+    private void SetA310BatteriesAuto()
+    {
+        if (_simConnect == null || _state?.IsIniBuildsA310 != true)
+        {
+            AppendDashboardLog("A310 battery command blocked: A310 aircraft state is unavailable.");
+            FinishOneShot(3);
+            return;
+        }
+        if (!_state.OnGround || !_state.EnginesOff || !_mobiFlightReady)
+        {
+            AppendDashboardLog("A310 battery command blocked: requires the A310 on the ground, engines off, with its adapter connected.");
+            FinishOneShot(4);
+            return;
+        }
+
+        SendA310BatteryAutoCommand(1);
+        ScheduleA310BatteryAutoCommand(2, 900);
+        ScheduleA310BatteryAutoCommand(3, 1800);
+        AppLog.Write(
+            "A310 BAT 1/2/3 AUTO sequence started with 0.9-second spacing; awaiting three independent native readbacks.");
+        AppendDashboardLog(
+            "A310 BAT 1, BAT 2 and BAT 3 AUTO command sent; awaiting readback.");
+        FinishOneShot();
+    }
+
+    private void SendA310BatteryAutoCommand(int batteryNumber)
+    {
+        SendMobiFlightCommand(
+            $"MF.SimVars.Set.{A310ControlProfile.BatteryAutoCalculatorCode(batteryNumber)}");
+        SendMobiFlightCommand("MF.DummyCmd");
+        AppLog.Write($"A310 BAT {batteryNumber} AUTO command sent.");
+    }
+
+    private void ScheduleA310BatteryAutoCommand(int batteryNumber, int delayMs)
+    {
+        var timer = new System.Windows.Forms.Timer { Interval = delayMs };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            if (_state?.IsIniBuildsA310 == true)
+            {
+                SendA310BatteryAutoCommand(batteryNumber);
+            }
+            _nativePulseTimers.Remove(timer);
+            timer.Dispose();
+        };
+        _nativePulseTimers.Add(timer);
+        timer.Start();
+    }
+
+    private void SetA310WipersAndWeatherRadarOff()
+    {
+        if (_simConnect == null || _state?.IsIniBuildsA310 != true || !_mobiFlightReady)
+        {
+            AppendDashboardLog("A310 wiper/radar command blocked: A310 adapter is unavailable.");
+            FinishOneShot(3);
+            return;
+        }
+
+        SendA310ControlValue(A310ControlProfile.CaptainWiperState, 0, "captain wiper OFF");
+        ScheduleA310ControlValue(
+            A310ControlProfile.FirstOfficerWiperState,
+            0,
+            "first-officer wiper OFF",
+            900);
+        ScheduleA310ControlValue(
+            A310ControlProfile.WeatherRadarSystemState,
+            1,
+            "weather radar system OFF",
+            1800);
+        AppendDashboardLog("A310 wipers and weather radar OFF sequence sent; awaiting native readback.");
+        FinishOneShot();
+    }
+
+    private void RunA310ApuFireTest()
+    {
+        _a310ApuFireTestObserved = false;
+        _a310ApuLoopTestObserved = false;
+        SendA310ControlValue(A310ControlProfile.ApuFireTestState, 1, "APU SQUIB test pressed");
+        ScheduleA310ControlValue(A310ControlProfile.ApuFireTestState, 0, "APU SQUIB test released", 1800);
+        ScheduleA310ControlValue(A310ControlProfile.ApuLoopTestSwitchState, 1, "APU LOOP A test selected", 2800);
+        ScheduleA310ControlValue(A310ControlProfile.ApuLoopTestSwitchState, 0, "APU LOOP A test released", 4600);
+        ScheduleA310ControlValue(A310ControlProfile.ApuLoopTestSwitchState, -1, "APU LOOP B test selected", 5600);
+        ScheduleA310ControlValue(A310ControlProfile.ApuLoopTestSwitchState, 0, "APU LOOP B test released", 7400);
+        AppendDashboardLog("A310 APU SQUIB and LOOP A/B test sequence started; awaiting live test readback.");
+        FinishOneShot();
+    }
+
+    private void SetA310IrsNav()
+    {
+        SendA310ControlValue(A310ControlProfile.Irs1State, 1, "IRS 1 NAV");
+        ScheduleA310ControlValue(A310ControlProfile.Irs2State, 1, "IRS 2 NAV", 900);
+        ScheduleA310ControlValue(A310ControlProfile.Irs3State, 1, "IRS 3 NAV", 1800);
+        AppendDashboardLog("A310 IRS 1, 2 and 3 NAV sequence sent; awaiting native readback.");
+        FinishOneShot();
+    }
+
+    private void RunA310AnnunciatorTest()
+    {
+        _a310AnnunciatorTestObserved = false;
+        SendA310ControlValue(A310ControlProfile.AnnunciatorLightTestState, 1, "annunciator light test pressed");
+        ScheduleA310ControlValue(A310ControlProfile.AnnunciatorLightTestState, 0, "annunciator light test released", 2200);
+        AppendDashboardLog("A310 annunciator light test started; awaiting live test readback.");
+        FinishOneShot();
+    }
+
+    private void SetA310InitialExteriorLights()
+    {
+        var settings = new (string State, int Value, string Label)[]
+        {
+            (A310ControlProfile.TaxiLightState, 2, "nose light OFF"),
+            (A310ControlProfile.LeftLandingLightState, 2, "left landing light RETRACT"),
+            (A310ControlProfile.RightLandingLightState, 2, "right landing light RETRACT"),
+            (A310ControlProfile.WingLightState, 0, "wing light OFF"),
+            (A310ControlProfile.BeaconLightState, 0, "beacon OFF"),
+            (A310ControlProfile.LeftRunwayTurnoffLightState, 0, "left runway-turnoff light OFF"),
+            (A310ControlProfile.RightRunwayTurnoffLightState, 0, "right runway-turnoff light OFF"),
+            (A310ControlProfile.NavLogoLightState, 1, "NAV/LOGO 1")
+        };
+
+        for (var index = 0; index < settings.Length; index++)
+        {
+            var setting = settings[index];
+            if (index == 0)
+            {
+                SendA310ControlValue(setting.State, setting.Value, setting.Label);
+            }
+            else
+            {
+                ScheduleA310ControlValue(
+                    setting.State,
+                    setting.Value,
+                    setting.Label,
+                    index * 700);
+            }
+        }
+
+        // The A310's AUTO strobe detent is represented by the shared iniBuilds
+        // AUTO flag while the actual strobe circuit remains off on the ground.
+        ScheduleA310CalculatorCode(
+            "1 (>L:STROBE_0_AUTO) 0 (>K:STROBES_SET)",
+            "strobe selector AUTO",
+            settings.Length * 700);
+        AppendDashboardLog("A310 initial exterior-light flow started with human-paced selector movement.");
+        FinishOneShot();
+    }
+
+    private void SetA310PreflightSigns()
+    {
+        RunA310Sequence(
+            new[]
+            {
+                (A310ControlProfile.NoSmokingState, 1, "no-smoking selector AUTO"),
+                (A310ControlProfile.SeatbeltsState, 1, "seat-belt signs ON")
+            },
+            900,
+            "A310 preflight signs sequence sent; awaiting native readback.");
+    }
+
+    private void SetA310AutoflightComputers()
+    {
+        RunA310Sequence(
+            new[]
+            {
+                (A310ControlProfile.AtsMaster1State, 1, "ATS 1 ON"),
+                (A310ControlProfile.AtsMaster2State, 1, "ATS 2 ON"),
+                (A310ControlProfile.PitchTrim1State, 1, "pitch-trim computer 1 ON"),
+                (A310ControlProfile.PitchTrim2State, 1, "pitch-trim computer 2 ON"),
+                (A310ControlProfile.YawDamper1State, 1, "yaw damper 1 ON"),
+                (A310ControlProfile.YawDamper2State, 1, "yaw damper 2 ON")
+            },
+            700,
+            "A310 ATS, pitch-trim and yaw-damper sequence sent; awaiting native readback.");
+    }
+
+    private void SetA310PreflightHeat()
+    {
+        RunA310Sequence(
+            new[]
+            {
+                (A310ControlProfile.WindowHeat1State, 1, "window heat 1 ON"),
+                (A310ControlProfile.WindowHeat2State, 1, "window heat 2 ON"),
+                (A310ControlProfile.WindowHeat3State, 1, "window heat 3 ON"),
+                (A310ControlProfile.WindowHeat4State, 1, "window heat 4 ON"),
+                (A310ControlProfile.ProbeHeatCaptainState, 1, "captain probe heat ON"),
+                (A310ControlProfile.ProbeHeatFirstOfficerState, 1, "first-officer probe heat ON"),
+                (A310ControlProfile.ProbeHeatStandbyState, 1, "standby probe heat ON")
+            },
+            650,
+            "A310 window and probe heat sequence sent; awaiting native readback.");
+    }
+
+    private void RunA310CargoSmokeTest()
+    {
+        _a310CargoSmokeTestObserved = false;
+        _a310CargoSmokeIndicationsObserved = false;
+        SendA310ControlValue(A310ControlProfile.CargoSmokeTestState, 1, "cargo-smoke loop test pressed");
+        ScheduleA310ControlValue(A310ControlProfile.CargoSmokeTestState, 0, "cargo-smoke loop test released", 2200);
+        AppendDashboardLog("A310 cargo-smoke test started; awaiting live test readback.");
+        FinishOneShot();
+    }
+
+    private void RunA310EgpwsTest()
+    {
+        _a310EgpwsTestObserved = false;
+        SendA310ControlValue(A310ControlProfile.EgpwsTestState, 1, "EGPWS test pressed");
+        ScheduleA310ControlValue(A310ControlProfile.EgpwsTestState, 0, "EGPWS test released", 3000);
+        AppendDashboardLog("A310 EGPWS test started; awaiting live test readback.");
+        FinishOneShot();
+    }
+
+    private void SetA310PreflightPedestal()
+    {
+        RunA310Sequence(
+            new[]
+            {
+                (A310ControlProfile.AutobrakeState, 0, "autobrake deselected"),
+                (A310ControlProfile.TcasPedestalModeState, 0, "TCAS preflight/standby"),
+                (A310ControlProfile.WeatherRadarSystemState, 1, "weather-radar system OFF"),
+                (A310ControlProfile.RudderTrimResetState, 1, "rudder-trim reset pressed"),
+                (A310ControlProfile.RudderTrimResetState, 0, "rudder-trim reset released")
+            },
+            800,
+            "A310 preflight pedestal configuration sent; awaiting native readback.");
+    }
+
+    private void StartA310Apu()
+    {
+        if (_simConnect == null || _state?.IsIniBuildsA310 != true)
+        {
+            AppendDashboardLog("A310 APU start blocked: simulator state is unavailable.");
+            FinishOneShot(4);
+            return;
+        }
+        if (_state.ApuAvailable)
+        {
+            AppendDashboardLog("A310 APU already available.");
+            FinishOneShot();
+            return;
+        }
+
+        SendA310ControlValue(
+            A310ControlProfile.LeftInnerTankPump2State,
+            1,
+            "left INNER TK PUMP 2 ON");
+        ScheduleA310ControlValue(A310ControlProfile.ApuMasterState, 1, "APU MASTER ON", 1200);
+        ScheduleInputEvent(A310ApuMasterInputEventHash, 1.0, 1200);
+        ScheduleA310ControlValue(A310ControlProfile.ApuStartButtonState, 1, "APU START ON", 4500);
+        ScheduleInputEvent(A310ApuStartInputEventHash, 1.0, 4500);
+        ScheduleSystemEvent(CopilotEvent.StartApu, 0, 0, 4700, "A310 APU starter");
+        AppendDashboardLog(
+            "A310 left INNER TK PUMP 2, MASTER and START sequence sent; waiting for APU AVAILABLE.");
+        FinishOneShot();
+    }
+
+    private void SetA310ApuPowerAndBleed()
+    {
+        if (_state?.IsIniBuildsA310 != true || !_mobiFlightRuntimeReady)
+        {
+            AppendDashboardLog("A310 APU power/bleed blocked: native runtime state is unavailable.");
+            FinishOneShot(4);
+            return;
+        }
+
+        RunA310Sequence(
+            new[]
+            {
+                (A310ControlProfile.ApuGeneratorState, 1, "APU generator ON"),
+                (A310ControlProfile.ApuBleedState, 1, "APU bleed ON")
+            },
+            900,
+            "A310 APU generator and bleed controls selected; awaiting native readback.");
+    }
+
+    private void RunA310Sequence(
+        IReadOnlyList<(string State, int Value, string Label)> settings,
+        int spacingMs,
+        string dashboardMessage)
+    {
+        for (var index = 0; index < settings.Count; index++)
+        {
+            var setting = settings[index];
+            if (index == 0)
+            {
+                SendA310ControlValue(setting.State, setting.Value, setting.Label);
+            }
+            else
+            {
+                ScheduleA310ControlValue(
+                    setting.State,
+                    setting.Value,
+                    setting.Label,
+                    index * spacingMs);
+            }
+        }
+        AppendDashboardLog(dashboardMessage);
+        FinishOneShot();
+    }
+
+    private void ScheduleA310CalculatorCode(string calculatorCode, string label, int delayMs)
+    {
+        var timer = new System.Windows.Forms.Timer { Interval = delayMs };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            if (_state?.IsIniBuildsA310 == true)
+            {
+                SendMobiFlightCommand($"MF.SimVars.Set.{calculatorCode}");
+                SendMobiFlightCommand("MF.DummyCmd");
+                AppLog.Write($"A310 {label} command sent.");
+            }
+            _nativePulseTimers.Remove(timer);
+            timer.Dispose();
+        };
+        _nativePulseTimers.Add(timer);
+        timer.Start();
+    }
+
+    private void SendA310ControlValue(string stateName, int value, string label)
+    {
+        SendMobiFlightCommand(
+            $"MF.SimVars.Set.{A310ControlProfile.SetCalculatorCode(stateName, value)}");
+        SendMobiFlightCommand("MF.DummyCmd");
+        AppLog.Write($"A310 {label} command sent.");
+    }
+
+    private void ScheduleA310ControlValue(
+        string stateName,
+        int value,
+        string label,
+        int delayMs)
+    {
+        var timer = new System.Windows.Forms.Timer { Interval = delayMs };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            if (_state?.IsIniBuildsA310 == true)
+            {
+                SendA310ControlValue(stateName, value, label);
+            }
+            _nativePulseTimers.Remove(timer);
+            timer.Dispose();
+        };
+        _nativePulseTimers.Add(timer);
+        timer.Start();
     }
 
     private void CaptureSayIntentionsArrivalStand(
@@ -16968,6 +18111,8 @@ internal sealed class CopilotService : Form
                     ? "iniBuilds A321LR"
                     : _state.IsIniBuildsA330
                     ? "iniBuilds A330"
+                    : _state.IsIniBuildsA310
+                    ? "iniBuilds A310-300"
                     : _state.IsFlyByWireA320Neo
                     ? "FBW A32NX"
                     : _state.IsPmdg737800
@@ -17009,6 +18154,8 @@ internal sealed class CopilotService : Form
                 : "PMDG NG3 SDK waiting - enable [SDK] EnableDataBroadcast=1 in 737_Options.ini"
             : _state.IsAsobo737Max8
                 ? "EXPERIMENTAL Asobo 737 MAX profile; incomplete live validation and no unattended Flow 7 use."
+            : _state.IsIniBuildsA310
+                ? "A310-300 procedure framework active; cockpit actions remain manual until native mappings are live-validated."
             : _mobiFlightReady
                 ? "MobiFlight connected"
                 : "MobiFlight not connected - aircraft controls unavailable";
@@ -18629,6 +19776,14 @@ internal sealed class CopilotService : Form
 
         _nativeBattery1On = null;
         _nativeBattery2On = null;
+        _a310Battery1Auto = null;
+        _a310Battery2Auto = null;
+        _a310Battery3Auto = null;
+        _a310HydraulicEngine1 = null;
+        _a310HydraulicEngine1A = null;
+        _a310HydraulicEngine2 = null;
+        _a310HydraulicEngine2B = null;
+        _a310HydraulicElectric = null;
         _nativeFuelPump1 = null;
         _nativeFuelPump2 = null;
         _nativeFuelPump3 = null;

@@ -34,6 +34,7 @@ internal static class ProcedureCalloutCatalog
             "fo-spoilers-callout" => "Spoilers",
             "fo-reverse-callout" => "Reverse green",
             "fo-decel-callout" => "Decel",
+            "eighty" => "Eighty knots",
             _ => null
         };
         if (essential != null || detail == CalloutDetail.Minimal)
@@ -58,6 +59,12 @@ internal static class ProcedureCalloutCatalog
             "fo-flaps-landing" => BoeingFlaps(state?.BoeingLandingFlaps, "Landing flaps set"),
             "fo-flaps" or "fo-flaps-zero" => "Flaps zero",
             "fo-flaps-up" => "Flaps up",
+            "slats-15" => "Slats fifteen",
+            "flaps-15" => "Flaps fifteen",
+            "flaps-20" => "Flaps twenty",
+            "flaps-40" => "Flaps forty",
+            "flaps-zero" => "Flaps zero",
+            "slats-zero" => "Slats zero",
             "stable-approach" => "One thousand, stable",
             _ => null
         };

@@ -13,6 +13,7 @@ changes, and provides spoken operational callouts.
 - iniBuilds A320neo V2
 - iniBuilds A321LR
 - iniBuilds A330-300 (GE)
+- iniBuilds A310-300 (**experimental; Flows 1–3 have completed initial live validation, while later gate-to-gate flows remain under development**)
 - FlyByWire A32NX for MSFS 2024
 - PMDG 737-800
 - Asobo 737 MAX 8 (**development beta; see the warning below**)
@@ -220,6 +221,19 @@ installed or disabled.
   Its imported
   SimBrief takeoff flap value is not currently compared with live MAX FMC
   takeoff data, and stabilizer/elevator state is not yet verified.
+- The iniBuilds A310-300 has researched gate-to-gate flow content, with Flows
+  1–3 now completing their initial live test from cold and dark through APU
+  power and pushback preparation. Its preliminary-panel flow uses A310-only commands and native readbacks
+  for batteries, wipers/radar, fire and annunciator tests, IRS, oxygen, and
+  initial exterior lights. Flow 2 also automates signs, ATS/flight-control
+  computers, window/probe heat, emergency lights, smoke/EGPWS tests, and the
+  preflight pedestal. Flow 3 automates APU start, APU generator/bleed,
+  beacon, transponder XPDR, and the guarded external-power disconnect; its
+  pushback clearance uses the shared SayIntentions/GSX contract. Captain
+  decisions and controls not yet mapped remain manual. This support remains
+  experimental: the next pass will add only operationally useful omissions
+  such as QNH, landing elevation, and required fuel-panel configuration,
+  without expanding the flows into redundant real-aircraft visual inspections.
 
 ## Troubleshooting and issue reports
 
@@ -249,6 +263,7 @@ retained flight recordings.
 - [Detailed gate-to-gate checklist](docs/checklist.md)
 - [Supported-aircraft and live-test status](docs/LIVE_TESTS.md)
 - [Asobo 737 MAX development status](docs/ASOBO_737_MAX_SUPPORT_STATUS.md)
+- [iniBuilds A310-300 implementation status](docs/A310_SUPPORT_PLAN.md)
 - [SayIntentions integration status](docs/SAYINTENTIONS_INTEGRATION_PLAN.md)
 - [SimBrief integration](docs/SIMBRIEF_INTEGRATION_PLAN.md)
 - [Product roadmap](docs/ROADMAP.md)

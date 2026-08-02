@@ -15,6 +15,7 @@ public sealed class SayIntentionsAtcFlowTests
             A320ProcedureLibrary.GateToGate[4],
             A321ProcedureLibrary.GateToGate[4],
             A330ProcedureLibrary.GateToGate[4],
+            A310ProcedureLibrary.GateToGate[4],
             FbwA320ProcedureLibrary.GateToGate[4],
             B737ProcedureLibrary.GateToGate[4]
         };
@@ -41,6 +42,7 @@ public sealed class SayIntentionsAtcFlowTests
             A320ProcedureLibrary.GateToGate[5],
             A321ProcedureLibrary.GateToGate[5],
             A330ProcedureLibrary.GateToGate[5],
+            A310ProcedureLibrary.GateToGate[5],
             FbwA320ProcedureLibrary.GateToGate[5],
             B737ProcedureLibrary.GateToGate[5]
         };

@@ -166,6 +166,7 @@ internal static class A310ProcedureLibrary
                 Observe("speedbrake", "Speedbrake retracted and disarmed", state => !state.GroundSpoilersArmed),
                 Captain("takeoff-warning", "Takeoff warning system tested", "perform the takeoff-warning test with each throttle and clear the warning."),
                 Automatic("atc-radar-rudder", "Preflight pedestal configured", state => state.A310PreflightPedestalSet, "preflight-pedestal"),
+                Automatic("fuel-pumps-on", "All tank fuel pumps ON", state => state.A310FuelPumpsOn, "fuel-pumps on"),
                 Advisory("adf-radar-check", "ADF and weather-radar indications checked"),
                 Manual(
                     "captain-ifr-clearance",
@@ -204,16 +205,16 @@ internal static class A310ProcedureLibrary
             new[]
             {
                 Captain("area-clear", "Area clear for engine start", "confirm the start area is clear and coordinate with the tug/ground crew."),
-                FirstOfficer("ignition-a-b", "Ignition selector A or B", "select ignition A when the Captain is PF or B when the First Officer is PF; verify ARM lights."),
-                FirstOfficer("packs-closed", "Pack valves closed for start", "verify both pack-valve flow bars extinguish when the start sequence is armed."),
-                FirstOfficer("fo-engine-two-starter", "Engine 2 start switch pressed", "press the Engine 2 START switch and verify the blue OPEN light."),
-                Observe("engine-two-rotation", "Engine 2 N2 reaches 20 percent", state => state.Engine2StarterActive || state.Engine2N1Percent > 2),
-                Captain("fo-engine-two-fuel", "Engine 2 fuel lever ON at 20 percent N2", "move Engine 2 fuel lever ON at 20% N2 and monitor EGT, oil pressure and acceleration."),
-                Observe("fo-engine-two-stable", "Engine 2 stable and start valve closed", state => state.Engine2Running),
-                FirstOfficer("fo-engine-one-starter", "Engine 1 start switch pressed", "press the Engine 1 START switch and verify the blue OPEN light."),
-                Observe("engine-one-rotation", "Engine 1 N2 reaches 20 percent", state => state.Engine1StarterActive || state.Engine1N1Percent > 2),
-                Captain("fo-engine-one-fuel", "Engine 1 fuel lever ON at 20 percent N2", "move Engine 1 fuel lever ON at 20% N2 and monitor EGT, oil pressure and acceleration."),
-                Observe("fo-engine-one-stable", "Engine 1 stable and start valve closed", state => state.Engine1Running),
+                Automatic("ignition-a-b", "Ignition selector A", state => state.A310IgnitionSelectedForStart, "ignition a"),
+                Observe("packs-closed", "Pack valves closed for start", state => state.A310PacksClosedForStart),
+                Automatic("fo-engine-two-starter", "Engine 2 start switch pressed", state => state.A310Engine2StarterSelected || state.Engine2StarterActive, "engine-2 starter"),
+                Observe("engine-two-rotation", "Engine 2 N2 reaches 20 percent", state => state.Engine2N2Percent >= 20),
+                Captain("fo-engine-two-fuel", "Engine 2 fuel lever ON at 20 percent N2", "move Engine 2 fuel lever ON and monitor EGT, oil pressure and acceleration.", state => state.A310Engine2FuelLeverOn || state.Engine2FuelFlowDetected || state.Engine2Running),
+                Observe("fo-engine-two-stable", "Engine 2 stable and start valve closed", state => state.Engine2Running && state.Engine2N2Percent >= 45 && !state.Engine2StarterActive),
+                Automatic("fo-engine-one-starter", "Engine 1 start switch pressed", state => state.A310Engine1StarterSelected || state.Engine1StarterActive, "engine-1 starter"),
+                Observe("engine-one-rotation", "Engine 1 N2 reaches 20 percent", state => state.Engine1N2Percent >= 20),
+                Captain("fo-engine-one-fuel", "Engine 1 fuel lever ON at 20 percent N2", "move Engine 1 fuel lever ON and monitor EGT, oil pressure and acceleration.", state => state.A310Engine1FuelLeverOn || state.Engine1FuelFlowDetected || state.Engine1Running),
+                Observe("fo-engine-one-stable", "Engine 1 stable and start valve closed", state => state.Engine1Running && state.Engine1N2Percent >= 45 && !state.Engine1StarterActive),
                 Observe("both-engines", "Both engines stable", state => state.Engine1Running && state.Engine2Running)
             });
 
@@ -224,21 +225,21 @@ internal static class A310ProcedureLibrary
             new[]
             {
                 Observe("both-engines", "Both engines running", state => state.Engine1Running && state.Engine2Running),
-                FirstOfficer("ignition-normal", "Ignition as required", "select OFF for normal operations, or CONT RELIGHT for heavy precipitation or a contaminated taxiway."),
-                FirstOfficer("apu-off", "APU bleed and master as required", "with both engines running, switch APU BLEED OFF and APU MASTER OFF unless operationally required."),
-                FirstOfficer("anti-ice", "Anti-ice as required", "select engine anti-ice ON in visible moisture below 10°C; otherwise leave it OFF."),
-                FirstOfficer("speedbrake-arm", "Speedbrake ARMED", "arm the speedbrake.", state => state.GroundSpoilersArmed),
-                FirstOfficer("rudder-trim", "Rudder trim reset to zero", "reset rudder trim and verify zero."),
+                Automatic("ignition-normal", "Ignition OFF for normal taxi", state => state.A310IgnitionOff, "ignition off"),
+                Automatic("apu-off", "APU bleed OFF, then master OFF", state => !state.ApuBleedOn && !state.ApuMasterSwitchOn, "apu off"),
+                Advisory("anti-ice", "Anti-ice as required for conditions"),
+                Automatic("speedbrake-arm", "Speedbrake ARMED", state => state.GroundSpoilersArmed, "speedbrake arm"),
+                Automatic("rudder-trim", "Rudder trim reset to zero", state => state.A310RudderTrimCentered, "rudder-trim reset"),
                 FirstOfficer("takeoff-flaps", "Slats/flaps set for takeoff", "set the slat/flap position calculated by takeoff performance.", state => state.FlapsHandleIndex > 0),
                 Captain("pitch-trim", "Pitch trim set from actual takeoff CG", "set pitch trim for takeoff using the CG shown on ECAM; verify the physical trim indication."),
                 Advisory("after-start-checklist", "After Start checklist reviewed"),
                 Manual("fo-taxi-clearance", "Taxi clearance received", "First Officer: press Confirm now to request taxi clearance through SayIntentions, or confirm the clearance received through another ATC source.", CrewRole.FirstOfficer, state => !state.SayIntentionsAtcActive),
-                FirstOfficer("nose-taxi", "Nose light TAXI", "set the nose light to TAXI."),
+                Automatic("nose-taxi", "Nose light TAXI", state => state.A310TaxiLightTaxi, "nose-light taxi"),
                 Captain("brakes-release-check", "Brakes released and checked", "release the parking brake and check toe-brake operation at the first safe opportunity.", state => !state.ParkingBrakeSet),
                 Captain("flight-controls", "Flight controls full and free", "select the F/CTL page and check full, free and correctly indicated yoke and rudder movement."),
                 Captain("fcp-takeoff", "FCP and takeoff modes set", "set preselected speed 250, arm PROF and NAV as appropriate, and verify both flight directors ON."),
-                FirstOfficer("autobrake-max", "Autobrake MAX", "select autobrake MAX."),
-                FirstOfficer("transponder-weather", "Transponder and weather radar set", "verify the squawk and transponder mode, then set weather radar ON with the appropriate system."),
+                Automatic("autobrake-max", "Autobrake MAX", state => state.A310AutobrakeMax, "autobrake max"),
+                Automatic("transponder-weather", "Transponder XPDR and weather radar ON", state => state.A310TransponderXpdrSet && state.A310WeatherRadarOn, "transponder-weather on"),
                 Captain("takeoff-config", "Takeoff configuration test passed", "perform the takeoff-configuration test and resolve every warning."),
                 Observe("taxi-underway", "Forward taxi established", state => state.ForwardTaxiDetected || state.BeforeTakeoffHoldEligible)
             });

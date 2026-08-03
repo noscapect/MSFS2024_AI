@@ -22,8 +22,49 @@ internal static class A310ControlProfile
     // The similarly named a310_inner_tank_pump2_left variable is read-only system state.
     public const string LeftInnerTankPump2State = "A310_INNER_TANK2_LEFT";
     public const string IgnitionSelectorState = "a310_eng_ignition_switch";
+    public const int IgnitionStartAValue = 1;
+    public const int IgnitionCrankValue = 2;
+    public const int IgnitionOffValue = 3;
     public const string Pack1State = "a310_bleed_pack1_percent";
     public const string Pack2State = "a310_bleed_pack2_percent";
+    public const string Engine1StarterState = "A310_ENG1_STARTER";
+    public const string Engine2StarterState = "A310_ENG2_STARTER";
+    public const string Engine1FuelLeverState = "A310_ENG1_MIXTURE_COMMAND";
+    public const string Engine2FuelLeverState = "A310_ENG2_MIXTURE_COMMAND";
+    public static IReadOnlyList<string> FuelPumpStates { get; } = new[]
+    {
+        "A310_OUTER_TANK1_LEFT",
+        "A310_OUTER_TANK2_LEFT",
+        "A310_INNER_TANK1_LEFT",
+        "A310_INNER_TANK2_LEFT",
+        "A310_CENTER_TANK1",
+        "A310_CENTER_TANK2",
+        "A310_INNER_TANK1_RIGHT",
+        "A310_INNER_TANK2_RIGHT",
+        "A310_OUTER_TANK1_RIGHT",
+        "A310_OUTER_TANK2_RIGHT",
+        "A310_TRIM_TANK1",
+        "A310_TRIM_TANK2"
+    };
+    public static IReadOnlyList<string> OperationalRuntimeStates { get; } =
+        new[]
+        {
+            ApuMasterState,
+            ApuStartButtonState,
+            ApuAvailableState,
+            ApuBleedState,
+            ApuGeneratorState,
+            IgnitionSelectorState,
+            Pack1State,
+            Pack2State,
+            Engine1StarterState,
+            Engine2StarterState,
+            Engine1FuelLeverState,
+            Engine2FuelLeverState
+        }
+        .Concat(FuelPumpStates)
+        .Concat(new[] { WeatherRadarModeState, AutobrakeMaxState })
+        .ToArray();
     public const string HydraulicEngine1State = "a310_hyd_eng1_switch_pos";
     public const string HydraulicEngine1AState = "a310_hyd_eng1_a_switch_pos";
     public const string HydraulicEngine2State = "a310_hyd_eng2_switch_pos";
@@ -32,6 +73,7 @@ internal static class A310ControlProfile
     public const string CaptainWiperState = "A310_CPT_WIPER_KNOB";
     public const string FirstOfficerWiperState = "A310_FO_WIPER_KNOB";
     public const string WeatherRadarSystemState = "a310_wxr_sys";
+    public const string WeatherRadarModeState = "A310_WXR_MODE";
     public const string Irs1State = "a310_irs1_state";
     public const string Irs2State = "a310_irs2_state";
     public const string Irs3State = "a310_irs3_state";
@@ -69,6 +111,9 @@ internal static class A310ControlProfile
     public const string CargoSmokeBulkIndicationState = "a300dr_cargo_after_bulk_smoke";
     public const string EgpwsTestState = "a310_gpws_test";
     public const string AutobrakeState = "a310_autobrake_level";
+    public const string AutobrakeMaxState = "A310_AUTOBRAKE_HI_DECEL";
+    public const string AutobrakeMaxCommandState = "A310_ABRK_HI_COMMAND";
+    public const string SpoilersArmedState = "A310_SPOILERS_ARMED";
     public const string RudderTrimState = "a310_total_rudder_trim";
     public const string RudderTrimResetState = "a310_reset_rudder_trim_command";
     public const string TcasPedestalModeState = "a310_tcas_mode_pedestal";
@@ -98,7 +143,7 @@ internal static class A310ControlProfile
             Capability("irs", "Three IRS mode selectors and ISDU", CapabilitySupport.ManualRequired, "A310 Input Events require live capture"),
             Capability("fire-tests", "APU and engine fire tests", CapabilitySupport.ManualRequired, "Held test events and independent warning readback require live capture"),
             Capability("apu", "APU master, start, generator and bleed", CapabilitySupport.ManualRequired, "A310 Input Events require live capture"),
-            Capability("engine-start", "Ignition, start switches and fuel levers", CapabilitySupport.ManualRequired, "A310 start controls require live capture"),
+            Capability("engine-start", "Ignition, start switches and fuel levers", CapabilitySupport.Supported, "A310 LVar commands, native LVar readback and SimConnect engine telemetry"),
             Capability("lights", "A310 external-light panel", CapabilitySupport.ManualRequired, "A310 selector events require live capture"),
             Capability("slats-flaps", "A310 combined slat/flap schedule", CapabilitySupport.ManualRequired, "Detent command and readback require live capture"),
             Capability("autoflight", "ATS, FCP, PROFILE and LAND modes", CapabilitySupport.ManualRequired, "A310 autoflight controls require live capture"),

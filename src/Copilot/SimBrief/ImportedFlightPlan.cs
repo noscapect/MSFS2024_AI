@@ -22,6 +22,22 @@ public sealed class ImportedFlightPlan
     public int? TakeoffV2Knots { get; set; }
     public string TakeoffFlaps { get; set; } = "";
     public double? BlockFuel { get; set; }
+    public double? TaxiFuel { get; set; }
+    public double? TakeoffFuel { get; set; }
+    public double? LandingFuel { get; set; }
+    public int? PassengerCount { get; set; }
+    public int? MaximumPassengerCount { get; set; }
+    public int? BaggageCount { get; set; }
+    public double? PassengerWeight { get; set; }
+    public double? BaggageWeight { get; set; }
+    public double? FreightWeight { get; set; }
+    public double? CargoWeight { get; set; }
+    public double? PayloadWeight { get; set; }
+    public double? OperatingEmptyWeight { get; set; }
+    public double? ZeroFuelWeight { get; set; }
+    public double? RampWeight { get; set; }
+    public double? TakeoffWeight { get; set; }
+    public double? LandingWeight { get; set; }
     public string Units { get; set; } = "";
 
     public string RouteLabel =>

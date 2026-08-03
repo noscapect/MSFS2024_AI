@@ -17,7 +17,7 @@ internal sealed class SimBriefClient
             : !string.IsNullOrWhiteSpace(username)
                 ? $"username={Uri.EscapeDataString(username.Trim())}"
                 : throw new InvalidOperationException("Enter a SimBrief Pilot ID or username first.");
-        var url = $"https://www.simbrief.com/api/xml.fetcher.php?{query}&json=1";
+        var url = $"https://www.simbrief.com/api/xml.fetcher.php?{query}&json=v2";
         using var response = await HttpClient.GetAsync(url, cancellationToken).ConfigureAwait(false);
         var json = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)

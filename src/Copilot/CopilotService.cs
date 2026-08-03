@@ -77,6 +77,7 @@ internal sealed class CopilotService : Form
     private bool _gsxGoodEngineStartMenuRequested;
     private bool _gsxGoodEngineStartPromptPending;
     private bool _gsxGoodEngineStartWaitingLogged;
+    private bool _gsxMenuHiddenLogged;
     private ProcedureDefinition? _pendingGsxEngineStartProcedure;
     private string? _pendingGsxArrivalStand;
     private string? _selectedGsxArrivalStand;
@@ -224,6 +225,9 @@ internal sealed class CopilotService : Form
     private bool _a310CargoSmokeIndicationsObserved;
     private bool _a310EgpwsTestObserved;
     private readonly float?[] _a310Flow3ApuStates = new float?[5];
+    private readonly float?[] _a310Flow4EngineStartStates = new float?[7];
+    private readonly float?[] _a310FuelPumpStates = new float?[12];
+    private readonly float?[] _a310Flow5States = new float?[2];
     private bool? _fbwBattery1Auto;
     private bool? _fbwBattery2Auto;
     private bool? _fbwBattery1AutoTyped;
@@ -246,6 +250,8 @@ internal sealed class CopilotService : Form
     private double? _lastLoggedA380AcPowerSignature;
     private double? _lastLoggedIniBuildsIgnitionKnob;
     private double? _lastLoggedIniBuildsTurnoffLightSwitch;
+    private double? _lastLoggedA310Engine1IgnitionSwitch;
+    private double? _lastLoggedA310Engine2IgnitionSwitch;
     private bool? _fbwApuMasterSwitch;
     private bool? _fbwApuStartButton;
     private bool? _fbwApuStartAvailable;
@@ -848,6 +854,27 @@ internal sealed class CopilotService : Form
         A310ApuStartInputEvent = 341,
         A310ApuGeneratorInputEvent = 342,
         A310ApuBleedInputEvent = 343,
+        A310Flow4Ignition = 344,
+        A310Flow4Pack1 = 345,
+        A310Flow4Pack2 = 346,
+        A310Flow4Engine1Starter = 347,
+        A310Flow4Engine2Starter = 348,
+        A310Flow4Engine1FuelLever = 349,
+        A310Flow4Engine2FuelLever = 350,
+        A310FuelPump1 = 351,
+        A310FuelPump2 = 352,
+        A310FuelPump3 = 353,
+        A310FuelPump4 = 354,
+        A310FuelPump5 = 355,
+        A310FuelPump6 = 356,
+        A310FuelPump7 = 357,
+        A310FuelPump8 = 358,
+        A310FuelPump9 = 359,
+        A310FuelPump10 = 360,
+        A310FuelPump11 = 361,
+        A310FuelPump12 = 362,
+        A310Flow5WeatherRadarMode = 363,
+        A310Flow5AutobrakeMax = 364,
         PmdgNg3Data = 300,
         PmdgNg3Control = 301
     }
@@ -1022,6 +1049,27 @@ internal sealed class CopilotService : Form
         A310Flow3ApuAvailable = 263,
         A310Flow3ApuBleed = 264,
         A310Flow3ApuGenerator = 265,
+        A310Flow4Ignition = 266,
+        A310Flow4Pack1 = 267,
+        A310Flow4Pack2 = 268,
+        A310Flow4Engine1Starter = 269,
+        A310Flow4Engine2Starter = 270,
+        A310Flow4Engine1FuelLever = 271,
+        A310Flow4Engine2FuelLever = 272,
+        A310FuelPump1 = 273,
+        A310FuelPump2 = 274,
+        A310FuelPump3 = 275,
+        A310FuelPump4 = 276,
+        A310FuelPump5 = 277,
+        A310FuelPump6 = 278,
+        A310FuelPump7 = 279,
+        A310FuelPump8 = 280,
+        A310FuelPump9 = 281,
+        A310FuelPump10 = 282,
+        A310FuelPump11 = 283,
+        A310FuelPump12 = 284,
+        A310Flow5WeatherRadarMode = 285,
+        A310Flow5AutobrakeMax = 286,
         PmdgNg3Data = unchecked((int)PmdgNg3DataDefinition),
         PmdgNg3Control = unchecked((int)PmdgNg3ControlDefinition)
     }
@@ -1093,6 +1141,8 @@ internal sealed class CopilotService : Form
         public double Engine2Starter;
         public double Engine1N1;
         public double Engine2N1;
+        public double Engine1N2;
+        public double Engine2N2;
         public double Engine1Egt;
         public double Engine2Egt;
         public double Engine1FuelFlow;
@@ -1547,6 +1597,8 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "GENERAL ENG STARTER ACTIVE:2", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "TURB ENG CORRECTED N1:1", "Percent", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "TURB ENG CORRECTED N1:2", "Percent", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "TURB ENG CORRECTED N2:1", "Percent", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "TURB ENG CORRECTED N2:2", "Percent", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "GENERAL ENG EXHAUST GAS TEMPERATURE:1", "Celsius", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "GENERAL ENG EXHAUST GAS TEMPERATURE:2", "Celsius", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "TURB ENG FUEL FLOW PPH:1", "Pounds per hour", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
@@ -2071,6 +2123,7 @@ internal sealed class CopilotService : Form
                 // previous menu. This helper clears the tracked dialog before
                 // closing it, so the old question is not sent as cancelled.
                 CloseGsxChoiceDialog();
+                _gsxMenuHiddenLogged = false;
                 _gsxMenu = _gsxFileReader?.ReadMenu()
                            ?? new GsxMenuSnapshot(
                                string.Empty,
@@ -2107,11 +2160,16 @@ internal sealed class CopilotService : Form
                 // The GSX SDK defines event 2 as hideMenu(), not as a
                 // cancellation. Keep the cached question and our remote UI
                 // available so the captain can still return a choice.
-                AppLog.Write(
-                    "GSX requested that its menu be hidden; retaining the pending remote response.");
+                if (!_gsxMenuHiddenLogged)
+                {
+                    AppLog.Write(
+                        "GSX requested that its menu be hidden; retaining the pending remote response.");
+                    _gsxMenuHiddenLogged = true;
+                }
                 break;
             case 3:
                 _gsxMenuOpen = false;
+                _gsxMenuHiddenLogged = false;
                 _gsxMenu = new GsxMenuSnapshot(
                     string.Empty,
                     Array.Empty<string>());
@@ -2290,10 +2348,10 @@ internal sealed class CopilotService : Form
         _gsxGoodEngineStartPromptPending = true;
         if (!BothEnginesStartStabilized(_state))
         {
-            AppLog.Write(
-                "GSX good-engine-start prompt is open; waiting for both engines stabilized before responding.");
             if (!_gsxGoodEngineStartWaitingLogged)
             {
+                AppLog.Write(
+                    "GSX good-engine-start prompt is open; waiting for both engines stabilized before responding.");
                 AppendDashboardLog(
                     "GSX is waiting for good engine start; First Officer will answer when both engines are stable.");
                 _gsxGoodEngineStartWaitingLogged = true;
@@ -3523,6 +3581,43 @@ internal sealed class CopilotService : Form
             return;
         }
 
+        if (request is >= Request.A310Flow4Ignition and <= Request.A310Flow4Engine2FuelLever)
+        {
+            var value = ((MobiFlightFloat)data.dwData[0]).Value;
+            var index = (int)request - (int)Request.A310Flow4Ignition;
+            var labels = new[]
+            {
+                "engine ignition selector", "pack 1 flow", "pack 2 flow",
+                "Engine 1 starter", "Engine 2 starter",
+                "Engine 1 fuel lever", "Engine 2 fuel lever"
+            };
+            SetLoggedFloat(ref _a310Flow4EngineStartStates[index], value, $"A310 {labels[index]}");
+            ApplyNativeAircraftState();
+            return;
+        }
+
+        if (request is >= Request.A310FuelPump1 and <= Request.A310FuelPump12)
+        {
+            var value = ((MobiFlightFloat)data.dwData[0]).Value;
+            var index = (int)request - (int)Request.A310FuelPump1;
+            SetLoggedFloat(
+                ref _a310FuelPumpStates[index],
+                value,
+                $"A310 fuel pump {index + 1}");
+            ApplyNativeAircraftState();
+            return;
+        }
+
+        if (request is >= Request.A310Flow5WeatherRadarMode and <= Request.A310Flow5AutobrakeMax)
+        {
+            var value = ((MobiFlightFloat)data.dwData[0]).Value;
+            var index = (int)request - (int)Request.A310Flow5WeatherRadarMode;
+            var labels = new[] { "weather-radar mode", "autobrake MAX" };
+            SetLoggedFloat(ref _a310Flow5States[index], value, $"A310 {labels[index]}");
+            ApplyNativeAircraftState();
+            return;
+        }
+
         if (request is >= Request.A310Battery1Auto and <= Request.A310AnnunciatorTest)
         {
             var value = ((MobiFlightFloat)data.dwData[0]).Value;
@@ -4211,6 +4306,23 @@ internal sealed class CopilotService : Form
         RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow3ApuAvailable, Request.A310Flow3ApuAvailable, 152 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow3ApuBleed, Request.A310Flow3ApuBleed, 153 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow3ApuGenerator, Request.A310Flow3ApuGenerator, 154 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow4Ignition, Request.A310Flow4Ignition, 155 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow4Pack1, Request.A310Flow4Pack1, 156 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow4Pack2, Request.A310Flow4Pack2, 157 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow4Engine1Starter, Request.A310Flow4Engine1Starter, 158 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow4Engine2Starter, Request.A310Flow4Engine2Starter, 159 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow4Engine1FuelLever, Request.A310Flow4Engine1FuelLever, 160 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow4Engine2FuelLever, Request.A310Flow4Engine2FuelLever, 161 * sizeof(float));
+        for (var index = 0; index < A310ControlProfile.FuelPumpStates.Count; index++)
+        {
+            RegisterMobiFlightFloat(
+                sender,
+                (ClientDataDefinition)((int)ClientDataDefinition.A310FuelPump1 + index),
+                (Request)((int)Request.A310FuelPump1 + index),
+                (162 + index) * sizeof(float));
+        }
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow5WeatherRadarMode, Request.A310Flow5WeatherRadarMode, 174 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow5AutobrakeMax, Request.A310Flow5AutobrakeMax, 175 * sizeof(float));
         _mobiFlightRuntimeReady = true;
         _mobiFlightRuntimeInitializedUtc = DateTime.UtcNow;
         SendMobiFlightRuntimeCommand("MF.SimVars.Clear");
@@ -4424,14 +4536,7 @@ internal sealed class CopilotService : Form
         {
             SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{stateName})");
         }
-        foreach (var stateName in new[]
-        {
-            A310ControlProfile.ApuMasterState,
-            A310ControlProfile.ApuStartButtonState,
-            A310ControlProfile.ApuAvailableState,
-            A310ControlProfile.ApuBleedState,
-            A310ControlProfile.ApuGeneratorState
-        })
+        foreach (var stateName in A310ControlProfile.OperationalRuntimeStates)
         {
             SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{stateName})");
         }
@@ -4503,6 +4608,9 @@ internal sealed class CopilotService : Form
             _state.ApuAvailable = _a310Flow3ApuStates[2] > 0.5f;
             _state.ApuBleedOn = _a310Flow3ApuStates[3] > 0.5f;
             _state.ApuGeneratorSwitchOn = _a310Flow3ApuStates[4] > 0.5f;
+            ApplyA310EngineStartState(_state);
+            _state.A310FuelPumpsOn = A310FuelPumpsOn();
+            ApplyA310AfterStartState(_state);
             _state.A310ApuPowerAndBleedSet = A310ApuPowerAndBleedSet();
             _state.A310TransponderXpdrSet = A310TransponderXpdrSet();
             if (_a310InitialLightStates[1].HasValue)
@@ -5167,6 +5275,17 @@ internal sealed class CopilotService : Form
                 raw.IniBuildsIgnitionKnob,
                 ref _lastLoggedIniBuildsIgnitionKnob);
         }
+        if (isIniBuildsA310)
+        {
+            LogChangedFloat(
+                "A310 standard engine 1 ignition",
+                raw.Engine1IgnitionSwitch,
+                ref _lastLoggedA310Engine1IgnitionSwitch);
+            LogChangedFloat(
+                "A310 standard engine 2 ignition",
+                raw.Engine2IgnitionSwitch,
+                ref _lastLoggedA310Engine2IgnitionSwitch);
+        }
         if (isIniBuildsAirbusFamily)
         {
             LogChangedFloat(
@@ -5272,6 +5391,13 @@ internal sealed class CopilotService : Form
         var effectiveV2 = Math.Max(
             effectiveVr,
             _settings.TakeoffV2SpeedKnots);
+        var engineModeSelectorPosition = ResolveEngineModeSelectorPosition(
+            isIniBuildsAirbusFamily
+                ? raw.IniBuildsIgnitionKnob
+                : null,
+            isIniBuildsAirbusFamily ? _nativeEngineModeSelector : null,
+            raw.Engine1IgnitionSwitch,
+            raw.Engine2IgnitionSwitch);
 
         _state = new AircraftState
         {
@@ -5317,17 +5443,13 @@ internal sealed class CopilotService : Form
             Engine2N1Percent = isFlyByWireAirbus
                 ? _fbwEngine2N1 ?? raw.Engine2N1
                 : raw.Engine2N1,
+            Engine1N2Percent = raw.Engine1N2,
+            Engine2N2Percent = raw.Engine2N2,
             Engine1EgtCelsius = raw.Engine1Egt,
             Engine2EgtCelsius = raw.Engine2Egt,
             Engine1FuelFlowPph = raw.Engine1FuelFlow,
             Engine2FuelFlowPph = raw.Engine2FuelFlow,
-            EngineModeSelectorPosition = ResolveEngineModeSelectorPosition(
-                isIniBuildsAirbusFamily
-                    ? raw.IniBuildsIgnitionKnob
-                    : null,
-                isIniBuildsAirbusFamily ? _nativeEngineModeSelector : null,
-                raw.Engine1IgnitionSwitch,
-                raw.Engine2IgnitionSwitch),
+            EngineModeSelectorPosition = engineModeSelectorPosition,
             FbwEngine1State = _fbwEngine1State,
             FbwEngine2State = _fbwEngine2State,
             Battery1On = isIniBuildsA310
@@ -5378,6 +5500,29 @@ internal sealed class CopilotService : Form
             A310PreflightPedestalSet = isIniBuildsA310 && A310PreflightPedestalSet(),
             A310ApuPowerAndBleedSet = isIniBuildsA310 && A310ApuPowerAndBleedSet(),
             A310TransponderXpdrSet = isIniBuildsA310 && A310TransponderXpdrSet(),
+            A310IgnitionSelectedForStart = isIniBuildsA310 && A310IgnitionSelectedForStart(),
+            A310PacksClosedForStart = isIniBuildsA310 && A310PacksClosedForStart(),
+            A310Engine1StarterSelected = isIniBuildsA310 && _a310Flow4EngineStartStates[3] > 0.5f,
+            A310Engine2StarterSelected = isIniBuildsA310 && _a310Flow4EngineStartStates[4] > 0.5f,
+            A310Engine1FuelLeverOn = isIniBuildsA310 && _a310Flow4EngineStartStates[5] > 0.5f,
+            A310Engine2FuelLeverOn = isIniBuildsA310 && _a310Flow4EngineStartStates[6] > 0.5f,
+            A310FuelPumpsOn = isIniBuildsA310 && A310FuelPumpsOn(),
+            A310IgnitionOff = isIniBuildsA310
+                              && IsA310IgnitionOff(
+                                  _a310Flow4EngineStartStates[0],
+                                  engineModeSelectorPosition),
+            A310RudderTrimCentered = isIniBuildsA310
+                                      && _a310Flow2States[19].HasValue
+                                      && Math.Abs(_a310Flow2States[19]!.Value) < 0.05,
+            A310TaxiLightTaxi = isIniBuildsA310
+                                 && _a310InitialLightStates[2].HasValue
+                                 && Math.Abs(_a310InitialLightStates[2]!.Value - 1) < 0.1,
+            A310AutobrakeMax = isIniBuildsA310 && _a310Flow5States[1] > 0.5f,
+            A310WeatherRadarOn = isIniBuildsA310
+                                  && _a310WeatherRadarSystem.HasValue
+                                  && Math.Abs(_a310WeatherRadarSystem.Value) < 0.1
+                                  && _a310Flow5States[0].HasValue
+                                  && Math.Abs(_a310Flow5States[0]!.Value - 2) < 0.1,
             Battery1Voltage = raw.Battery1Voltage,
             Battery2Voltage = raw.Battery2Voltage,
             ApuBatteryOn = !isIniBuildsA330
@@ -6761,11 +6906,25 @@ internal sealed class CopilotService : Form
             "a310 egpws-test" => A310Flow2ReadbacksAvailable(17, 1),
             "a310 preflight-pedestal" =>
                 A310Flow2ReadbacksAvailable(18, 3) && _a310WeatherRadarSystem.HasValue,
+            "a310 fuel-pumps on" => _a310FuelPumpStates.All(value => value.HasValue),
             "a310 apu start" => _a310Flow3ApuStates.All(value => value.HasValue),
             "a310 apu power-bleed" => _a310Flow3ApuStates.All(value => value.HasValue),
             "a310 beacon on" => _a310InitialLightStates[1].HasValue,
             "a310 transponder xpdr" => _a310Flow2States[20].HasValue,
             "a310 external-power off" => _a310Flow3ApuStates.All(value => value.HasValue),
+            "a310 ignition a" => A310Flow4ReadbacksAvailable(0, 3),
+            "a310 engine-1 starter" => A310Flow4ReadbacksAvailable(3, 1),
+            "a310 engine-2 starter" => A310Flow4ReadbacksAvailable(4, 1),
+            "a310 ignition off" => A310Flow4ReadbacksAvailable(0, 1),
+            "a310 apu off" => _a310Flow3ApuStates.All(value => value.HasValue),
+            "a310 speedbrake arm" => _mobiFlightRuntimeReady,
+            "a310 rudder-trim reset" => _a310Flow2States[19].HasValue,
+            "a310 nose-light taxi" => _a310InitialLightStates[2].HasValue,
+            "a310 autobrake max" => _a310Flow5States[1].HasValue,
+            "a310 transponder-weather on" =>
+                _a310Flow2States[20].HasValue
+                && _a310WeatherRadarSystem.HasValue
+                && _a310Flow5States[0].HasValue,
             var command when command.StartsWith("nav-logo ") => _mobiFlightRuntimeReady,
             var command when command.StartsWith("apu-") =>
                 _state?.IsFlyByWireAirbus == true
@@ -7071,6 +7230,9 @@ internal sealed class CopilotService : Form
             case "preflight-pedestal" when _state?.IsIniBuildsA310 == true:
                 SetA310PreflightPedestal();
                 break;
+            case "fuel-pumps on" when _state?.IsIniBuildsA310 == true:
+                SetA310FuelPumpsOn();
+                break;
             case "apu start" when _state?.IsIniBuildsA310 == true:
                 StartA310Apu();
                 break;
@@ -7078,8 +7240,45 @@ internal sealed class CopilotService : Form
                 SetA310ApuPowerAndBleed();
                 break;
             case "transponder xpdr" when _state?.IsIniBuildsA310 == true:
-                SendA310ControlValue(A310ControlProfile.TcasPedestalModeState, 2, "transponder XPDR");
+                SendA310ControlValue(A310ControlProfile.TcasPedestalModeState, 1, "transponder XPDR");
                 FinishOneShot();
+                break;
+            case "ignition a" when _state?.IsIniBuildsA310 == true:
+                SendA310ControlValue(
+                    A310ControlProfile.IgnitionSelectorState,
+                    A310ControlProfile.IgnitionStartAValue,
+                    "ignition selector A");
+                FinishOneShot();
+                break;
+            case "ignition off" when _state?.IsIniBuildsA310 == true:
+                SetA310IgnitionOff();
+                break;
+            case "engine-1 starter" when _state?.IsIniBuildsA310 == true:
+                SendA310ControlValue(A310ControlProfile.Engine1StarterState, 1, "Engine 1 START pressed");
+                FinishOneShot();
+                break;
+            case "engine-2 starter" when _state?.IsIniBuildsA310 == true:
+                SendA310ControlValue(A310ControlProfile.Engine2StarterState, 1, "Engine 2 START pressed");
+                FinishOneShot();
+                break;
+            case "apu off" when _state?.IsIniBuildsA310 == true:
+                SetA310ApuOff();
+                break;
+            case "speedbrake arm" when _state?.IsIniBuildsA310 == true:
+                ArmA310Speedbrake();
+                break;
+            case "rudder-trim reset" when _state?.IsIniBuildsA310 == true:
+                ResetA310RudderTrim();
+                break;
+            case "nose-light taxi" when _state?.IsIniBuildsA310 == true:
+                SendA310ControlValue(A310ControlProfile.TaxiLightState, 1, "nose light TAXI");
+                FinishOneShot();
+                break;
+            case "autobrake max" when _state?.IsIniBuildsA310 == true:
+                SetA310AutobrakeMax();
+                break;
+            case "transponder-weather on" when _state?.IsIniBuildsA310 == true:
+                SetA310TransponderAndWeatherRadar();
                 break;
             case "apu-master on":
                 SetApuMaster(true);
@@ -7766,6 +7965,12 @@ internal sealed class CopilotService : Form
     private bool A310Flow2ReadbacksAvailable(int start, int count) =>
         _a310Flow2States.Skip(start).Take(count).All(value => value.HasValue);
 
+    private bool A310Flow4ReadbacksAvailable(int start, int count) =>
+        _a310Flow4EngineStartStates
+            .Skip(start)
+            .Take(count)
+            .All(value => value.HasValue);
+
     private bool A310ApuPowerAndBleedSet() =>
         _a310Flow3ApuStates[2] > 0.5f
         && _a310Flow3ApuStates[3] > 0.5f
@@ -7773,7 +7978,58 @@ internal sealed class CopilotService : Form
 
     private bool A310TransponderXpdrSet() =>
         _a310Flow2States[20].HasValue
-        && Math.Abs(_a310Flow2States[20]!.Value - 2) < 0.1;
+        && Math.Abs(_a310Flow2States[20]!.Value - 1) < 0.1;
+
+    private bool A310IgnitionSelectedForStart() =>
+        _a310Flow4EngineStartStates[0].HasValue
+        && Math.Abs(
+            _a310Flow4EngineStartStates[0]!.Value
+            - A310ControlProfile.IgnitionStartAValue) < 0.1;
+
+    private static bool IsA310IgnitionOff(
+        float? nativeSelectorPosition,
+        double? standardEngineIgnitionPosition) =>
+        nativeSelectorPosition.HasValue
+        && Math.Abs(
+            nativeSelectorPosition.Value
+            - A310ControlProfile.IgnitionOffValue) < 0.1
+        || standardEngineIgnitionPosition.HasValue
+        && Math.Abs(standardEngineIgnitionPosition.Value) < 0.1;
+
+    private bool A310PacksClosedForStart() =>
+        _a310Flow4EngineStartStates[1].HasValue
+        && _a310Flow4EngineStartStates[2].HasValue
+        && _a310Flow4EngineStartStates[1]!.Value <= 0.5f
+        && _a310Flow4EngineStartStates[2]!.Value <= 0.5f;
+
+    private bool A310FuelPumpsOn() =>
+        _a310FuelPumpStates.All(value => value.HasValue && value.Value > 0.5f);
+
+    private void ApplyA310EngineStartState(AircraftState state)
+    {
+        state.A310IgnitionSelectedForStart = A310IgnitionSelectedForStart();
+        state.A310PacksClosedForStart = A310PacksClosedForStart();
+        state.A310Engine1StarterSelected = _a310Flow4EngineStartStates[3] > 0.5f;
+        state.A310Engine2StarterSelected = _a310Flow4EngineStartStates[4] > 0.5f;
+        state.A310Engine1FuelLeverOn = _a310Flow4EngineStartStates[5] > 0.5f;
+        state.A310Engine2FuelLeverOn = _a310Flow4EngineStartStates[6] > 0.5f;
+        state.A310IgnitionOff = IsA310IgnitionOff(
+            _a310Flow4EngineStartStates[0],
+            state.EngineModeSelectorPosition);
+    }
+
+    private void ApplyA310AfterStartState(AircraftState state)
+    {
+        state.A310RudderTrimCentered = _a310Flow2States[19].HasValue
+                                        && Math.Abs(_a310Flow2States[19]!.Value) < 0.05;
+        state.A310TaxiLightTaxi = _a310InitialLightStates[2].HasValue
+                                   && Math.Abs(_a310InitialLightStates[2]!.Value - 1) < 0.1;
+        state.A310AutobrakeMax = _a310Flow5States[1] > 0.5f;
+        state.A310WeatherRadarOn = _a310WeatherRadarSystem.HasValue
+                                    && Math.Abs(_a310WeatherRadarSystem.Value) < 0.1
+                                    && _a310Flow5States[0].HasValue
+                                    && Math.Abs(_a310Flow5States[0]!.Value - 2) < 0.1;
+    }
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
     private struct FlightCalloutData
@@ -13684,7 +13940,10 @@ internal sealed class CopilotService : Form
         var blockedReason = ValidateExternalPowerProcedure(_state, desiredOn);
         if (blockedReason != null)
         {
-            Console.Error.WriteLine($"External-power procedure blocked: {blockedReason}");
+            var message = $"External-power procedure blocked: {blockedReason}";
+            Console.Error.WriteLine(message);
+            AppendDashboardLog(message);
+            AppLog.Write(message);
             FinishOneShot(3);
             return;
         }
@@ -13756,14 +14015,14 @@ internal sealed class CopilotService : Form
             return "the loaded aircraft is not supported for external-power automation.";
         }
 
-        if (!state.OnGround || state.GroundSpeedKnots > 0.5)
+        if (desiredOn && (!state.OnGround || state.GroundSpeedKnots > 0.5))
         {
-            return "aircraft must be stationary on the ground.";
+            return "aircraft must be stationary on the ground before connecting power.";
         }
 
-        if (!state.EnginesOff)
+        if (desiredOn && !state.EnginesOff)
         {
-            return "engines must be off for this initial procedure.";
+            return "engines must be off before connecting external power.";
         }
 
         if (desiredOn && !state.ExternalPowerAvailable)
@@ -14497,6 +14756,13 @@ internal sealed class CopilotService : Form
             Margin = new Padding(8, 2, 8, 0)
         };
         featureSettingsButton.Click += (_, _) => ShowFeatureSettingsDialog();
+        var payloadOverviewButton = new Button
+        {
+            Text = "Payload...",
+            AutoSize = true,
+            Margin = new Padding(0, 2, 8, 0)
+        };
+        payloadOverviewButton.Click += (_, _) => ShowSimBriefPayloadOverview();
 
         flightSetupPanel.Controls.Add(new Label
         {
@@ -14659,6 +14925,7 @@ internal sealed class CopilotService : Form
             Margin = new Padding(2, 7, 0, 0)
         });
         flightSetupPanel.Controls.Add(featureSettingsButton);
+        flightSetupPanel.Controls.Add(payloadOverviewButton);
         settingsPanel.Controls.Add(flightSetupPanel, 0, 0);
         settingsPanel.Controls.Add(preferencesPanel, 0, 1);
         root.Controls.Add(settingsPanel);
@@ -15576,6 +15843,74 @@ internal sealed class CopilotService : Form
             "A310 preflight pedestal configuration sent; awaiting native readback.");
     }
 
+    private void SetA310FuelPumpsOn()
+    {
+        RunA310Sequence(
+            A310ControlProfile.FuelPumpStates
+                .Select((stateName, index) =>
+                    (stateName, 1, $"tank fuel pump {index + 1} ON"))
+                .ToArray(),
+            650,
+            "A310 tank fuel pumps are being selected ON sequentially; awaiting native readback.");
+    }
+
+    private void SetA310ApuOff()
+    {
+        // MSFS 2024's A310 cockpit model may accept the LVar write without
+        // actuating the guarded pushbutton. Mirror the proven startup path by
+        // sending the corresponding native InputEvents as well.
+        ScheduleInputEvent(A310ApuBleedInputEventHash, 0.0, 50);
+        ScheduleInputEvent(A310ApuMasterInputEventHash, 0.0, 1050);
+        RunA310Sequence(
+            new[]
+            {
+                (A310ControlProfile.ApuBleedState, 0, "APU bleed OFF"),
+                (A310ControlProfile.ApuMasterState, 0, "APU master OFF")
+            },
+            1000,
+            "A310 APU bleed and master shutdown sent; awaiting native readback.");
+    }
+
+    private void ArmA310Speedbrake()
+    {
+        SendMobiFlightCommand(
+            "MF.SimVars.Set.(L:A310_SPOILERS_ARMED, Bool) ! " +
+            "(L:A310_SPOILERS_HANDLE_POSITION, position 16k) 0 == and " +
+            "if{ 1 } els{ 0 } (>K:SPOILERS_ARM_SET)");
+        SendMobiFlightCommand("MF.DummyCmd");
+        AppendDashboardLog("A310 speedbrake ARM command sent; awaiting simulator readback.");
+        FinishOneShot();
+    }
+
+    private void ResetA310RudderTrim()
+    {
+        SendA310ControlValue(A310ControlProfile.RudderTrimResetState, 1, "rudder-trim reset pressed");
+        ScheduleA310ControlValue(A310ControlProfile.RudderTrimResetState, 0, "rudder-trim reset released", 700);
+        AppendDashboardLog("A310 rudder trim reset; awaiting zero readback.");
+        FinishOneShot();
+    }
+
+    private void SetA310AutobrakeMax()
+    {
+        SendA310ControlValue(A310ControlProfile.AutobrakeMaxCommandState, 1, "autobrake MAX pressed");
+        ScheduleA310ControlValue(A310ControlProfile.AutobrakeMaxCommandState, 0, "autobrake MAX released", 700);
+        AppendDashboardLog("A310 autobrake MAX selected; awaiting annunciator readback.");
+        FinishOneShot();
+    }
+
+    private void SetA310TransponderAndWeatherRadar()
+    {
+        RunA310Sequence(
+            new[]
+            {
+                (A310ControlProfile.TcasPedestalModeState, 1, "transponder XPDR"),
+                (A310ControlProfile.WeatherRadarSystemState, 0, "weather-radar system 1"),
+                (A310ControlProfile.WeatherRadarModeState, 2, "weather-radar mode WX")
+            },
+            700,
+            "A310 transponder and weather radar taxi configuration sent; awaiting native readback.");
+    }
+
     private void StartA310Apu()
     {
         if (_simConnect == null || _state?.IsIniBuildsA310 != true)
@@ -15622,6 +15957,24 @@ internal sealed class CopilotService : Form
             },
             900,
             "A310 APU generator and bleed controls selected; awaiting native readback.");
+    }
+
+    private void SetA310IgnitionOff()
+    {
+        RunA310Sequence(
+            new[]
+            {
+                (
+                    A310ControlProfile.IgnitionSelectorState,
+                    A310ControlProfile.IgnitionCrankValue,
+                    "ignition selector through CRANK"),
+                (
+                    A310ControlProfile.IgnitionSelectorState,
+                    A310ControlProfile.IgnitionOffValue,
+                    "ignition selector OFF")
+            },
+            650,
+            "A310 ignition selector rotating from START A through CRANK to OFF; awaiting native readback.");
     }
 
     private void RunA310Sequence(
@@ -17377,6 +17730,164 @@ internal sealed class CopilotService : Form
         var cruise = plan.CruiseAltitudeFeet.HasValue ? $"FL{plan.CruiseAltitudeFeet.Value / 100:000}" : "cruise n/a";
         var runways = $"{(string.IsNullOrWhiteSpace(plan.OriginRunway) ? "--" : plan.OriginRunway)} -> {(string.IsNullOrWhiteSpace(plan.DestinationRunway) ? "--" : plan.DestinationRunway)}";
         return $"{plan.RouteLabel}  {plan.FlightNumber}\nAircraft {plan.AircraftIcao} {plan.AircraftRegistration} | {cruise} | runways {runways}\n{generated}";
+    }
+
+    private void ShowSimBriefPayloadOverview()
+    {
+        var plan = _simBriefFlightPlan;
+        using var dialog = new Form
+        {
+            Text = "SimBrief payload overview",
+            Width = 760,
+            Height = 720,
+            MinimumSize = new System.Drawing.Size(620, 480),
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.Sizable,
+            MaximizeBox = true,
+            MinimizeBox = false
+        };
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(16),
+            ColumnCount = 1,
+            RowCount = 3
+        };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        dialog.Controls.Add(root);
+
+        var heading = new Label
+        {
+            Text = plan == null
+                ? "No active SimBrief flight"
+                : $"{plan.RouteLabel}  {plan.FlightNumber}   |   {plan.AircraftIcao} {plan.AircraftRegistration}".Trim(),
+            AutoSize = true,
+            Font = new System.Drawing.Font(Font.FontFamily, 12, System.Drawing.FontStyle.Bold),
+            ForeColor = System.Drawing.Color.FromArgb(30, 69, 110),
+            Margin = new Padding(0, 0, 0, 12)
+        };
+        root.Controls.Add(heading, 0, 0);
+
+        var scroll = new Panel
+        {
+            Dock = DockStyle.Fill,
+            AutoScroll = true,
+            BorderStyle = BorderStyle.FixedSingle
+        };
+        root.Controls.Add(scroll, 0, 1);
+        var values = new TableLayoutPanel
+        {
+            Dock = DockStyle.Top,
+            AutoSize = true,
+            ColumnCount = 2,
+            Padding = new Padding(12)
+        };
+        values.ColumnStyles.Add(new ColumnStyle(SizeType.Absolute, 190));
+        values.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        scroll.Controls.Add(values);
+
+        void AddSection(string text)
+        {
+            var row = values.RowCount++;
+            values.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            var label = new Label
+            {
+                Text = text,
+                AutoSize = true,
+                Font = new System.Drawing.Font(Font.FontFamily, 10, System.Drawing.FontStyle.Bold),
+                ForeColor = System.Drawing.Color.FromArgb(40, 68, 106),
+                Margin = new Padding(0, row == 0 ? 0 : 14, 0, 5)
+            };
+            values.Controls.Add(label, 0, row);
+            values.SetColumnSpan(label, 2);
+        }
+
+        void AddValue(string name, string value)
+        {
+            var row = values.RowCount++;
+            values.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+            values.Controls.Add(new Label
+            {
+                Text = name,
+                AutoSize = true,
+                Font = new System.Drawing.Font(Font.FontFamily, 9, System.Drawing.FontStyle.Bold),
+                Margin = new Padding(0, 4, 10, 4)
+            }, 0, row);
+            values.Controls.Add(new Label
+            {
+                Text = value,
+                AutoSize = true,
+                Margin = new Padding(0, 4, 0, 4)
+            }, 1, row);
+        }
+
+        if (plan == null)
+        {
+            AddValue(
+                "Payload data",
+                "Import and activate a SimBrief flight from Manage integrations first.");
+        }
+        else
+        {
+            AddSection("Passengers and cargo");
+            AddValue("Passengers", SimBriefPayloadSummary.FormatCount(plan.PassengerCount));
+            if (plan.MaximumPassengerCount.HasValue)
+            {
+                AddValue("Aircraft passenger capacity", SimBriefPayloadSummary.FormatCount(plan.MaximumPassengerCount));
+            }
+            AddValue("Weight per passenger", SimBriefPayloadSummary.FormatWeightPerUnit(plan.PassengerWeight, plan.Units));
+            AddValue("Passenger mass", SimBriefPayloadSummary.FormatWeight(SimBriefPayloadSummary.PassengerMass(plan), plan.Units));
+            AddValue("Checked bags", SimBriefPayloadSummary.FormatCount(plan.BaggageCount));
+            AddValue("Weight per bag", SimBriefPayloadSummary.FormatWeightPerUnit(plan.BaggageWeight, plan.Units));
+            AddValue("Baggage mass", SimBriefPayloadSummary.FormatWeight(SimBriefPayloadSummary.BaggageMass(plan), plan.Units));
+            AddValue("Freight", SimBriefPayloadSummary.FormatWeight(plan.FreightWeight, plan.Units));
+            AddValue("Total cargo", SimBriefPayloadSummary.FormatWeight(plan.CargoWeight, plan.Units));
+            AddValue("Total payload", SimBriefPayloadSummary.FormatWeight(plan.PayloadWeight, plan.Units));
+
+            AddSection("Fuel");
+            AddValue("Block fuel", SimBriefPayloadSummary.FormatWeight(plan.BlockFuel, plan.Units));
+            AddValue("Taxi fuel", SimBriefPayloadSummary.FormatWeight(plan.TaxiFuel, plan.Units));
+            AddValue("Takeoff fuel", SimBriefPayloadSummary.FormatWeight(plan.TakeoffFuel, plan.Units));
+            AddValue("Planned landing fuel", SimBriefPayloadSummary.FormatWeight(plan.LandingFuel, plan.Units));
+
+            AddSection("Aircraft weights");
+            AddValue("Operating empty weight", SimBriefPayloadSummary.FormatWeight(plan.OperatingEmptyWeight, plan.Units));
+            AddValue("Zero fuel weight", SimBriefPayloadSummary.FormatWeight(plan.ZeroFuelWeight, plan.Units));
+            AddValue("Ramp weight", SimBriefPayloadSummary.FormatWeight(plan.RampWeight, plan.Units));
+            AddValue("Takeoff weight", SimBriefPayloadSummary.FormatWeight(plan.TakeoffWeight, plan.Units));
+            AddValue("Landing weight", SimBriefPayloadSummary.FormatWeight(plan.LandingWeight, plan.Units));
+        }
+
+        var footer = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            ColumnCount = 2,
+            Margin = new Padding(0, 10, 0, 0)
+        };
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        footer.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        footer.Controls.Add(new Label
+        {
+            Text = "Dispatch totals only. Loading stations and CG remain aircraft-specific because SimBrief does not provide their distribution.",
+            AutoSize = true,
+            MaximumSize = new System.Drawing.Size(560, 0),
+            ForeColor = System.Drawing.Color.DimGray,
+            Margin = new Padding(0, 5, 12, 0)
+        }, 0, 0);
+        var close = new Button
+        {
+            Text = "Close",
+            AutoSize = true,
+            DialogResult = DialogResult.OK
+        };
+        footer.Controls.Add(close, 1, 0);
+        root.Controls.Add(footer, 0, 2);
+        dialog.AcceptButton = close;
+        dialog.CancelButton = close;
+        dialog.ShowDialog(this);
     }
 
     private void ShowDebugJumpDialog()

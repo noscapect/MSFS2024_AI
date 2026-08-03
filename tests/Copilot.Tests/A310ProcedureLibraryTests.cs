@@ -1,4 +1,5 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
+using System.Reflection;
 using Msfs2024Ai.Copilot.AircraftAdapters;
 using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA310;
 using Msfs2024Ai.Copilot.Domain;
@@ -68,6 +69,15 @@ public sealed class A310ProcedureLibraryTests
     {
         var steps = A310ProcedureLibrary.EngineStartSequence.Steps.ToList();
 
+        CollectionAssert.AreEqual(
+            new[] { "ignition-a-b", "fo-engine-two-starter", "fo-engine-one-starter" },
+            steps.Where(step => step.Kind == ProcedureStepKind.AutomaticAction)
+                .Select(step => step.Id)
+                .ToArray());
+        Assert.IsTrue(steps
+            .Where(step => step.Kind == ProcedureStepKind.AutomaticAction)
+            .All(step => step.Command!.StartsWith("a310 ", StringComparison.Ordinal)));
+
         Assert.IsTrue(
             steps.FindIndex(step => step.Id == "fo-engine-two-starter")
             < steps.FindIndex(step => step.Id == "fo-engine-one-starter"));
@@ -77,6 +87,25 @@ public sealed class A310ProcedureLibraryTests
         StringAssert.Contains(
             steps.Single(step => step.Id == "fo-engine-one-fuel").Label,
             "20 percent N2");
+
+        var engineTwoRotation = steps.Single(step => step.Id == "engine-two-rotation");
+        Assert.IsFalse(engineTwoRotation.IsComplete(new AircraftState
+        {
+            Engine2N1Percent = 25,
+            Engine2N2Percent = 19.9
+        }));
+        Assert.IsTrue(engineTwoRotation.IsComplete(new AircraftState
+        {
+            Engine2N2Percent = 20
+        }));
+
+        var engineTwoFuel = steps.Single(step => step.Id == "fo-engine-two-fuel");
+        Assert.AreEqual(ProcedureStepKind.ManualAction, engineTwoFuel.Kind);
+        Assert.AreEqual(CrewRole.Captain, engineTwoFuel.AssignedRole);
+        Assert.IsTrue(engineTwoFuel.IsComplete(new AircraftState
+        {
+            A310Engine2FuelLeverOn = true
+        }));
     }
 
     [TestMethod]
@@ -176,8 +205,11 @@ public sealed class A310ProcedureLibraryTests
             A310ControlProfile.SetCalculatorCode(A310ControlProfile.CaptainWiperState, 0),
             $">L:{A310ControlProfile.CaptainWiperState}");
         Assert.IsTrue(A310ControlProfile.Capabilities
-            .Where(item => item.Id != "aircraft-state")
+            .Where(item => item.Id is not "aircraft-state" and not "engine-start")
             .All(item => item.Support != CapabilitySupport.Supported));
+        Assert.AreEqual(
+            CapabilitySupport.Supported,
+            A310ControlProfile.Capabilities.Single(item => item.Id == "engine-start").Support);
     }
 
     [TestMethod]
@@ -193,7 +225,7 @@ public sealed class A310ProcedureLibraryTests
             new[]
             {
                 "signs", "recorder-and-autoflight", "heat", "cargo-smoke-test",
-                "emergency-exit", "egpws-test", "atc-radar-rudder"
+                "emergency-exit", "egpws-test", "atc-radar-rudder", "fuel-pumps-on"
             },
             automaticIds);
         Assert.IsFalse(flow.Steps.Any(step =>
@@ -205,6 +237,135 @@ public sealed class A310ProcedureLibraryTests
         var clearance = flow.Steps.Single(step => step.Id == "captain-ifr-clearance");
         Assert.AreEqual(ProcedureStepKind.ManualAction, clearance.Kind);
         Assert.AreEqual(CrewRole.Captain, clearance.AssignedRole);
+    }
+
+    [TestMethod]
+    public void FuelPumpsAndNormalAfterStartIgnitionAreAutomated()
+    {
+        Assert.AreEqual(1, A310ControlProfile.IgnitionStartAValue);
+        Assert.AreEqual(2, A310ControlProfile.IgnitionCrankValue);
+        Assert.AreEqual(3, A310ControlProfile.IgnitionOffValue);
+        Assert.AreEqual(12, A310ControlProfile.FuelPumpStates.Count);
+        Assert.AreEqual(
+            12,
+            A310ControlProfile.FuelPumpStates.Distinct(StringComparer.Ordinal).Count());
+
+        var fuelPumps = A310ProcedureLibrary.FlightComputerAndPreFlight.Steps
+            .Single(step => step.Id == "fuel-pumps-on");
+        Assert.AreEqual(ProcedureStepKind.AutomaticAction, fuelPumps.Kind);
+        Assert.AreEqual("a310 fuel-pumps on", fuelPumps.Command);
+        Assert.IsTrue(fuelPumps.IsComplete(new AircraftState { A310FuelPumpsOn = true }));
+
+        var ignition = A310ProcedureLibrary.AfterStartAndTaxi.Steps
+            .Single(step => step.Id == "ignition-normal");
+        Assert.AreEqual(ProcedureStepKind.AutomaticAction, ignition.Kind);
+        Assert.AreEqual("a310 ignition off", ignition.Command);
+        Assert.IsTrue(ignition.IsComplete(new AircraftState { A310IgnitionOff = true }));
+    }
+
+    [TestMethod]
+    public void OperationalRuntimeStatesMatchTheirRegisteredOffsetOrder()
+    {
+        var expected = new[]
+        {
+            A310ControlProfile.ApuMasterState,
+            A310ControlProfile.ApuStartButtonState,
+            A310ControlProfile.ApuAvailableState,
+            A310ControlProfile.ApuBleedState,
+            A310ControlProfile.ApuGeneratorState,
+            A310ControlProfile.IgnitionSelectorState,
+            A310ControlProfile.Pack1State,
+            A310ControlProfile.Pack2State,
+            A310ControlProfile.Engine1StarterState,
+            A310ControlProfile.Engine2StarterState,
+            A310ControlProfile.Engine1FuelLeverState,
+            A310ControlProfile.Engine2FuelLeverState
+        }
+        .Concat(A310ControlProfile.FuelPumpStates)
+        .Concat(new[]
+        {
+            A310ControlProfile.WeatherRadarModeState,
+            A310ControlProfile.AutobrakeMaxState
+        })
+        .ToArray();
+
+        CollectionAssert.AreEqual(
+            expected,
+            A310ControlProfile.OperationalRuntimeStates.ToArray());
+        Assert.AreEqual(26, expected.Length);
+    }
+
+    [TestMethod]
+    public void IgnitionOffVerificationFallsBackToStandardEngineTelemetry()
+    {
+        var verifier = typeof(CopilotService).GetMethod(
+            "IsA310IgnitionOff",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.IsNotNull(verifier);
+        Assert.AreEqual(
+            true,
+            verifier!.Invoke(null, new object?[] { 1f, 0d }),
+            "The standard two-engine OFF indication must override a stale START A LVar.");
+        Assert.AreEqual(
+            true,
+            verifier.Invoke(null, new object?[] { 3f, 1d }),
+            "The native selector OFF indication remains valid.");
+        Assert.AreEqual(
+            false,
+            verifier.Invoke(null, new object?[] { 1f, 1d }),
+            "START A must not verify as OFF.");
+    }
+
+    [TestMethod]
+    public void ExternalPowerCanDisconnectAfterGsxBeginsTugMovement()
+    {
+        var validator = typeof(CopilotService).GetMethod(
+            "ValidateExternalPowerProcedure",
+            BindingFlags.NonPublic | BindingFlags.Static);
+        var state = new AircraftState
+        {
+            Title = "Airbus A310-300",
+            OnGround = true,
+            GroundSpeedKnots = 1,
+            ApuAvailable = true,
+            ApuGeneratorSwitchOn = true
+        };
+
+        Assert.IsNotNull(validator);
+        Assert.IsNull(validator!.Invoke(null, new object[] { state, false }));
+        Assert.IsNotNull(validator.Invoke(null, new object[] { state, true }));
+    }
+
+    [TestMethod]
+    public void FlowFiveAutomatesDeterministicFirstOfficerActions()
+    {
+        var flow = A310ProcedureLibrary.AfterStartAndTaxi;
+        var automaticIds = flow.Steps
+            .Where(step => step.Kind == ProcedureStepKind.AutomaticAction)
+            .Select(step => step.Id)
+            .ToArray();
+
+        CollectionAssert.AreEqual(
+            new[]
+            {
+                "ignition-normal", "apu-off", "speedbrake-arm", "rudder-trim",
+                "nose-taxi", "autobrake-max", "transponder-weather"
+            },
+            automaticIds);
+        Assert.IsTrue(flow.Steps
+            .Where(step => step.Kind == ProcedureStepKind.AutomaticAction)
+            .All(step => step.Command!.StartsWith("a310 ", StringComparison.Ordinal)));
+        Assert.AreEqual(
+            ProcedureStepKind.Observe,
+            flow.Steps.Single(step => step.Id == "anti-ice").Kind);
+
+        var takeoffFlaps = flow.Steps.Single(step => step.Id == "takeoff-flaps");
+        Assert.AreEqual(ProcedureStepKind.ManualAction, takeoffFlaps.Kind);
+        Assert.AreEqual(CrewRole.FirstOfficer, takeoffFlaps.AssignedRole);
+        Assert.AreEqual(
+            ProcedureStepKind.ManualAction,
+            flow.Steps.Single(step => step.Id == "pitch-trim").Kind);
     }
 
     [TestMethod]

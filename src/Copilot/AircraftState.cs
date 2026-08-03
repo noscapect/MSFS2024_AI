@@ -26,6 +26,8 @@ internal sealed class AircraftState
     public double? Engine2StartSwitchPosition { get; set; }
     public double Engine1N1Percent { get; set; }
     public double Engine2N1Percent { get; set; }
+    public double Engine1N2Percent { get; set; }
+    public double Engine2N2Percent { get; set; }
     public double Engine1EgtCelsius { get; set; }
     public double Engine2EgtCelsius { get; set; }
     public double Engine1FuelFlowPph { get; set; }
@@ -50,6 +52,18 @@ internal sealed class AircraftState
     public bool A310PreflightPedestalSet { get; set; }
     public bool A310ApuPowerAndBleedSet { get; set; }
     public bool A310TransponderXpdrSet { get; set; }
+    public bool A310IgnitionSelectedForStart { get; set; }
+    public bool A310PacksClosedForStart { get; set; }
+    public bool A310Engine1StarterSelected { get; set; }
+    public bool A310Engine2StarterSelected { get; set; }
+    public bool A310Engine1FuelLeverOn { get; set; }
+    public bool A310Engine2FuelLeverOn { get; set; }
+    public bool A310FuelPumpsOn { get; set; }
+    public bool A310IgnitionOff { get; set; }
+    public bool A310RudderTrimCentered { get; set; }
+    public bool A310TaxiLightTaxi { get; set; }
+    public bool A310AutobrakeMax { get; set; }
+    public bool A310WeatherRadarOn { get; set; }
     public double Battery1Voltage { get; set; }
     public double Battery2Voltage { get; set; }
     public bool ApuBatteryOn { get; set; }

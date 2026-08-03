@@ -51,7 +51,26 @@ internal static class SimBriefJsonMapper
             CostIndex = Integer(root, "general", "costindex"),
             TransitionAltitudeFeet = Integer(root, "origin", "trans_alt"),
             BlockFuel = Number(root, "fuel", "plan_ramp")
-                        ?? Number(root, "fuel", "plan_block")
+                        ?? Number(root, "fuel", "plan_block"),
+            TaxiFuel = Number(root, "fuel", "taxi"),
+            TakeoffFuel = Number(root, "fuel", "plan_takeoff"),
+            LandingFuel = Number(root, "fuel", "plan_landing"),
+            PassengerCount = Integer(root, "weights", "pax_count_actual")
+                             ?? Integer(root, "weights", "pax_count")
+                             ?? Integer(root, "general", "passengers"),
+            MaximumPassengerCount = Integer(root, "aircraft", "max_passengers"),
+            BaggageCount = Integer(root, "weights", "bag_count_actual")
+                           ?? Integer(root, "weights", "bag_count"),
+            PassengerWeight = Number(root, "weights", "pax_weight"),
+            BaggageWeight = Number(root, "weights", "bag_weight"),
+            FreightWeight = Number(root, "weights", "freight_added"),
+            CargoWeight = Number(root, "weights", "cargo"),
+            PayloadWeight = Number(root, "weights", "payload"),
+            OperatingEmptyWeight = Number(root, "weights", "oew"),
+            ZeroFuelWeight = Number(root, "weights", "est_zfw"),
+            RampWeight = Number(root, "weights", "est_ramp"),
+            TakeoffWeight = Number(root, "weights", "est_tow"),
+            LandingWeight = Number(root, "weights", "est_ldw")
         };
 
         result.TakeoffV1Knots = FindInteger(root, "speeds_v1", "v1");

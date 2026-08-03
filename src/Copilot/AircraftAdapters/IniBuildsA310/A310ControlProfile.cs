@@ -25,6 +25,7 @@ internal static class A310ControlProfile
     public const int IgnitionStartAValue = 1;
     public const int IgnitionCrankValue = 2;
     public const int IgnitionOffValue = 3;
+    public const int IgnitionContinuousRelightValue = 4;
     public const string Pack1State = "a310_bleed_pack1_percent";
     public const string Pack2State = "a310_bleed_pack2_percent";
     public const string Engine1StarterState = "A310_ENG1_STARTER";
@@ -64,6 +65,7 @@ internal static class A310ControlProfile
         }
         .Concat(FuelPumpStates)
         .Concat(new[] { WeatherRadarModeState, AutobrakeMaxState })
+        .Concat(new[] { SpoilersArmedState, GearHandleState })
         .ToArray();
     public const string HydraulicEngine1State = "a310_hyd_eng1_switch_pos";
     public const string HydraulicEngine1AState = "a310_hyd_eng1_a_switch_pos";
@@ -114,9 +116,13 @@ internal static class A310ControlProfile
     public const string AutobrakeMaxState = "A310_AUTOBRAKE_HI_DECEL";
     public const string AutobrakeMaxCommandState = "A310_ABRK_HI_COMMAND";
     public const string SpoilersArmedState = "A310_SPOILERS_ARMED";
+    public const string GearHandleState = "a310_gear_handle_status";
     public const string RudderTrimState = "a310_total_rudder_trim";
     public const string RudderTrimResetState = "a310_reset_rudder_trim_command";
     public const string TcasPedestalModeState = "a310_tcas_mode_pedestal";
+    public const string CaptainAltimeterStandardState = "a310_altimeter1_std_set";
+    public const string FirstOfficerAltimeterStandardState = "a310_altimeter2_std_set";
+    public const string StandbyAltimeterStandardState = "a310_altimeter3_std_set";
     public const string AcBus1OffState = "a310_ac_bus1_off";
     public const string AcBus2OffState = "a310_ac_bus2_off";
     public const string FlapsLeftState = "a310_flaps_ratio1";

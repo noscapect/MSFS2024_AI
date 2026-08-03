@@ -72,6 +72,8 @@ interface CompanionState {
     completedSteps: number;
     totalSteps: number;
     waitingFor: string;
+    guidance?: string;
+    transition?: "taxi-to-hold" | null;
     canStart: boolean;
     canConfirm: boolean;
     canPause: boolean;
@@ -135,6 +137,8 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
   private readonly nextFlowButtonRef =
     FSComponent.createRef<HTMLButtonElement>();
   private readonly nextFlowHitboxRef =
+    FSComponent.createRef<HTMLDivElement>();
+  private readonly quickStartCopyRef =
     FSComponent.createRef<HTMLDivElement>();
   private readonly confirmButtonRef =
     FSComponent.createRef<HTMLButtonElement>();
@@ -403,7 +407,11 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
     // an optional state section is absent, starting the next flow must remain
     // available.
     const flows = Array.isArray(state.flows) ? state.flows : [];
-    this.renderNextFlowAction(flows, Boolean(state.flow?.canStart));
+    this.renderNextFlowAction(
+      flows,
+      Boolean(state.flow?.canStart),
+      state.flow?.transition
+    );
     this.renderFlowSelect(flows, Boolean(state.flow?.canStart));
     this.renderFlowList(flows);
 
@@ -435,6 +443,8 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
     this.stepRef.instance.textContent = state.flow.currentStep;
     this.roleRef.instance.textContent = state.flow.assignedRole;
     this.waitingRef.instance.textContent = state.flow.waitingFor;
+    this.quickStartCopyRef.instance.textContent =
+      state.flow.guidance ?? "Continue the gate-to-gate sequence";
 
     const progress = state.flow.totalSteps === 0
       ? 0
@@ -457,7 +467,8 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
 
   private renderNextFlowAction(
     flows: FlowListItem[],
-    canStart: boolean
+    canStart: boolean,
+    transition?: "taxi-to-hold" | null
   ): void {
     const nextFlow =
       flows.find(flow => flow.state === "next")
@@ -465,7 +476,9 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
         flow => flow.state !== "done" && flow.state !== "current"
       );
     const button = this.nextFlowButtonRef.instance;
-    button.textContent = nextFlow
+    button.textContent = transition === "taxi-to-hold"
+      ? "Flow 6 starts at holding point"
+      : nextFlow
       ? `Start ${nextFlow.name}`
       : "Start next flow";
     button.disabled = !canStart;
@@ -660,7 +673,7 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
       <div class="vfo-efb">
         <header class="app-header">
           <div>
-            <div class="eyebrow">MSFS 2024 - EFB build 0.2.10</div>
+            <div class="eyebrow">MSFS 2024 - EFB build 0.2.11</div>
             <h1>Virtual First Officer</h1>
           </div>
           <div ref={this.connectionRef} class="connection waiting">
@@ -671,7 +684,7 @@ class VfoEfbView extends AppView<RequiredProps<AppViewProps, "bus">> {
         <section class="quick-start">
           <div>
             <div class="section-label">Recommended action</div>
-            <div class="quick-start-copy">
+            <div ref={this.quickStartCopyRef} class="quick-start-copy">
               Continue the gate-to-gate sequence
             </div>
           </div>

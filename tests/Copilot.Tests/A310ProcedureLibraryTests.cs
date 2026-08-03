@@ -129,6 +129,48 @@ public sealed class A310ProcedureLibraryTests
     }
 
     [TestMethod]
+    public void BeforeTakeoffBrakeFanReviewDoesNotBlockTheFlow()
+    {
+        var brakeFans = A310ProcedureLibrary.BeforeTakeoff.Steps
+            .Single(step => step.Id == "brake-fans");
+
+        Assert.AreEqual(ProcedureStepKind.Observe, brakeFans.Kind);
+        Assert.IsTrue(brakeFans.IsComplete(new AircraftState()));
+    }
+
+    [TestMethod]
+    public void BeforeTakeoffAircraftConfigurationUsesNativeAutomaticActions()
+    {
+        var steps = A310ProcedureLibrary.BeforeTakeoff.Steps;
+        var expected = new Dictionary<string, string>
+        {
+            ["takeoff-lights"] = "a310 takeoff-lights",
+            ["ignition-takeoff"] = "a310 ignition takeoff",
+            ["packs-takeoff"] = "a310 packs on",
+            ["tcas-tara"] = "a310 tcas tara"
+        };
+
+        foreach (var item in expected)
+        {
+            var step = steps.Single(candidate => candidate.Id == item.Key);
+            Assert.AreEqual(ProcedureStepKind.AutomaticAction, step.Kind);
+            Assert.AreEqual(item.Value, step.Command);
+        }
+
+        var ready = new AircraftState
+        {
+            A310TakeoffExteriorLightsSet = true,
+            A310IgnitionContinuousRelight = true,
+            A310PacksOn = true,
+            A310TcasTaRaSet = true
+        };
+        Assert.IsTrue(steps.Single(step => step.Id == "takeoff-lights").IsComplete(ready));
+        Assert.IsTrue(steps.Single(step => step.Id == "ignition-takeoff").IsComplete(ready));
+        Assert.IsTrue(steps.Single(step => step.Id == "packs-takeoff").IsComplete(ready));
+        Assert.IsTrue(steps.Single(step => step.Id == "tcas-tara").IsComplete(ready));
+    }
+
+    [TestMethod]
     public void TakeoffFlowIncludesA310GearPackAndSlatSequence()
     {
         var ids = A310ProcedureLibrary.TakeoffAndClimb.Steps
@@ -142,10 +184,22 @@ public sealed class A310ProcedureLibraryTests
                 "flaps-zero", "slats-zero", "packs-on", "altimeters-standard"
             },
             ids);
-        StringAssert.Contains(
-            A310ProcedureLibrary.TakeoffAndClimb.Steps
-                .Single(step => step.Id == "packs-on").ManualInstruction!,
-            "10 seconds");
+        var automaticCommands = A310ProcedureLibrary.TakeoffAndClimb.Steps
+            .Where(step => step.Kind == ProcedureStepKind.AutomaticAction)
+            .ToDictionary(step => step.Id, step => step.Command);
+        Assert.AreEqual("a310 gear up", automaticCommands["fo-gear-up"]);
+        Assert.AreEqual("a310 speedbrake disarm", automaticCommands["fo-ground-spoilers-disarm"]);
+        Assert.AreEqual("a310 packs on", automaticCommands["packs-on"]);
+        Assert.AreEqual("a310 climb-lights", automaticCommands["climb-lights"]);
+        Assert.AreEqual("a310 apu off", automaticCommands["apu-climb"]);
+        Assert.AreEqual("a310 altimeters standard", automaticCommands["altimeters-standard"]);
+        Assert.AreEqual("a310 landing-lights retract", automaticCommands["landing-lights-retract"]);
+
+        var blockingManualSteps = A310ProcedureLibrary.TakeoffAndClimb.Steps
+            .Where(step => step.Kind == ProcedureStepKind.ManualAction)
+            .Select(step => step.Id)
+            .ToArray();
+        CollectionAssert.AreEqual(new[] { "slats-zero" }, blockingManualSteps);
     }
 
     [TestMethod]
@@ -166,16 +220,83 @@ public sealed class A310ProcedureLibraryTests
     }
 
     [TestMethod]
-    public void ParkingPreservesApuFuelPumpExceptionAndSecureDelay()
+    public void ParkingPreservesApuFuelPumpUntilApuShutdown()
     {
         var flow = A310ProcedureLibrary.ParkingAndShutdown;
 
-        StringAssert.Contains(
-            flow.Steps.Single(step => step.Id == "fuel-pumps-parking").ManualInstruction!,
-            "left inner tank Pump 2");
-        StringAssert.Contains(
-            flow.Steps.Single(step => step.Id == "irs-off").ManualInstruction!,
-            "10 seconds");
+        var parkingPumps = flow.Steps.Single(step => step.Id == "fuel-pumps-parking");
+        var finalApuPump = flow.Steps.Single(step => step.Id == "apu-fuel-pump-off");
+        Assert.AreEqual(ProcedureStepKind.AutomaticAction, parkingPumps.Kind);
+        Assert.AreEqual("a310 fuel-pumps parking", parkingPumps.Command);
+        Assert.AreEqual(ProcedureStepKind.AutomaticAction, finalApuPump.Kind);
+        Assert.AreEqual("a310 fuel-pumps parking", finalApuPump.Command);
+        Assert.IsTrue(
+            flow.Steps.ToList().IndexOf(finalApuPump)
+            > flow.Steps.ToList().FindIndex(step => step.Id == "apu-off"));
+    }
+
+    [TestMethod]
+    public void ApproachHasVerifiedAutomaticConfigurationActions()
+    {
+        var automatic = A310ProcedureLibrary.ApproachAndLanding.Steps
+            .Where(step => step.Kind == ProcedureStepKind.AutomaticAction)
+            .ToDictionary(step => step.Id, step => step.Command);
+
+        Assert.AreEqual("a310 approach-lights", automatic["approach-signs-lights"]);
+        Assert.AreEqual("a310 flaps 15-0", automatic["slats-15"]);
+        Assert.AreEqual("a310 flaps 15-15", automatic["flaps-15"]);
+        Assert.AreEqual("a310 gear down", automatic["fo-gear-down"]);
+        Assert.AreEqual("a310 speedbrake arm", automatic["fo-spoilers-arm"]);
+        Assert.AreEqual("a310 flaps 15-20", automatic["flaps-20"]);
+        Assert.AreEqual("a310 flaps 30-40", automatic["flaps-40"]);
+        Assert.IsFalse(A310ProcedureLibrary.ApproachAndLanding.Steps.Any(
+            step => step.Kind == ProcedureStepKind.ManualAction));
+    }
+
+    [TestMethod]
+    public void AfterLandingKeepsOnlyTaxiClearanceManual()
+    {
+        var flow = A310ProcedureLibrary.AfterLandingAndTaxi;
+        CollectionAssert.AreEqual(
+            new[] { "taxi-gate" },
+            flow.Steps
+                .Where(step => step.Kind == ProcedureStepKind.ManualAction)
+                .Select(step => step.Id)
+                .ToArray());
+        CollectionAssert.IsSubsetOf(
+            new[]
+            {
+                "after-landing-lights", "ignition-off", "apu-start",
+                "spoilers-disarm", "transponder-standby", "radar-off", "flaps-retract"
+            },
+            flow.Steps
+                .Where(step => step.Kind == ProcedureStepKind.AutomaticAction)
+                .Select(step => step.Id)
+                .ToArray());
+    }
+
+    [TestMethod]
+    public void ShutdownManualStepsAreOnlyCrewDecisionsAndPowerTransfer()
+    {
+        var flow = A310ProcedureLibrary.ParkingAndShutdown;
+        CollectionAssert.AreEqual(
+            new[] { "fuel-levers-off", "secure-decision", "external-power-secure" },
+            flow.Steps
+                .Where(step => step.Kind == ProcedureStepKind.ManualAction)
+                .Select(step => step.Id)
+                .ToArray());
+
+        var fuelLevers = flow.Steps.Single(step => step.Id == "fuel-levers-off");
+        Assert.IsTrue(fuelLevers.IsComplete(new AircraftState
+        {
+            A310Engine1FuelLeverOn = false,
+            A310Engine2FuelLeverOn = false
+        }));
+        Assert.IsFalse(fuelLevers.IsComplete(new AircraftState
+        {
+            A310Engine1FuelLeverOn = true,
+            A310Engine2FuelLeverOn = false
+        }));
     }
 
     [TestMethod]
@@ -285,14 +406,16 @@ public sealed class A310ProcedureLibraryTests
         .Concat(new[]
         {
             A310ControlProfile.WeatherRadarModeState,
-            A310ControlProfile.AutobrakeMaxState
+            A310ControlProfile.AutobrakeMaxState,
+            A310ControlProfile.SpoilersArmedState,
+            A310ControlProfile.GearHandleState
         })
         .ToArray();
 
         CollectionAssert.AreEqual(
             expected,
             A310ControlProfile.OperationalRuntimeStates.ToArray());
-        Assert.AreEqual(26, expected.Length);
+        Assert.AreEqual(28, expected.Length);
     }
 
     [TestMethod]
@@ -315,6 +438,19 @@ public sealed class A310ProcedureLibraryTests
             false,
             verifier.Invoke(null, new object?[] { 1f, 1d }),
             "START A must not verify as OFF.");
+    }
+
+    [TestMethod]
+    public void AutobrakeMaxVerificationAcceptsSelectorLevelThree()
+    {
+        var verifier = typeof(CopilotService).GetMethod(
+            "IsA310AutobrakeMaxSelected",
+            BindingFlags.NonPublic | BindingFlags.Static);
+
+        Assert.IsNotNull(verifier);
+        Assert.AreEqual(true, verifier!.Invoke(null, new object?[] { 3f, 0f }));
+        Assert.AreEqual(true, verifier.Invoke(null, new object?[] { 0f, 1f }));
+        Assert.AreEqual(false, verifier.Invoke(null, new object?[] { 2f, 0f }));
     }
 
     [TestMethod]
@@ -350,7 +486,7 @@ public sealed class A310ProcedureLibraryTests
             new[]
             {
                 "ignition-normal", "apu-off", "speedbrake-arm", "rudder-trim",
-                "nose-taxi", "autobrake-max", "transponder-weather"
+                "takeoff-flaps", "nose-taxi", "autobrake-max", "transponder-weather"
             },
             automaticIds);
         Assert.IsTrue(flow.Steps
@@ -361,8 +497,9 @@ public sealed class A310ProcedureLibraryTests
             flow.Steps.Single(step => step.Id == "anti-ice").Kind);
 
         var takeoffFlaps = flow.Steps.Single(step => step.Id == "takeoff-flaps");
-        Assert.AreEqual(ProcedureStepKind.ManualAction, takeoffFlaps.Kind);
+        Assert.AreEqual(ProcedureStepKind.AutomaticAction, takeoffFlaps.Kind);
         Assert.AreEqual(CrewRole.FirstOfficer, takeoffFlaps.AssignedRole);
+        Assert.AreEqual("a310 takeoff-flaps 15-0", takeoffFlaps.Command);
         Assert.AreEqual(
             ProcedureStepKind.ManualAction,
             flow.Steps.Single(step => step.Id == "pitch-trim").Kind);

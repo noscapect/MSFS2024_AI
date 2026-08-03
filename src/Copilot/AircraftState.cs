@@ -64,6 +64,26 @@ internal sealed class AircraftState
     public bool A310TaxiLightTaxi { get; set; }
     public bool A310AutobrakeMax { get; set; }
     public bool A310WeatherRadarOn { get; set; }
+    public bool A310TakeoffExteriorLightsSet { get; set; }
+    public bool A310IgnitionContinuousRelight { get; set; }
+    public bool A310PacksOn { get; set; }
+    public bool A310TcasTaRaSet { get; set; }
+    public bool A310ClimbLightsSet { get; set; }
+    public bool A310LandingLightsRetracted { get; set; }
+    public bool A310ApproachLightsSet { get; set; }
+    public bool A310NoseLightTakeoff { get; set; }
+    public bool A310AfterLandingLightsSet { get; set; }
+    public bool A310TransponderStandby { get; set; }
+    public bool A310WeatherRadarOff { get; set; }
+    public bool A310NoseLightOff { get; set; }
+    public bool A310SeatbeltsOff { get; set; }
+    public bool A310FuelPumpsParkingSet { get; set; }
+    public bool A310ProbeHeatOff { get; set; }
+    public bool A310IrsOff { get; set; }
+    public bool A310OxygenOff { get; set; }
+    public bool A310ExteriorLightsOff { get; set; }
+    public bool A310EmergencyExitDisarmed { get; set; }
+    public bool A310BatteriesOff { get; set; }
     public double Battery1Voltage { get; set; }
     public double Battery2Voltage { get; set; }
     public bool ApuBatteryOn { get; set; }

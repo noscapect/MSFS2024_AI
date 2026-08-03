@@ -75,7 +75,7 @@ $manifest = [ordered]@{
     title = "MSFS 2024 Virtual First Officer EFB"
     manufacturer = "noscapect"
     creator = "noscapect"
-    package_version = "0.2.10"
+    package_version = "0.2.11"
     minimum_game_version = "1.7.0"
     minimum_compatibility_version = "1.0.0.0"
     export_type = "Community"
@@ -83,7 +83,7 @@ $manifest = [ordered]@{
     package_order_hint = "MISC"
     release_notes = [ordered]@{
         neutral = [ordered]@{
-            LastUpdate = "Release 0.2.10: resilient desktop communication, complete flow controls, and GSX prompt handling."
+            LastUpdate = "Release 0.2.11: clear taxi-to-holding-point guidance while Flow 6 is gated."
             OlderHistory = ""
         }
     }

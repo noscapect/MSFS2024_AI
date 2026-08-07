@@ -71,4 +71,52 @@ public sealed class GsxPromptPolicyTests
 
         Assert.IsFalse(GsxPromptPolicy.IsRootServicesMenu(menu));
     }
+
+    [TestMethod]
+    public void DetectsPushbackDirectionQuestion()
+    {
+        var menu = new GsxMenuSnapshot(
+            "Select pushback direction",
+            new[]
+            {
+                "Nose Right/Tail Left (LEFT)",
+                "Nose Left/Tail Right (RIGHT)",
+                "Straight pushback (manual stop, max 100 m)"
+            });
+
+        Assert.IsTrue(GsxPromptPolicy.IsPushbackDirectionMenu(menu));
+    }
+
+    [TestMethod]
+    public void MatchesRefreshedChoiceByPromptAndLabelInsteadOfOldIndex()
+    {
+        var refreshed = new GsxMenuSnapshot(
+            "Select Push-back Direction",
+            new[]
+            {
+                "QuickEdit Pushback",
+                "Nose Left / Tail Right (RIGHT)",
+                "Nose Right / Tail Left (LEFT)"
+            });
+
+        Assert.AreEqual(
+            1,
+            GsxPromptPolicy.FindMatchingChoice(
+                refreshed,
+                "Select pushback direction",
+                "Nose Left/Tail Right (RIGHT)"));
+    }
+
+    [TestMethod]
+    public void RefreshedChoiceRejectsChangedQuestion()
+    {
+        var changed = new GsxMenuSnapshot(
+            "Confirm good engine start",
+            new[] { "Confirm good engine start", "Abort pushback" });
+
+        Assert.IsNull(GsxPromptPolicy.FindMatchingChoice(
+            changed,
+            "Select pushback direction",
+            "Nose Left/Tail Right (RIGHT)"));
+    }
 }

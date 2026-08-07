@@ -7,6 +7,7 @@ using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA330;
 using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA310;
 using Msfs2024Ai.Copilot.AircraftIdentity;
 using Msfs2024Ai.Copilot.Checklists;
+using Msfs2024Ai.Copilot.Companion;
 using Msfs2024Ai.Copilot.Controls;
 using Msfs2024Ai.Copilot.Diagnostics;
 using Msfs2024Ai.Copilot.Domain;
@@ -19,10 +20,12 @@ using Msfs2024Ai.Copilot.SayIntentions;
 using Msfs2024Ai.Copilot.SimBrief;
 using Msfs2024Ai.Copilot.Telemetry;
 using Msfs2024Ai.Copilot.Voice;
+using QRCoder;
 using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
+using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -50,6 +53,11 @@ internal sealed class CopilotService : Form
     private const string MobiFlightRuntimeClientName = "MSFS2024_AI_Copilot_v27";
     private readonly Dictionary<EfbCommBusEvent, List<string>> _efbCommBusChunks =
         new();
+    private readonly CompanionBridge _companionBridge = new();
+    private readonly HashSet<string> _companionRequestIds =
+        new(StringComparer.Ordinal);
+    private RelayCompanionClient? _relayCompanionClient;
+    private LocalCompanionServer? _localCompanionServer;
     private DateTime _lastEfbStateRequestResponseUtc = DateTime.MinValue;
     private DateTime _lastEfbStatePublishedUtc = DateTime.MinValue;
     private readonly string? _oneShotCommand;
@@ -78,6 +86,13 @@ internal sealed class CopilotService : Form
     private bool _gsxGoodEngineStartPromptPending;
     private bool _gsxGoodEngineStartWaitingLogged;
     private bool _gsxMenuHiddenLogged;
+    private string? _pendingGsxChoiceTitle;
+    private string? _pendingGsxChoiceLabel;
+    private string? _pendingGsxChoiceRequestId;
+    private DateTime? _pendingGsxChoiceDeadlineUtc;
+    private string? _awaitingGsxChoiceAckLabel;
+    private string? _awaitingGsxChoiceAckRequestId;
+    private DateTime? _awaitingGsxChoiceAckDeadlineUtc;
     private ProcedureDefinition? _pendingGsxEngineStartProcedure;
     private string? _pendingGsxArrivalStand;
     private string? _selectedGsxArrivalStand;
@@ -1480,6 +1495,7 @@ internal sealed class CopilotService : Form
         _procedureRunner.Changed += OnProcedureChanged;
         _procedureRunner.StepCompleted += SpeakProcedureCallout;
         _procedureRunner.StepCompleted += OnProcedureStepCompleted;
+        _companionBridge.CommandReceived += DispatchCompanionCommand;
         try
         {
             _voiceCalloutQueue = new VoiceCalloutQueue();
@@ -1510,6 +1526,7 @@ internal sealed class CopilotService : Form
 
     public void Connect()
     {
+        StartDevelopmentCompanionRelay();
         if (_simConnect != null)
         {
             return;
@@ -2141,6 +2158,12 @@ internal sealed class CopilotService : Form
                         $"GSX menu: {_gsxMenu.Title} | "
                         + string.Join(" | ", _gsxMenu.Choices));
                 }
+                if (TrySubmitRefreshedGsxChoice())
+                {
+                    UpdateDashboard();
+                    PublishEfbState(force: true);
+                    break;
+                }
                 TrySelectPendingGsxAction();
                 TryAutoSelectGsxArrivalStand();
                 if (_gsxMenuOpen)
@@ -2172,8 +2195,13 @@ internal sealed class CopilotService : Form
                         "GSX requested that its menu be hidden; retaining the pending remote response.");
                     _gsxMenuHiddenLogged = true;
                 }
+                CompleteGsxChoiceAcknowledgement();
                 break;
             case 3:
+                FailPendingGsxChoice(
+                    "GSX closed or timed out the question before confirming the selection.");
+                FailGsxChoiceAcknowledgement(
+                    "GSX closed or timed out the question before accepting the selection.");
                 _gsxMenuOpen = false;
                 _gsxMenuHiddenLogged = false;
                 _gsxMenu = new GsxMenuSnapshot(
@@ -2281,8 +2309,11 @@ internal sealed class CopilotService : Form
                 return;
             }
 
-            SendGsxMenuChoice(choices.SelectedIndex, choices.SelectedItem?.ToString());
-            dialog.Close();
+            RequestGsxMenuChoice(
+                choices.SelectedIndex,
+                choices.SelectedItem?.ToString() ?? string.Empty,
+                null);
+            CloseGsxChoiceDialog();
         };
         cancel.Click += (_, _) =>
         {
@@ -2334,6 +2365,242 @@ internal sealed class CopilotService : Form
             choice >= 0
                 ? $"GSX selection sent: {label ?? $"option {choice + 1}"}."
                 : "GSX prompt cancelled.");
+        AppLog.Write(
+            choice >= 0
+                ? $"GSX menu choice index {choice} transmitted: {label ?? "unlabelled"}."
+                : "GSX menu cancellation transmitted.");
+    }
+
+    private void StartDevelopmentCompanionRelay()
+    {
+        if (_relayCompanionClient != null)
+        {
+            return;
+        }
+        RelayCompanionOptions? options;
+        if (!RelayCompanionOptions.TryFromEnvironment(
+                out options,
+                out var error))
+        {
+            if (!string.IsNullOrWhiteSpace(error))
+            {
+                AppLog.Write("Android companion relay configuration rejected: " + error);
+                return;
+            }
+            if (!CompanionPairingStore.TryLoad(out var pairing)
+                || pairing == null
+                || !RelayCompanionOptions.TryFromPairing(
+                    pairing,
+                    out options,
+                    out error))
+            {
+                if (!string.IsNullOrWhiteSpace(error))
+                {
+                    AppLog.Write("Saved Android companion pairing rejected: " + error);
+                }
+                return;
+            }
+        }
+
+        _ = Handle;
+        _relayCompanionClient = new RelayCompanionClient(
+            options!,
+            _companionBridge);
+        try
+        {
+            _localCompanionServer = new LocalCompanionServer(
+                options!,
+                _companionBridge);
+        }
+        catch (SocketException exception)
+        {
+            AppLog.Write(
+                "Android companion LAN listener unavailable: "
+                + exception.Message);
+        }
+        AppLog.Write(
+            "Android companion transports enabled. Remote controls remain pairing-gated.");
+    }
+
+    private void RestartCompanionRelay()
+    {
+        _relayCompanionClient?.Dispose();
+        _relayCompanionClient = null;
+        _localCompanionServer?.Dispose();
+        _localCompanionServer = null;
+        StartDevelopmentCompanionRelay();
+    }
+
+    private void DispatchCompanionCommand(string efbPayload)
+    {
+        if (IsDisposed || Disposing || !IsHandleCreated)
+        {
+            return;
+        }
+        if (InvokeRequired)
+        {
+            BeginInvoke(new Action(() => DispatchCompanionCommand(efbPayload)));
+            return;
+        }
+        if (EfbCompanionProtocol.TryParseCommand(
+                efbPayload,
+                out var command,
+                out _))
+        {
+            _companionRequestIds.Add(command.RequestId);
+        }
+        HandleEfbCommand(efbPayload);
+    }
+
+    private void RequestGsxMenuChoice(
+        int choice,
+        string label,
+        string? requestId)
+    {
+        if (_pendingGsxChoiceLabel != null
+            || _awaitingGsxChoiceAckLabel != null)
+        {
+            if (!string.IsNullOrWhiteSpace(requestId))
+            {
+                SendEfbCommandResult(
+                    requestId!,
+                    false,
+                    "Another GSX response is already being submitted.");
+            }
+            return;
+        }
+
+        if (_gsxMenuHiddenLogged)
+        {
+            _pendingGsxChoiceTitle = _gsxMenu.Title;
+            _pendingGsxChoiceLabel = label;
+            _pendingGsxChoiceRequestId = requestId;
+            _pendingGsxChoiceDeadlineUtc = DateTime.UtcNow.AddSeconds(10);
+            SetGsxValue(Definition.GsxMenuOpen, 1);
+            AppendDashboardLog(
+                $"Refreshing the live GSX question before submitting '{label}'. Keep the parking brake set.");
+            AppLog.Write(
+                $"GSX cached choice '{label}' is being matched against a refreshed live menu before transmission.");
+            PublishEfbState(force: true);
+            return;
+        }
+
+        SubmitLiveGsxChoice(choice, label, requestId);
+    }
+
+    private bool TrySubmitRefreshedGsxChoice()
+    {
+        if (_pendingGsxChoiceTitle == null
+            || _pendingGsxChoiceLabel == null)
+        {
+            return false;
+        }
+
+        var choice = GsxPromptPolicy.FindMatchingChoice(
+            _gsxMenu,
+            _pendingGsxChoiceTitle,
+            _pendingGsxChoiceLabel);
+        if (!choice.HasValue)
+        {
+            FailPendingGsxChoice(
+                "The GSX question changed before the selected response could be submitted. Please choose from the current question.");
+            return false;
+        }
+
+        var label = _gsxMenu.Choices[choice.Value];
+        var requestId = _pendingGsxChoiceRequestId;
+        ClearPendingGsxChoice();
+        SubmitLiveGsxChoice(choice.Value, label, requestId);
+        CloseGsxChoiceDialog();
+        return true;
+    }
+
+    private void SubmitLiveGsxChoice(
+        int choice,
+        string label,
+        string? requestId)
+    {
+        SendGsxMenuChoice(choice, label);
+        if (string.IsNullOrWhiteSpace(requestId))
+        {
+            return;
+        }
+
+        _awaitingGsxChoiceAckLabel = label;
+        _awaitingGsxChoiceAckRequestId = requestId;
+        _awaitingGsxChoiceAckDeadlineUtc = DateTime.UtcNow.AddSeconds(6);
+        AppendDashboardLog(
+            $"Waiting for GSX to accept '{label}'.");
+    }
+
+    private void CompleteGsxChoiceAcknowledgement()
+    {
+        if (_awaitingGsxChoiceAckLabel == null)
+        {
+            return;
+        }
+
+        var label = _awaitingGsxChoiceAckLabel;
+        var requestId = _awaitingGsxChoiceAckRequestId;
+        ClearGsxChoiceAcknowledgement();
+        if (!string.IsNullOrWhiteSpace(requestId))
+        {
+            SendEfbCommandResult(
+                requestId!,
+                true,
+                $"GSX accepted '{label}'.");
+        }
+        AppendDashboardLog($"GSX accepted: {label}.");
+        AppLog.Write($"GSX acknowledged menu choice: {label}.");
+    }
+
+    private void FailPendingGsxChoice(string message)
+    {
+        var requestId = _pendingGsxChoiceRequestId;
+        if (_pendingGsxChoiceLabel == null)
+        {
+            return;
+        }
+
+        ClearPendingGsxChoice();
+        if (!string.IsNullOrWhiteSpace(requestId))
+        {
+            SendEfbCommandResult(requestId!, false, message);
+        }
+        AppendDashboardLog(message);
+        AppLog.Write(message);
+    }
+
+    private void FailGsxChoiceAcknowledgement(string message)
+    {
+        var requestId = _awaitingGsxChoiceAckRequestId;
+        if (_awaitingGsxChoiceAckLabel == null)
+        {
+            return;
+        }
+
+        ClearGsxChoiceAcknowledgement();
+        if (!string.IsNullOrWhiteSpace(requestId))
+        {
+            SendEfbCommandResult(requestId!, false, message);
+        }
+        AppendDashboardLog(message);
+        AppLog.Write(message);
+    }
+
+    private void ClearPendingGsxChoice()
+    {
+        _pendingGsxChoiceTitle = null;
+        _pendingGsxChoiceLabel = null;
+        _pendingGsxChoiceRequestId = null;
+        _pendingGsxChoiceDeadlineUtc = null;
+    }
+
+    private void ClearGsxChoiceAcknowledgement()
+    {
+        _awaitingGsxChoiceAckLabel = null;
+        _awaitingGsxChoiceAckRequestId = null;
+        _awaitingGsxChoiceAckDeadlineUtc = null;
     }
 
     private bool TryAutoConfirmGsxGoodEngineStart()
@@ -2515,8 +2782,22 @@ internal sealed class CopilotService : Form
 
     private void CheckGsxPendingTimeout()
     {
+        var now = DateTime.UtcNow;
+        if (_pendingGsxChoiceDeadlineUtc.HasValue
+            && now >= _pendingGsxChoiceDeadlineUtc.Value)
+        {
+            FailPendingGsxChoice(
+                "GSX did not reopen the question in time. No response was sent; keep the parking brake set and retry.");
+        }
+        if (_awaitingGsxChoiceAckDeadlineUtc.HasValue
+            && now >= _awaitingGsxChoiceAckDeadlineUtc.Value)
+        {
+            FailGsxChoiceAcknowledgement(
+                "GSX did not confirm the selected response. Keep the parking brake set and retry.");
+        }
+
         if (!_pendingGsxActionDeadlineUtc.HasValue
-            || DateTime.UtcNow < _pendingGsxActionDeadlineUtc.Value)
+            || now < _pendingGsxActionDeadlineUtc.Value)
         {
             return;
         }
@@ -2551,6 +2832,10 @@ internal sealed class CopilotService : Form
         _gsxOwnershipLease.Clear();
         _pendingGsxAction = null;
         _pendingGsxActionDeadlineUtc = null;
+        FailPendingGsxChoice(
+            "GSX remote control was released before the selected response could be submitted.");
+        FailGsxChoiceAcknowledgement(
+            "GSX remote control was released before accepting the selected response.");
         ClearGsxGoodEngineStartPrompt();
     }
 
@@ -8059,6 +8344,16 @@ internal sealed class CopilotService : Form
                     BeginGsxAction(GsxDepartureAction.PrepareForDeparture);
             }
 
+            if (IsGsxPushbackDirectionResponsePending())
+            {
+                _pendingGsxEngineStartProcedure = definition;
+                AppendDashboardLog(
+                    "Flow 4 is waiting for the GSX pushback direction to be accepted. Select it in the EFB and keep the parking brake set.");
+                UpdateDashboard();
+                FinishOneShot();
+                return;
+            }
+
             // GSX being active is the sequencing gate, not ownership of its
             // Remote Control API. Another add-on can legitimately own that
             // API, in which case BeginGsxAction cannot send the request. We
@@ -8470,11 +8765,21 @@ internal sealed class CopilotService : Form
             state.Engine1Running,
             state.Engine2Running);
 
+    private bool IsGsxPushbackDirectionResponsePending() =>
+        (_gsxMenuOpen && GsxPromptPolicy.IsPushbackDirectionMenu(_gsxMenu))
+        || _pendingGsxChoiceLabel != null
+        || _awaitingGsxChoiceAckLabel != null;
+
     private void TryStartPendingGsxEngineFlow()
     {
         if (_pendingGsxEngineStartProcedure == null
             || _state == null
             || IsProcedureActive(_procedureRunner.Status))
+        {
+            return;
+        }
+
+        if (IsGsxPushbackDirectionResponsePending())
         {
             return;
         }
@@ -17384,8 +17689,8 @@ internal sealed class CopilotService : Form
         {
             Text = "Manage integrations",
             Width = 680,
-            Height = 560,
-            MinimumSize = new System.Drawing.Size(620, 500),
+            Height = 680,
+            MinimumSize = new System.Drawing.Size(620, 600),
             StartPosition = FormStartPosition.CenterParent,
             FormBorderStyle = FormBorderStyle.Sizable,
             MaximizeBox = true,
@@ -17435,12 +17740,13 @@ internal sealed class CopilotService : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 3,
+            RowCount = 4,
             Margin = new Padding(0, 8, 0, 8)
         };
-        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33F));
-        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 33.33F));
-        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 33.34F));
+        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
+        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
+        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
+        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
         layout.Controls.Add(cards, 0, 1);
 
         var simBriefCard = new GroupBox
@@ -17519,6 +17825,33 @@ internal sealed class CopilotService : Form
         gsxCard.Controls.Add(gsxCardLayout);
         cards.Controls.Add(gsxCard, 0, 2);
 
+        var androidCard = new GroupBox
+        {
+            Text = "Android companion",
+            Dock = DockStyle.Fill,
+            Padding = new Padding(12),
+            Margin = new Padding(0, 7, 0, 0)
+        };
+        var androidCardLayout = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            ColumnCount = 2,
+            RowCount = 1
+        };
+        androidCardLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        androidCardLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        var androidStatus = NewDashboardLabel(AndroidCompanionStatusText());
+        androidStatus.MaximumSize = new System.Drawing.Size(470, 0);
+        var manageAndroid = new Button
+        {
+            Text = "Manage Android",
+            AutoSize = true
+        };
+        androidCardLayout.Controls.Add(androidStatus, 0, 0);
+        androidCardLayout.Controls.Add(manageAndroid, 1, 0);
+        androidCard.Controls.Add(androidCardLayout);
+        cards.Controls.Add(androidCard, 0, 3);
+
         void RefreshStatuses()
         {
             simBriefStatus.Text = SimBriefStatusText();
@@ -17535,6 +17868,10 @@ internal sealed class CopilotService : Form
                 GsxStatusText() + Environment.NewLine + GsxConfigurationSummary();
             gsxStatus.ForeColor = _gsxStatusLabel?.ForeColor
                 ?? System.Drawing.Color.DimGray;
+            androidStatus.Text = AndroidCompanionStatusText();
+            androidStatus.ForeColor = CompanionPairingStore.TryLoad(out _)
+                ? System.Drawing.Color.DarkGoldenrod
+                : System.Drawing.Color.DimGray;
         }
 
         manageSimBrief.Click += (_, _) =>
@@ -17550,6 +17887,11 @@ internal sealed class CopilotService : Form
         manageGsx.Click += (_, _) =>
         {
             ShowGsxDialog(dialog);
+            RefreshStatuses();
+        };
+        manageAndroid.Click += (_, _) =>
+        {
+            ShowAndroidCompanionDialog(dialog);
             RefreshStatuses();
         };
 
@@ -18546,6 +18888,202 @@ internal sealed class CopilotService : Form
         dialog.AcceptButton = close;
         dialog.CancelButton = close;
         dialog.ShowDialog(this);
+    }
+
+    private string AndroidCompanionStatusText() =>
+        CompanionPairingStore.TryLoad(out var pairing) && pairing != null
+            ? "Paired for encrypted LAN/relay access (view-only development mode)."
+            : "Not paired. Native Android companion is optional.";
+
+    private void ShowAndroidCompanionDialog(IWin32Window? owner = null)
+    {
+        CompanionPairingStore.TryLoad(out var pairing);
+        using var dialog = new Form
+        {
+            Text = "Android companion pairing",
+            Width = 760,
+            Height = 720,
+            MinimumSize = new System.Drawing.Size(680, 640),
+            StartPosition = FormStartPosition.CenterParent,
+            FormBorderStyle = FormBorderStyle.Sizable,
+            MaximizeBox = true,
+            MinimizeBox = false
+        };
+        var root = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            Padding = new Padding(18),
+            ColumnCount = 1,
+            RowCount = 5
+        };
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
+        dialog.Controls.Add(root);
+
+        root.Controls.Add(new Label
+        {
+            Text = "Pair the native Android tablet app",
+            AutoSize = true,
+            Font = new System.Drawing.Font(
+                Font.FontFamily,
+                14,
+                System.Drawing.FontStyle.Bold),
+            Margin = new Padding(0, 0, 0, 6)
+        }, 0, 0);
+
+        var setup = new TableLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            ColumnCount = 2,
+            Margin = new Padding(0, 4, 0, 12)
+        };
+        setup.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
+        setup.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
+        setup.Controls.Add(new Label
+        {
+            Text = "Relay URL",
+            AutoSize = true,
+            Margin = new Padding(0, 8, 10, 0)
+        }, 0, 0);
+        var relayBox = new TextBox
+        {
+            Dock = DockStyle.Fill,
+            Text = pairing?.RelayEndpoint ?? "wss://"
+        };
+        setup.Controls.Add(relayBox, 1, 0);
+        root.Controls.Add(setup, 0, 1);
+
+        var qrPicture = new PictureBox
+        {
+            Dock = DockStyle.Fill,
+            SizeMode = PictureBoxSizeMode.Zoom,
+            BackColor = System.Drawing.Color.White,
+            Margin = new Padding(0, 4, 0, 12)
+        };
+        root.Controls.Add(qrPicture, 0, 2);
+
+        var status = new Label
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            ForeColor = System.Drawing.Color.DimGray,
+            Text = pairing == null
+                ? "Enter the deployed relay URL, then generate a revocable pairing. Controls remain disabled."
+                : "This pairing is encrypted end to end. Controls remain disabled during development.",
+            Margin = new Padding(0, 0, 0, 10)
+        };
+        root.Controls.Add(status, 0, 3);
+
+        var buttons = new FlowLayoutPanel
+        {
+            Dock = DockStyle.Fill,
+            AutoSize = true,
+            FlowDirection = FlowDirection.RightToLeft
+        };
+        var close = new Button { Text = "Close", AutoSize = true };
+        var revoke = new Button
+        {
+            Text = "Revoke pairing",
+            AutoSize = true,
+            Enabled = pairing != null
+        };
+        var copy = new Button
+        {
+            Text = "Copy pairing URI",
+            AutoSize = true,
+            Enabled = pairing != null
+        };
+        var generate = new Button
+        {
+            Text = pairing == null ? "Generate pairing" : "Replace pairing",
+            AutoSize = true
+        };
+        buttons.Controls.Add(close);
+        buttons.Controls.Add(revoke);
+        buttons.Controls.Add(copy);
+        buttons.Controls.Add(generate);
+        root.Controls.Add(buttons, 0, 4);
+
+        void RenderPairing()
+        {
+            var previous = qrPicture.Image;
+            qrPicture.Image = null;
+            previous?.Dispose();
+            if (pairing == null)
+            {
+                return;
+            }
+            var png = PngByteQRCodeHelper.GetQRCode(
+                pairing.ToPairingUri(),
+                QRCodeGenerator.ECCLevel.Q,
+                8);
+            using var stream = new MemoryStream(png);
+            using var source = System.Drawing.Image.FromStream(stream);
+            qrPicture.Image = new System.Drawing.Bitmap(source);
+        }
+
+        generate.Click += (_, _) =>
+        {
+            if (!Uri.TryCreate(
+                    relayBox.Text.Trim(),
+                    UriKind.Absolute,
+                    out var relayUri)
+                || !string.Equals(
+                    relayUri.Scheme,
+                    "wss",
+                    StringComparison.OrdinalIgnoreCase))
+            {
+                status.Text = "Enter a valid wss:// relay URL.";
+                status.ForeColor = System.Drawing.Color.DarkRed;
+                return;
+            }
+            pairing = CompanionPairing.Create(relayUri.AbsoluteUri);
+            CompanionPairingStore.Save(pairing);
+            RestartCompanionRelay();
+            RenderPairing();
+            generate.Text = "Replace pairing";
+            copy.Enabled = true;
+            revoke.Enabled = true;
+            status.Text = "Pairing generated. Scan this QR code in the Android app. Controls remain disabled.";
+            status.ForeColor = System.Drawing.Color.DarkGreen;
+        };
+        copy.Click += (_, _) =>
+        {
+            if (pairing != null)
+            {
+                Clipboard.SetText(pairing.ToPairingUri());
+                status.Text = "Pairing URI copied. Treat it like a password until this pairing is replaced.";
+                status.ForeColor = System.Drawing.Color.DarkGoldenrod;
+            }
+        };
+        revoke.Click += (_, _) =>
+        {
+            CompanionPairingStore.Revoke();
+            pairing = null;
+            _relayCompanionClient?.Dispose();
+            _relayCompanionClient = null;
+            _localCompanionServer?.Dispose();
+            _localCompanionServer = null;
+            RenderPairing();
+            copy.Enabled = false;
+            revoke.Enabled = false;
+            generate.Text = "Generate pairing";
+            status.Text = "The Android companion pairing was revoked.";
+            status.ForeColor = System.Drawing.Color.DarkRed;
+        };
+        close.Click += (_, _) => dialog.Close();
+        dialog.FormClosed += (_, _) =>
+        {
+            qrPicture.Image?.Dispose();
+            qrPicture.Image = null;
+        };
+
+        RenderPairing();
+        dialog.ShowDialog(owner ?? this);
     }
 
     private void ShowDebugJumpDialog()
@@ -20468,7 +21006,6 @@ internal sealed class CopilotService : Form
             case "gsx_menu_choice":
             {
                 if (!_settings.EnableGsxIntegration
-                    || !_gsxMenuOpen
                     || _gsxMenu.IsEmpty
                     || GsxPromptPolicy.IsRootServicesMenu(_gsxMenu))
                 {
@@ -20490,12 +21027,11 @@ internal sealed class CopilotService : Form
                 }
 
                 var choiceLabel = _gsxMenu.Choices[choiceIndex];
-                SendGsxMenuChoice(choiceIndex, choiceLabel);
+                RequestGsxMenuChoice(
+                    choiceIndex,
+                    choiceLabel,
+                    command.RequestId);
                 CloseGsxChoiceDialog();
-                SendEfbCommandResult(
-                    command.RequestId,
-                    true,
-                    $"Transmitted '{choiceLabel}' to GSX; GSX controls the resulting manoeuvre.");
                 break;
             }
             case "confirm":
@@ -20538,12 +21074,12 @@ internal sealed class CopilotService : Form
                 SendEfbCommandResult(command.RequestId, true, "Pausing flow.");
                 break;
             case "resume":
-                if (status != ProcedureStatus.Paused)
+                if (status != ProcedureStatus.Paused && status != ProcedureStatus.Failed)
                 {
                     SendEfbCommandResult(
                         command.RequestId,
                         false,
-                        "The current flow is not paused.");
+                        "The current flow is not paused or failed.");
                     return;
                 }
                 _commands.Enqueue("procedure resume");
@@ -20573,8 +21109,7 @@ internal sealed class CopilotService : Form
         bool accepted,
         string message)
     {
-        SendEfbEnvelope(
-            new Dictionary<string, object?>
+        var efbEnvelope = new Dictionary<string, object?>
             {
                 ["protocolVersion"] = EfbCompanionProtocol.Version,
                 ["kind"] = "commandResult",
@@ -20582,7 +21117,17 @@ internal sealed class CopilotService : Form
                 ["accepted"] = accepted,
                 ["message"] = message,
                 ["sentUtc"] = DateTime.UtcNow.ToString("O")
-            });
+            };
+        SendEfbEnvelope(efbEnvelope);
+
+        if (_companionRequestIds.Remove(requestId))
+        {
+            var companionEnvelope = new Dictionary<string, object?>(efbEnvelope)
+            {
+                ["protocolVersion"] = CompanionProtocol.Version
+            };
+            _companionBridge.Publish(companionEnvelope);
+        }
     }
 
     private void PublishEfbState(bool force = false)
@@ -20600,11 +21145,13 @@ internal sealed class CopilotService : Form
         }
         _lastEfbStatePublishedUtc = now;
 
-        var envelope = BuildEfbStateEnvelope();
+        var envelope = BuildEfbStateEnvelope(EfbCompanionProtocol.Version);
         SendEfbEnvelope(envelope);
+        _companionBridge.Publish(
+            BuildEfbStateEnvelope(CompanionProtocol.Version));
     }
 
-    private Dictionary<string, object?> BuildEfbStateEnvelope()
+    private Dictionary<string, object?> BuildEfbStateEnvelope(int protocolVersion)
     {
         var state = _state;
         var gsx = GetGsxLiveState();
@@ -20669,7 +21216,7 @@ internal sealed class CopilotService : Form
 
         return new Dictionary<string, object?>
         {
-            ["protocolVersion"] = EfbCompanionProtocol.Version,
+            ["protocolVersion"] = protocolVersion,
             ["kind"] = "state",
             ["sentUtc"] = DateTime.UtcNow.ToString("O"),
             ["companionVersion"] = GetApplicationVersion(),
@@ -20734,7 +21281,8 @@ internal sealed class CopilotService : Form
                     or ProcedureStatus.WaitingForManualAction
                     or ProcedureStatus.WaitingForVerification,
                 ["canResume"] =
-                    _procedureRunner.Status == ProcedureStatus.Paused,
+                    _procedureRunner.Status == ProcedureStatus.Paused
+                    || _procedureRunner.Status == ProcedureStatus.Failed,
                 ["canCancel"] = procedureActive
             },
             ["flows"] = flows,
@@ -21110,6 +21658,11 @@ internal sealed class CopilotService : Form
             _aircraftIdentityLookupCancellation = null;
             SetAircraftThumbnail(null);
             _flightTelemetryStore.Dispose();
+            _relayCompanionClient?.Dispose();
+            _relayCompanionClient = null;
+            _localCompanionServer?.Dispose();
+            _localCompanionServer = null;
+            _companionBridge.CommandReceived -= DispatchCompanionCommand;
             _voiceCalloutQueue?.Dispose();
             _voiceCalloutQueue = null;
             _sayIntentionsClient.Dispose();

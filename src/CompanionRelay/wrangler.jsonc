@@ -1,0 +1,24 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "vfo-companion-relay",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-04",
+  "durable_objects": {
+    "bindings": [
+      {
+        "name": "COMPANION_SESSIONS",
+        "class_name": "CompanionSession"
+      }
+    ]
+  },
+  "migrations": [
+    {
+      "tag": "v1",
+      "new_sqlite_classes": ["CompanionSession"]
+    }
+  ],
+  "observability": {
+    "enabled": true,
+    "head_sampling_rate": 0.1
+  }
+}

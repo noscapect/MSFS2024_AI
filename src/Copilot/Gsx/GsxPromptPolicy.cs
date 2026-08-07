@@ -28,6 +28,29 @@ internal static class GsxPromptPolicy
         return rootChoiceCount >= 3;
     }
 
+    public static bool IsPushbackDirectionMenu(GsxMenuSnapshot menu)
+    {
+        if (menu.IsEmpty)
+        {
+            return false;
+        }
+
+        var title = Normalize(menu.Title);
+        if (!title.Contains("pushback direction"))
+        {
+            return false;
+        }
+
+        return menu.Choices
+            .Select(Normalize)
+            .Any(choice =>
+                choice.Contains("nose left")
+                || choice.Contains("nose right")
+                || choice.Contains("tail left")
+                || choice.Contains("tail right")
+                || choice.Contains("straight pushback"));
+    }
+
     public static bool RequiresGoodEngineStartMenu(IReadOnlyList<string> statusLines)
     {
         var status = string.Join(" ", statusLines).ToLowerInvariant();
@@ -51,11 +74,48 @@ internal static class GsxPromptPolicy
         return null;
     }
 
-    private static string Normalize(string value) =>
-        new string(value
+    public static int? FindMatchingChoice(
+        GsxMenuSnapshot menu,
+        string expectedTitle,
+        string expectedChoice)
+    {
+        if (menu.IsEmpty
+            || !string.Equals(
+                Normalize(menu.Title),
+                Normalize(expectedTitle),
+                StringComparison.Ordinal))
+        {
+            return null;
+        }
+
+        var normalizedChoice = Normalize(expectedChoice);
+        for (var index = 0; index < menu.Choices.Count; index++)
+        {
+            if (string.Equals(
+                    Normalize(menu.Choices[index]),
+                    normalizedChoice,
+                    StringComparison.Ordinal))
+            {
+                return index;
+            }
+        }
+
+        return null;
+    }
+
+    private static string Normalize(string value)
+    {
+        var words = new string(value
                 .ToLowerInvariant()
-                .Where(character => char.IsLetterOrDigit(character)
-                                    || char.IsWhiteSpace(character))
+                .Select(character =>
+                    char.IsLetterOrDigit(character)
+                    || char.IsWhiteSpace(character)
+                        ? character
+                        : ' ')
                 .ToArray())
-            .Replace("push back", "pushback");
+            .Split(
+                new[] { ' ', '\t', '\r', '\n' },
+                StringSplitOptions.RemoveEmptyEntries);
+        return string.Join(" ", words).Replace("push back", "pushback");
+    }
 }

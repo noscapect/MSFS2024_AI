@@ -118,6 +118,18 @@ internal sealed class ProcedureRunner
 
     public void Resume(AircraftState state)
     {
+        if (Status == ProcedureStatus.Failed)
+        {
+            _stepIndex++;
+            _manualConfirmationReceived = false;
+            _lastAutomaticStepId = null;
+            _recovering = false;
+            Status = ProcedureStatus.Running;
+            Message = "Procedure resumed (skipped failed step).";
+            Advance(state);
+            return;
+        }
+
         if (Status != ProcedureStatus.Paused)
         {
             return;

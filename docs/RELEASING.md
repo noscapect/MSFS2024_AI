@@ -34,3 +34,6 @@ client libraries copied into the application output during the build:
 Users do not need to install the full MSFS 2024 SDK to run a release.
 The SDK is required only on the release-development machine to build the EFB
 package.
+
+The package also includes `BouncyCastle.Cryptography.dll` and `QRCoder.dll`,
+which provide Android companion end-to-end encryption and desktop QR pairing.

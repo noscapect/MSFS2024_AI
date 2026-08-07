@@ -27,6 +27,22 @@ CopilotService command and snapshot bridge
 Existing procedure, aircraft, GSX, and SayIntentions subsystems
 ```
 
+### Native Android companion (in development)
+
+The native Android tablet application uses the same thin-client ownership
+boundary as the MSFS EFB. A transport-neutral desktop bridge publishes
+versioned state snapshots and translates allow-listed Android commands back
+through the existing EFB parser and runtime validation path. Network code has
+no reference to SimConnect or the procedure command queue.
+
+The automatic transport tries an authenticated direct LAN connection before
+falling back to an outbound WebSocket relay. Relay envelopes are
+end-to-end encrypted and replay-checked. Pairing secrets are protected with
+Windows DPAPI and Android Keystore, and the desktop can replace or revoke its
+QR pairing. The development client remains view-only until live security and
+network validation are complete. See
+`docs/ANDROID_COMPANION.md`.
+
 ### Procedure engine
 
 Owns the gate-to-gate state machine. Each procedure contains ordered and

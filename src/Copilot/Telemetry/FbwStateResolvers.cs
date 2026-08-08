@@ -2,6 +2,16 @@ namespace Msfs2024Ai.Copilot.Telemetry;
 
 internal static class FbwStateResolvers
 {
+    public static double ResolveFlapsHandleIndex(
+        float? nativeHandleIndex,
+        double genericHandleIndex)
+    {
+        // The generic SimVar can lag behind the A32NX cockpit lever and is
+        // refreshed more often than the native LVar. Keep the last native
+        // value authoritative across those generic telemetry updates.
+        return nativeHandleIndex ?? genericHandleIndex;
+    }
+
     public static double ResolveNoseLightSelectorPosition(
         double selectorPosition,
         float? commandedValue,

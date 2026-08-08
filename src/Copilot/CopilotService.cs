@@ -6231,9 +6231,13 @@ internal sealed class CopilotService : Form
             RightSpoilerPositionPercent = isPmdg737 && pmdg?.SpeedbrakeExtended == true
                 ? 100
                 : raw.RightSpoilerPosition,
-            FlapsHandleIndex = isAsobo737Max && _asobo737MaxFlapsInputState.HasValue
-                ? Asobo737MaxFlapsHandleIndex(_asobo737MaxFlapsInputState.Value)
-                : raw.FlapsHandleIndex,
+            FlapsHandleIndex = isFlyByWireAirbus
+                ? FbwStateResolvers.ResolveFlapsHandleIndex(
+                    _fbwFlapsHandleIndex,
+                    raw.FlapsHandleIndex)
+                : isAsobo737Max && _asobo737MaxFlapsInputState.HasValue
+                    ? Asobo737MaxFlapsHandleIndex(_asobo737MaxFlapsInputState.Value)
+                    : raw.FlapsHandleIndex,
             BoeingTakeoffFlaps = cockpitFlaps ?? plannedTakeoffFlaps,
             BoeingLandingFlaps = isPmdg737 && pmdg != null && pmdg.LandingFlaps > 0
                 ? pmdg.LandingFlaps
@@ -13645,10 +13649,14 @@ internal sealed class CopilotService : Form
     }
 
     private static bool GearUpCommandVerified(AircraftState state) =>
-        state.IsIniBuildsA310 ? state.GearHandleUp : state.GearUpVerified;
+        state.IsIniBuildsA310 || state.IsFlyByWireAirbus
+            ? state.GearHandleUp
+            : state.GearUpVerified;
 
     private static bool GearDownCommandVerified(AircraftState state) =>
-        state.IsIniBuildsA310 ? state.GearHandleDown : state.GearDownVerified;
+        state.IsIniBuildsA310 || state.IsFlyByWireAirbus
+            ? state.GearHandleDown
+            : state.GearDownVerified;
 
     private void SetGroundSpoilersDisarmed()
     {

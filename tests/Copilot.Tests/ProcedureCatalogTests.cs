@@ -680,6 +680,22 @@ public sealed class ProcedureCatalogTests
     }
 
     [TestMethod]
+    public void FlyByWireA320TurnsSeatbeltsOffAfterTenThousandFeet()
+    {
+        var ids = FbwA320ProcedureLibrary.TakeoffAndClimb.Steps
+            .Select(step => step.Id)
+            .ToArray();
+        var altitudeGate = Array.IndexOf(ids, "above-ten-thousand");
+        var seatbelts = Array.IndexOf(ids, "fo-seatbelts-off-above-ten");
+        var step = FbwA320ProcedureLibrary.TakeoffAndClimb.Steps[seatbelts];
+
+        Assert.AreEqual(altitudeGate + 1, seatbelts);
+        Assert.AreEqual("seatbelts off", step.Command);
+        Assert.IsTrue(step.IsComplete(new AircraftState { SeatbeltSignsOn = false }));
+        Assert.IsFalse(step.IsComplete(new AircraftState { SeatbeltSignsOn = true }));
+    }
+
+    [TestMethod]
     public void FlyByWireA320ApproachAndShutdownUseSeatbeltSignState()
     {
         var approachStep = FbwA320ProcedureLibrary.GateToGate[9].Steps

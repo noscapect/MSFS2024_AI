@@ -392,7 +392,7 @@ internal static class FbwA320ProcedureLibrary
                 Automatic(
                     "fo-gear-up",
                     "Landing gear UP",
-                    state => state.GearUpVerified,
+                    state => state.GearHandleUp,
                     "gear up"),
                 Automatic(
                     "fo-nose-light-off",
@@ -421,6 +421,11 @@ internal static class FbwA320ProcedureLibrary
                     "10,000 feet passed",
                     state => state.IndicatedAltitudeFeet >= 10000,
                     CrewRole.FirstOfficer),
+                Automatic(
+                    "fo-seatbelts-off-above-ten",
+                    "Seatbelt signs OFF above 10,000 feet",
+                    state => !state.SeatbeltSignsOn,
+                    "seatbelts off"),
                 Automatic(
                     "fo-runway-turnoff-off",
                     "Runway turnoff lights OFF",
@@ -577,7 +582,7 @@ internal static class FbwA320ProcedureLibrary
                 Automatic(
                     "fo-gear-down",
                     "Landing gear DOWN",
-                    state => state.GearDownVerified,
+                    state => state.GearHandleDown,
                     "gear down"),
                 Automatic(
                     "fo-ground-spoilers",

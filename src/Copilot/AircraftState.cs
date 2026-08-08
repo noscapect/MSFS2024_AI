@@ -541,6 +541,11 @@ internal sealed class AircraftState
             return A321FlapsAtDetent(detent);
         }
 
+        if (IsFlyByWireAirbus)
+        {
+            return FlyByWireFlapsAtDetent(detent);
+        }
+
         return LegacyA320FlapsAtDetent(detent);
     }
 
@@ -577,6 +582,17 @@ internal sealed class AircraftState
         // handle index is therefore the authority for this aircraft; accepting
         // the surface fallback here makes Flow 7 skip the retract command.
         return A321ControlProfile.FlapsAtDetent(FlapsHandleIndex, detent);
+    }
+
+    private bool FlyByWireFlapsAtDetent(int detent)
+    {
+        // The A32NX native handle LVar tracks the cockpit lever. Its flap
+        // surfaces can already be clean while the lever remains at CONFIG 1,
+        // so surface fallback would skip the required lever retraction.
+        // Some FBW versions expose FULL as handle index 5 instead of 4.
+        return detent == 4
+            ? FlapsHandleIndex >= 3.9
+            : Math.Abs(FlapsHandleIndex - detent) < 0.1;
     }
 
     private bool Boeing737FlapsAtDetent(int detent)

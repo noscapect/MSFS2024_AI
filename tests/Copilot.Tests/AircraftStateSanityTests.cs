@@ -1,5 +1,6 @@
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using Msfs2024Ai.Copilot.Diagnostics;
+using Msfs2024Ai.Copilot.Procedures;
 
 namespace Msfs2024Ai.Copilot.Tests;
 
@@ -136,5 +137,57 @@ public sealed class AircraftStateSanityTests
 
         Assert.IsFalse(state.GearUpVerified);
         Assert.IsFalse(state.GearDownVerified);
+    }
+
+    [TestMethod]
+    public void FbwGearStepsUseTheHandleWhenWheelPositionsRemainStale()
+    {
+        var takeoffGear = FbwA320ProcedureLibrary.TakeoffAndClimb.Steps
+            .Single(step => step.Id == "fo-gear-up");
+        var approachGear = FbwA320ProcedureLibrary.ApproachAndLanding.Steps
+            .Single(step => step.Id == "fo-gear-down");
+
+        var up = new AircraftState
+        {
+            Title = "FlyByWire A32NX",
+            GearHandlePosition = 0,
+            GearHandleDown = false,
+            LeftGearPosition = 1,
+            CenterGearPosition = 1,
+            RightGearPosition = 1
+        };
+        var down = new AircraftState
+        {
+            Title = "FlyByWire A32NX",
+            GearHandlePosition = 2,
+            GearHandleDown = true,
+            LeftGearPosition = 0,
+            CenterGearPosition = 0,
+            RightGearPosition = 0
+        };
+
+        Assert.IsFalse(up.GearUpVerified);
+        Assert.IsTrue(takeoffGear.IsComplete(up));
+        Assert.IsFalse(down.GearDownVerified);
+        Assert.IsTrue(approachGear.IsComplete(down));
+    }
+
+    [TestMethod]
+    public void FbwCleanFlapsRequireTheCockpitHandleAtZero()
+    {
+        var state = new AircraftState
+        {
+            Title = "FlyByWire A32NX",
+            FlapsHandleIndex = 1,
+            LeftFlapPositionPercent = 0,
+            RightFlapPositionPercent = 0,
+            FlapReadbackSane = false
+        };
+
+        Assert.IsFalse(state.FlapsAtDetent(0));
+
+        state.FlapsHandleIndex = 0;
+
+        Assert.IsTrue(state.FlapsAtDetent(0));
     }
 }

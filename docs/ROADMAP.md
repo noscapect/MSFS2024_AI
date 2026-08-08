@@ -6,7 +6,7 @@ profiles remain protected by their aircraft-specific regression tests.
 
 ## Current stabilization
 
-The latest public release is v0.9.6. It includes the dashboard redesign, the
+The latest public release is v0.9.7. It includes the dashboard redesign, the
 optional EFB companion, expanded optional GSX coordination, and the Asobo 737
 MAX profile under an explicit experimental warning. Active MAX development is
 paused while UX, EFB, and integration reliability are stabilized on `main`.
@@ -43,7 +43,7 @@ by SayIntentions.
 ## Post-1.0 enhancements
 
 1. Deeper GSX arrival services and ground-service coordination. The optional
-   coordinator uses the official bidirectional Remote Control SDK; v0.9.6
+   coordinator uses the official bidirectional Remote Control SDK; v0.9.7
    already includes exact arrival-stand handoff and deboarding coordination.
 2. Interactive checklist and crew-audio improvements.
 

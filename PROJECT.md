@@ -1,17 +1,16 @@
 # MSFS 2024 Virtual First Officer - Project Status and Handoff
 
 This file is the primary technical handoff for continuing development. The
-current public release is **v0.9.6** from August 2, 2026. It contains the
-dashboard redesign, optional MSFS 2024 EFB companion, expanded optional GSX
-coordination, and the Asobo 737 MAX profile under an explicit experimental
-warning. The flows implemented in the
+current public release is **v0.9.7** from August 9, 2026. It contains the
+dashboard and optional MSFS 2024 EFB companion, expanded optional GSX
+coordination, the experimental iniBuilds A310-300 profile, and the Asobo 737
+MAX profile under an explicit experimental warning. The flows implemented in the
 application are authoritative; supporting documents must follow the application
 when they differ.
 
-Current post-release development adds an iniBuilds A310-300 procedure and
-checklist framework. It is not part of v0.9.6 and remains experimental, with
-validated preliminary-panel actions now automated
-until its native MSFS 2024 controls and readbacks are live-validated.
+The iniBuilds A310-300 procedure and checklist framework is included in v0.9.7
+as experimental support. Its native MSFS 2024 controls and readbacks continue
+to receive live gate-to-gate validation.
 
 Suggested opening prompt for a new development chat:
 
@@ -34,9 +33,9 @@ software, not an autopilot, and the pilot must always be able to take over.
 
 ## Current release
 
-- Public version: **0.9.6**
+- Public version: **0.9.7**
 - Repository: <https://github.com/noscapect/MSFS2024_AI>
-- Latest release: <https://github.com/noscapect/MSFS2024_AI/releases/tag/v0.9.6>
+- Latest release: <https://github.com/noscapect/MSFS2024_AI/releases/tag/v0.9.7>
 - Main project: `src/Copilot/Copilot.csproj`
 - UI/runtime: WinForms, .NET Framework 4.7.2, x64
 - Release executable: `src/Copilot/bin/Release/net472/Copilot.exe`
@@ -52,10 +51,10 @@ dotnet build .\src\Copilot\Copilot.csproj -c Release --no-restore
 dotnet test .\tests\Copilot.Tests\Copilot.Tests.csproj -c Release --no-restore
 ```
 
-The v0.9.6 release passed 290 automated tests. Current post-release development
-passes 303 tests. The Asobo 737 MAX profile is packaged only as experimental
-support and must complete its remaining safety instrumentation and gate-to-gate
-live validation before that warning can be removed.
+The v0.9.7 release passes 344 automated tests. The Asobo 737 MAX profile is
+packaged only as experimental support and must complete its remaining safety
+instrumentation and gate-to-gate live validation before that warning can be
+removed.
 
 ## MSFS 2024 EFB companion
 
@@ -264,7 +263,7 @@ verify the exchange without controlling the radios.
 
 ## GSX integration
 
-GSX Pro integration is available as optional beta functionality in v0.9.6.
+GSX Pro integration is available as optional beta functionality in v0.9.7.
 GSX remains the owner of all passenger, fuel,
 cargo, catering, door, timing, airport-profile, and aircraft-profile choices.
 The Virtual First Officer only coordinates natural departure milestones.

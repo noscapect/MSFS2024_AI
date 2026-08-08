@@ -203,6 +203,39 @@ public sealed class A310ProcedureLibraryTests
     }
 
     [TestMethod]
+    public void GearStepsUseTheA310NativeHandleInsteadOfStaleWheelPositions()
+    {
+        var gearUp = A310ProcedureLibrary.TakeoffAndClimb.Steps
+            .Single(step => step.Id == "fo-gear-up");
+        var gearDown = A310ProcedureLibrary.ApproachAndLanding.Steps
+            .Single(step => step.Id == "fo-gear-down");
+
+        var upWithStaleWheels = new AircraftState
+        {
+            Title = "Airbus A310-300",
+            GearHandlePosition = 0,
+            GearHandleDown = false,
+            LeftGearPosition = 1,
+            CenterGearPosition = 1,
+            RightGearPosition = 1
+        };
+        var downWithStaleWheels = new AircraftState
+        {
+            Title = "Airbus A310-300",
+            GearHandlePosition = 2,
+            GearHandleDown = true,
+            LeftGearPosition = 0,
+            CenterGearPosition = 0,
+            RightGearPosition = 0
+        };
+
+        Assert.IsFalse(upWithStaleWheels.GearUpVerified);
+        Assert.IsTrue(gearUp.IsComplete(upWithStaleWheels));
+        Assert.IsFalse(downWithStaleWheels.GearDownVerified);
+        Assert.IsTrue(gearDown.IsComplete(downWithStaleWheels));
+    }
+
+    [TestMethod]
     public void ApproachUsesPublishedA310ConfigurationsAndSpeedLimits()
     {
         var flow = A310ProcedureLibrary.ApproachAndLanding;
@@ -217,6 +250,22 @@ public sealed class A310ProcedureLibraryTests
         var safe = new AircraftState { IndicatedAirspeedKnots = 180 };
         Assert.IsFalse(flow.Steps.Single(step => step.Id == "flaps-40-speed").IsComplete(fast));
         Assert.IsTrue(flow.Steps.Single(step => step.Id == "flaps-40-speed").IsComplete(safe));
+
+        var flaps15Point = flow.Steps.Single(step => step.Id == "flaps-15-point");
+        Assert.IsFalse(flaps15Point.IsComplete(new AircraftState
+        {
+            IndicatedAirspeedKnots = 211,
+            AltitudeAboveGroundFeet = 3000,
+            ApproachDistanceToTouchdownNm = 12,
+            ApproachFlaps2DistanceNm = 10
+        }));
+        Assert.IsTrue(flaps15Point.IsComplete(new AircraftState
+        {
+            IndicatedAirspeedKnots = 210,
+            AltitudeAboveGroundFeet = 3000,
+            ApproachDistanceToTouchdownNm = 12,
+            ApproachFlaps2DistanceNm = 10
+        }));
     }
 
     [TestMethod]
@@ -408,14 +457,17 @@ public sealed class A310ProcedureLibraryTests
             A310ControlProfile.WeatherRadarModeState,
             A310ControlProfile.AutobrakeMaxState,
             A310ControlProfile.SpoilersArmedState,
-            A310ControlProfile.GearHandleState
+            A310ControlProfile.GearHandleState,
+            A310ControlProfile.CaptainAltimeterStandardState,
+            A310ControlProfile.FirstOfficerAltimeterStandardState,
+            A310ControlProfile.StandbyAltimeterStandardState
         })
         .ToArray();
 
         CollectionAssert.AreEqual(
             expected,
             A310ControlProfile.OperationalRuntimeStates.ToArray());
-        Assert.AreEqual(28, expected.Length);
+        Assert.AreEqual(31, expected.Length);
     }
 
     [TestMethod]

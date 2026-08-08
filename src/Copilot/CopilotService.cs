@@ -245,6 +245,7 @@ internal sealed class CopilotService : Form
     private readonly float?[] _a310FuelPumpStates = new float?[12];
     private readonly float?[] _a310Flow5States = new float?[3];
     private float? _a310GearHandleStatus;
+    private readonly float?[] _a310AltimeterStandardStates = new float?[3];
     private bool? _fbwBattery1Auto;
     private bool? _fbwBattery2Auto;
     private bool? _fbwBattery1AutoTyped;
@@ -894,6 +895,9 @@ internal sealed class CopilotService : Form
         A310Flow5AutobrakeMax = 364,
         A310Flow5SpoilersArmed = 365,
         A310GearHandleStatus = 366,
+        A310CaptainAltimeterStandard = 367,
+        A310FirstOfficerAltimeterStandard = 368,
+        A310StandbyAltimeterStandard = 369,
         PmdgNg3Data = 300,
         PmdgNg3Control = 301
     }
@@ -1091,6 +1095,9 @@ internal sealed class CopilotService : Form
         A310Flow5AutobrakeMax = 286,
         A310Flow5SpoilersArmed = 287,
         A310GearHandleStatus = 288,
+        A310CaptainAltimeterStandard = 289,
+        A310FirstOfficerAltimeterStandard = 290,
+        A310StandbyAltimeterStandard = 291,
         PmdgNg3Data = unchecked((int)PmdgNg3DataDefinition),
         PmdgNg3Control = unchecked((int)PmdgNg3ControlDefinition)
     }
@@ -3917,6 +3924,20 @@ internal sealed class CopilotService : Form
             return;
         }
 
+        if (request is >= Request.A310CaptainAltimeterStandard
+            and <= Request.A310StandbyAltimeterStandard)
+        {
+            var value = ((MobiFlightFloat)data.dwData[0]).Value;
+            var index = (int)request - (int)Request.A310CaptainAltimeterStandard;
+            var labels = new[] { "captain altimeter STD", "first-officer altimeter STD", "standby altimeter STD" };
+            SetLoggedFloat(
+                ref _a310AltimeterStandardStates[index],
+                value,
+                $"A310 {labels[index]}");
+            ApplyNativeAircraftState();
+            return;
+        }
+
         if (request is >= Request.A310Battery1Auto and <= Request.A310AnnunciatorTest)
         {
             var value = ((MobiFlightFloat)data.dwData[0]).Value;
@@ -4624,6 +4645,9 @@ internal sealed class CopilotService : Form
         RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow5AutobrakeMax, Request.A310Flow5AutobrakeMax, 175 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.A310Flow5SpoilersArmed, Request.A310Flow5SpoilersArmed, 176 * sizeof(float));
         RegisterMobiFlightFloat(sender, ClientDataDefinition.A310GearHandleStatus, Request.A310GearHandleStatus, 177 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310CaptainAltimeterStandard, Request.A310CaptainAltimeterStandard, 178 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310FirstOfficerAltimeterStandard, Request.A310FirstOfficerAltimeterStandard, 179 * sizeof(float));
+        RegisterMobiFlightFloat(sender, ClientDataDefinition.A310StandbyAltimeterStandard, Request.A310StandbyAltimeterStandard, 180 * sizeof(float));
         _mobiFlightRuntimeReady = true;
         _mobiFlightRuntimeInitializedUtc = DateTime.UtcNow;
         SendMobiFlightRuntimeCommand("MF.SimVars.Clear");
@@ -6140,8 +6164,14 @@ internal sealed class CopilotService : Form
             AltitudeAboveGroundFeet = raw.AltitudeAboveGround,
             IndicatedAltitudeFeet = raw.IndicatedAltitude,
             TransitionAltitudeFeet = _settings.TransitionAltitudeFeet,
-            CaptainAltimeterStandard = raw.CaptainBaroStandard != 0,
-            FirstOfficerAltimeterStandard = raw.FirstOfficerBaroStandard != 0,
+            CaptainAltimeterStandard = isIniBuildsA310
+                                        && _a310AltimeterStandardStates[0].HasValue
+                ? _a310AltimeterStandardStates[0]!.Value > 0.5f
+                : raw.CaptainBaroStandard != 0,
+            FirstOfficerAltimeterStandard = isIniBuildsA310
+                                             && _a310AltimeterStandardStates[1].HasValue
+                ? _a310AltimeterStandardStates[1]!.Value > 0.5f
+                : raw.FirstOfficerBaroStandard != 0,
             IndicatedAirspeedKnots = raw.IndicatedAirspeed,
             TakeoffV1SpeedKnots = effectiveV1,
             TakeoffRotateSpeedKnots = effectiveVr,
@@ -7283,7 +7313,8 @@ internal sealed class CopilotService : Form
             "a310 gear up" => _a310GearHandleStatus.HasValue,
             "a310 speedbrake disarm" => _a310Flow5States[2].HasValue,
             "a310 climb-lights" => _a310InitialLightStates.All(value => value.HasValue),
-            "a310 altimeters standard" => true,
+            "a310 altimeters standard" =>
+                _a310AltimeterStandardStates.All(value => value.HasValue),
             "a310 landing-lights retract" =>
                 _a310InitialLightStates[3].HasValue
                 && _a310InitialLightStates[4].HasValue,
@@ -13547,7 +13578,7 @@ internal sealed class CopilotService : Form
             FinishOneShot(3);
             return;
         }
-        if (_state.GearUpVerified)
+        if (GearUpCommandVerified(_state))
         {
             AppendDashboardLog("Landing gear already UP.");
             FinishOneShot();
@@ -13572,7 +13603,7 @@ internal sealed class CopilotService : Form
         SendMobiFlightCommand("MF.DummyCmd");
         BeginNativeAction(
             "Landing gear",
-            state => state.GearUpVerified,
+            GearUpCommandVerified,
             true,
             TimeSpan.FromSeconds(12));
     }
@@ -13585,7 +13616,7 @@ internal sealed class CopilotService : Form
             FinishOneShot(3);
             return;
         }
-        if (_state.GearDownVerified)
+        if (GearDownCommandVerified(_state))
         {
             AppendDashboardLog("Landing gear already DOWN.");
             FinishOneShot();
@@ -13608,10 +13639,16 @@ internal sealed class CopilotService : Form
         SendMobiFlightCommand("MF.DummyCmd");
         BeginNativeAction(
             "Landing gear",
-            state => state.GearDownVerified,
+            GearDownCommandVerified,
             true,
             TimeSpan.FromSeconds(15));
     }
+
+    private static bool GearUpCommandVerified(AircraftState state) =>
+        state.IsIniBuildsA310 ? state.GearHandleUp : state.GearUpVerified;
+
+    private static bool GearDownCommandVerified(AircraftState state) =>
+        state.IsIniBuildsA310 ? state.GearHandleDown : state.GearDownVerified;
 
     private void SetGroundSpoilersDisarmed()
     {
@@ -21576,6 +21613,10 @@ internal sealed class CopilotService : Form
         _nativeTransponderStandby = null;
         Array.Clear(_a310Flow5States, 0, _a310Flow5States.Length);
         _a310GearHandleStatus = null;
+        Array.Clear(
+            _a310AltimeterStandardStates,
+            0,
+            _a310AltimeterStandardStates.Length);
         _asobo737MaxBatteryInputEventOn = null;
         _asobo737MaxBatteryCoverInputEventOn = null;
         _asobo737MaxBatteryInputEventHash = null;

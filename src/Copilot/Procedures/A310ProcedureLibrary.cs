@@ -279,7 +279,10 @@ internal static class A310ProcedureLibrary
                 Observe("v1", "V1", state => state.V1CalloutReached),
                 Observe("rotate", "Rotate", state => state.RotateCalloutReached),
                 Observe("positive-climb", "Positive climb", state => !state.OnGround && state.VerticalSpeedFeetPerMinute > 100),
-                Automatic("fo-gear-up", "Landing gear UP", state => state.GearUpVerified, "gear up"),
+                // The A310's generic three-wheel position SimVars can remain stale
+                // after retraction. Its native handle readback is authoritative:
+                // 0=UP, 1=transit and 2=DOWN.
+                Automatic("fo-gear-up", "Landing gear UP", state => state.GearHandleUp, "gear up"),
                 Advisory("autopilot", "Autopilot as required"),
                 Observe("thrust-reduction", "Thrust-reduction altitude reached", state => state.AltitudeAboveGroundFeet >= 1000),
                 Advisory("climb-thrust", "Climb thrust established; TRP CL and symmetric thrust checked"),
@@ -344,12 +347,19 @@ internal static class A310ProcedureLibrary
                 Observe("slats-speed", "Slats 15 speed safe", state => state.IndicatedAirspeedKnots <= 245),
                 Automatic("slats-15", "Slats 15 / Flaps 0", state => state.FlapsHandleIndex >= 1, "flaps 15-0"),
                 Advisory("land-mode", "Arm LAND when cleared and monitor LOC/G/S capture"),
-                Observe("flaps-15-point", "Flaps 15 point", state => ApproachGate(state, state.ApproachFlaps2DistanceNm, state.AltitudeAboveGroundFeet <= 2000)),
+                Observe(
+                    "flaps-15-point",
+                    "Flaps 15 point",
+                    state => state.IndicatedAirspeedKnots <= 210
+                             || ApproachGate(
+                                 state,
+                                 state.ApproachFlaps2DistanceNm,
+                                 state.AltitudeAboveGroundFeet <= 2000)),
                 Observe("flaps-15-speed", "Flaps 15 speed safe", state => state.IndicatedAirspeedKnots <= 210),
                 Automatic("flaps-15", "Slats 15 / Flaps 15", state => state.FlapsHandleIndex >= 2, "flaps 15-15"),
                 Automatic("speedbrakes-retracted", "Speedbrakes retracted", state => !state.GroundSpoilersArmed, "speedbrake disarm"),
                 Observe("gear-point", "Latest gear-down point", state => ApproachGate(state, 5, state.AltitudeAboveGroundFeet <= 1800)),
-                Automatic("fo-gear-down", "Landing gear DOWN", state => state.GearDownVerified, "gear down"),
+                Automatic("fo-gear-down", "Landing gear DOWN", state => state.GearHandleDown, "gear down"),
                 Automatic("fo-spoilers-arm", "Ground spoilers ARMED", state => state.GroundSpoilersArmed, "speedbrake arm"),
                 Automatic("nose-to", "Nose light T.O.", state => state.A310NoseLightTakeoff, "nose-light takeoff"),
                 Observe("flaps-20-speed", "Flaps 20 speed safe", state => state.IndicatedAirspeedKnots <= 195),

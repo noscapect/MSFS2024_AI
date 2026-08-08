@@ -66,6 +66,12 @@ internal static class A310ControlProfile
         .Concat(FuelPumpStates)
         .Concat(new[] { WeatherRadarModeState, AutobrakeMaxState })
         .Concat(new[] { SpoilersArmedState, GearHandleState })
+        .Concat(new[]
+        {
+            CaptainAltimeterStandardState,
+            FirstOfficerAltimeterStandardState,
+            StandbyAltimeterStandardState
+        })
         .ToArray();
     public const string HydraulicEngine1State = "a310_hyd_eng1_switch_pos";
     public const string HydraulicEngine1AState = "a310_hyd_eng1_a_switch_pos";

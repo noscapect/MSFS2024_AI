@@ -70,6 +70,7 @@ internal sealed class CopilotService : Form
     private readonly SayIntentionsClient _sayIntentionsClient = new();
     private readonly GsxInstallation? _gsxInstallation = GsxInstallation.Discover();
     private readonly GsxOwnershipLease _gsxOwnershipLease = new();
+    private readonly GsxStatusTracker _gsxStatusTracker = new();
     private GsxFileReader? _gsxFileReader;
     private bool _gsxCouatlStarted;
     private bool _gsxRemoteControlActive;
@@ -99,7 +100,6 @@ internal sealed class CopilotService : Form
     private bool _gsxMenuOpen;
     private GsxMenuSnapshot _gsxMenu =
         new(string.Empty, Array.Empty<string>());
-    private IReadOnlyList<string> _gsxTooltip = Array.Empty<string>();
     private Form? _gsxChoiceDialog;
     private readonly object _sayIntentionsVoiceQueueSync = new();
     private Task _sayIntentionsVoiceTail = Task.CompletedTask;
@@ -2080,11 +2080,30 @@ internal sealed class CopilotService : Form
                 HandleGsxMenuEvent(data.dwData);
                 break;
             case CopilotEvent.GsxExternalSystemSet:
-                _gsxTooltip = _gsxFileReader?.ReadTooltip()
+                var tooltip = _gsxFileReader?.ReadTooltip()
                               ?? Array.Empty<string>();
-                if (_gsxTooltip.Count > 0)
+                if (data.dwData == 0)
                 {
-                    AppLog.Write("GSX status: " + string.Join(" | ", _gsxTooltip));
+                    _gsxStatusTracker.Update(
+                        Array.Empty<string>(),
+                        TimeSpan.Zero,
+                        DateTime.UtcNow);
+                }
+                else if (tooltip.Count > 0)
+                {
+                    _gsxStatusTracker.Update(
+                        tooltip,
+                        TimeSpan.FromSeconds(data.dwData),
+                        DateTime.UtcNow);
+                    AppLog.Write("GSX status: " + string.Join(" | ", tooltip));
+                    InvalidateHiddenGsxMenuAfterStatusChange();
+                }
+                else
+                {
+                    // GSX supplied a positive notification lifetime, so an
+                    // empty read is an I/O race rather than a cleared status.
+                    AppLog.Write(
+                        "GSX notification file was temporarily unavailable; retaining the previous live status.");
                 }
                 HandleGsxStatusPrompt();
                 UpdateDashboard();
@@ -2096,7 +2115,8 @@ internal sealed class CopilotService : Form
     private void HandleGsxStatusPrompt()
     {
         var needsConfirmation =
-            GsxPromptPolicy.RequiresGoodEngineStartMenu(_gsxTooltip);
+            GsxPromptPolicy.RequiresGoodEngineStartMenu(
+                _gsxStatusTracker.CurrentNotifications(DateTime.UtcNow));
         if (!needsConfirmation)
         {
             ClearGsxGoodEngineStartPrompt();
@@ -2142,6 +2162,25 @@ internal sealed class CopilotService : Form
         _gsxGoodEngineStartMenuRequested = false;
         _gsxGoodEngineStartPromptPending = false;
         _gsxGoodEngineStartWaitingLogged = false;
+    }
+
+    private void InvalidateHiddenGsxMenuAfterStatusChange()
+    {
+        if (!_gsxMenuHiddenLogged)
+        {
+            return;
+        }
+
+        FailPendingGsxChoice(
+            "GSX advanced to a new status before the selected response could be submitted.");
+        _gsxMenuOpen = false;
+        _gsxMenuHiddenLogged = false;
+        _gsxMenu = new GsxMenuSnapshot(
+            string.Empty,
+            Array.Empty<string>());
+        CloseGsxChoiceDialog();
+        AppLog.Write(
+            "Cleared the hidden GSX question because GSX published a newer status.");
     }
 
     private void HandleGsxMenuEvent(uint eventData)
@@ -2196,11 +2235,17 @@ internal sealed class CopilotService : Form
                 // The GSX SDK defines event 2 as hideMenu(), not as a
                 // cancellation. Keep the cached question and our remote UI
                 // available so the captain can still return a choice.
-                if (!_gsxMenuHiddenLogged)
+                if (_gsxMenuOpen && !_gsxMenuHiddenLogged)
                 {
                     AppLog.Write(
                         "GSX requested that its menu be hidden; retaining the pending remote response.");
                     _gsxMenuHiddenLogged = true;
+                }
+                else if (!_gsxMenuOpen)
+                {
+                    // hideMenu() is also GSX's acknowledgement after a
+                    // submitted choice. It must not resurrect that question.
+                    _gsxMenuHiddenLogged = false;
                 }
                 CompleteGsxChoiceAcknowledgement();
                 break;
@@ -2353,6 +2398,7 @@ internal sealed class CopilotService : Form
     {
         SetGsxValue(Definition.GsxMenuChoice, choice);
         _gsxMenuOpen = false;
+        _gsxMenuHiddenLogged = false;
         if (_gsxGoodEngineStartPromptPending && choice >= 0)
         {
             ClearGsxGoodEngineStartPrompt();
@@ -2612,7 +2658,11 @@ internal sealed class CopilotService : Form
 
     private bool TryAutoConfirmGsxGoodEngineStart()
     {
-        if (!_gsxMenuOpen
+        if (!GsxPromptPolicy.CanAnswerGoodEngineStart(
+                _gsxGoodEngineStartPromptPending,
+                _gsxStatusTracker.CurrentNotifications(DateTime.UtcNow),
+                _gsxMenu)
+            || !_gsxMenuOpen
             || _gsxMenu.IsEmpty
             || _state == null)
         {
@@ -2640,8 +2690,15 @@ internal sealed class CopilotService : Form
         }
 
         var label = _gsxMenu.Choices[choice.Value];
-        SendGsxMenuChoice(choice.Value, label);
+        var refreshRequired = _gsxMenuHiddenLogged;
+        RequestGsxMenuChoice(choice.Value, label, null);
         CloseGsxChoiceDialog();
+        if (refreshRequired)
+        {
+            AppLog.Write(
+                $"Refreshing the hidden GSX good-engine-start question before submitting: {label}.");
+            return true;
+        }
         AppendDashboardLog(
             "First Officer confirmed good engine start to GSX.");
         AppLog.Write(
@@ -9569,6 +9626,7 @@ internal sealed class CopilotService : Form
         _gsxDeboardingRequestedThisFlight = false;
         _gsxDepartureRequestAccepted = false;
         _gsxDepartureRequestAcceptedUtc = null;
+        _gsxStatusTracker.Reset();
         ClearGsxGoodEngineStartPrompt();
         _pendingGsxEngineStartProcedure = null;
         _pendingGsxArrivalStand = null;
@@ -17303,6 +17361,10 @@ internal sealed class CopilotService : Form
     private void UpdateGsxStatus(bool couatlStarted)
     {
         _gsxCouatlStarted = couatlStarted;
+        if (!couatlStarted)
+        {
+            _gsxStatusTracker.Reset();
+        }
         if (_gsxInstallation != null && _gsxFileReader == null)
         {
             _gsxFileReader = new GsxFileReader(_gsxInstallation);
@@ -17320,7 +17382,7 @@ internal sealed class CopilotService : Form
         }
 
         var liveState = GsxLiveStatusFormatter.Format(
-            _gsxTooltip,
+            _gsxStatusTracker.Snapshot(DateTime.UtcNow),
             _gsxMenu,
             _settings.EnableGsxIntegration,
             _gsxInstallation != null,
@@ -18392,7 +18454,7 @@ internal sealed class CopilotService : Form
     private GsxLiveState GetGsxLiveState()
     {
         var gsx = GsxLiveStatusFormatter.Format(
-            _gsxTooltip,
+            _gsxStatusTracker.Snapshot(DateTime.UtcNow),
             _gsxMenuOpen ? _gsxMenu : null,
             _settings.EnableGsxIntegration,
             _gsxInstallation != null,
@@ -20426,8 +20488,9 @@ internal sealed class CopilotService : Form
 
     private string FormatGsxPushbackWaitingReason()
     {
-        var status = _gsxTooltip.Count > 0
-            ? string.Join(" | ", _gsxTooltip)
+        var tooltip = _gsxStatusTracker.Snapshot(DateTime.UtcNow);
+        var status = tooltip.Count > 0
+            ? string.Join(" | ", tooltip)
             : "GSX is preparing the tug.";
         var appearsStalled = _gsxDepartureRequestAcceptedUtc.HasValue
                              && DateTime.UtcNow - _gsxDepartureRequestAcceptedUtc.Value
@@ -21050,7 +21113,9 @@ internal sealed class CopilotService : Form
             }
             case "gsx_menu_choice":
             {
+                var choiceIndex = command.ChoiceIndex ?? -1;
                 if (!_settings.EnableGsxIntegration
+                    || !_gsxMenuOpen
                     || _gsxMenu.IsEmpty
                     || GsxPromptPolicy.IsRootServicesMenu(_gsxMenu))
                 {
@@ -21061,8 +21126,10 @@ internal sealed class CopilotService : Form
                     return;
                 }
 
-                var choiceIndex = command.ChoiceIndex ?? -1;
-                if (choiceIndex < 0 || choiceIndex >= _gsxMenu.Choices.Count)
+                if (!GsxPromptPolicy.CanSubmitRemoteChoice(
+                        _gsxMenuOpen,
+                        _gsxMenu,
+                        choiceIndex))
                 {
                     SendEfbCommandResult(
                         command.RequestId,

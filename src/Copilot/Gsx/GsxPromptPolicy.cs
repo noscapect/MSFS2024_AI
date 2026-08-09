@@ -74,6 +74,24 @@ internal static class GsxPromptPolicy
         return null;
     }
 
+    public static bool CanAnswerGoodEngineStart(
+        bool promptPending,
+        IReadOnlyList<string> currentNotifications,
+        GsxMenuSnapshot menu) =>
+        promptPending
+        && RequiresGoodEngineStartMenu(currentNotifications)
+        && FindGoodEngineStartConfirmation(menu).HasValue;
+
+    public static bool CanSubmitRemoteChoice(
+        bool menuOpen,
+        GsxMenuSnapshot menu,
+        int choiceIndex) =>
+        menuOpen
+        && !menu.IsEmpty
+        && !IsRootServicesMenu(menu)
+        && choiceIndex >= 0
+        && choiceIndex < menu.Choices.Count;
+
     public static int? FindMatchingChoice(
         GsxMenuSnapshot menu,
         string expectedTitle,

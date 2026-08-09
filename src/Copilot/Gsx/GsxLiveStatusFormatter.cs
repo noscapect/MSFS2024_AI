@@ -112,7 +112,12 @@ internal static class GsxLiveStatusFormatter
         }
         state.BoardingInProgress = boardingLines.Count > 0
                                    && !state.BoardingComplete;
+        var deboardingCompleteFromCount =
+            state.PassengerCurrent.HasValue
+            && state.PassengerTotal.HasValue
+            && state.PassengerCurrent.Value >= state.PassengerTotal.Value;
         state.DeboardingInProgress = isDeboarding
+                                     && !deboardingCompleteFromCount
                                      && !deboardingLines.Any(line =>
                                          line.IndexOf("deboarding complete", StringComparison.OrdinalIgnoreCase) >= 0
                                          || line.IndexOf("deboarding completed", StringComparison.OrdinalIgnoreCase) >= 0
@@ -158,9 +163,19 @@ internal static class GsxLiveStatusFormatter
         }
 
         // Summary string
-        if (state.PassengerProgressText != null && isDeboarding)
+        if (state.PassengerProgressText != null
+            && isDeboarding
+            && !state.DeboardingInProgress)
+        {
+            state.SummaryText = $"Deboarding completed ({state.PassengerProgressText})";
+        }
+        else if (state.PassengerProgressText != null && isDeboarding)
         {
             state.SummaryText = $"Deboarding in progress ({state.PassengerProgressText})";
+        }
+        else if (state.PassengerProgressText != null && state.BoardingComplete)
+        {
+            state.SummaryText = $"Boarding completed ({state.PassengerProgressText})";
         }
         else if (state.PassengerProgressText != null && isBoarding)
         {

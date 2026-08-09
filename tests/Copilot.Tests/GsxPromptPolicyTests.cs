@@ -6,6 +6,51 @@ namespace Msfs2024Ai.Copilot.Tests;
 [TestClass]
 public sealed class GsxPromptPolicyTests
 {
+    [TestMethod]
+    public void CachedGoodEngineMenuCannotBeAnsweredAfterStatusAdvances()
+    {
+        var menu = new GsxMenuSnapshot(
+            "Interrupt pushback?",
+            new[]
+            {
+                "Confirm good engine Start",
+                "Stop here and complete pushback procedure"
+            });
+
+        Assert.IsFalse(GsxPromptPolicy.CanAnswerGoodEngineStart(
+            true,
+            new[] { "[GSX] Have a good trip" },
+            menu));
+    }
+
+    [TestMethod]
+    public void LiveGoodEngineMenuCanBeAnsweredWhilePromptIsCurrent()
+    {
+        var menu = new GsxMenuSnapshot(
+            "Interrupt pushback?",
+            new[] { "Confirm good engine Start", "Abort pushback" });
+
+        Assert.IsTrue(GsxPromptPolicy.CanAnswerGoodEngineStart(
+            true,
+            new[]
+            {
+                "[GSX] Waiting your confirmation for good engine start (Confirm from the GSX Menu)"
+            },
+            menu));
+    }
+
+    [TestMethod]
+    public void ClosedCachedMenuCannotAcceptRemoteChoice()
+    {
+        var menu = new GsxMenuSnapshot(
+            "Select handling operator",
+            new[] { "Operator A", "Operator B" });
+
+        Assert.IsFalse(GsxPromptPolicy.CanSubmitRemoteChoice(false, menu, 0));
+        Assert.IsTrue(GsxPromptPolicy.CanSubmitRemoteChoice(true, menu, 0));
+        Assert.IsFalse(GsxPromptPolicy.CanSubmitRemoteChoice(true, menu, 2));
+    }
+
     [DataTestMethod]
     [DataRow("[GSX] Waiting your confirmation for good engine start (Confirm from the GSX Menu)")]
     [DataRow("Confirm good engine Start")]

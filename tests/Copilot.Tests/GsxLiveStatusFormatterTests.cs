@@ -49,6 +49,20 @@ public sealed class GsxLiveStatusFormatterTests
     }
 
     [TestMethod]
+    public void MarksDeboardingCompleteWhenPassengerTotalIsReached()
+    {
+        var state = GsxLiveStatusFormatter.Format(
+            new[] { "[GSX] 148/148 passengers deboarded" },
+            null,
+            true,
+            true,
+            true);
+
+        Assert.IsFalse(state.DeboardingInProgress);
+        Assert.IsTrue(state.SummaryText.StartsWith("Deboarding completed"));
+    }
+
+    [TestMethod]
     public void MarksBoardingCompleteWhenPassengerTotalIsReached()
     {
         var state = GsxLiveStatusFormatter.Format(
@@ -60,6 +74,7 @@ public sealed class GsxLiveStatusFormatterTests
 
         Assert.IsTrue(state.BoardingComplete);
         Assert.IsFalse(state.BoardingInProgress);
+        Assert.IsTrue(state.SummaryText.StartsWith("Boarding completed"));
     }
 
     [TestMethod]

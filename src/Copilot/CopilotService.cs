@@ -87,6 +87,7 @@ internal sealed class CopilotService : Form
     private bool _gsxGoodEngineStartPromptPending;
     private bool _gsxGoodEngineStartWaitingLogged;
     private bool _gsxMenuHiddenLogged;
+    private DateTime _gsxMenuReceivedUtc = DateTime.MinValue;
     private string? _pendingGsxChoiceTitle;
     private string? _pendingGsxChoiceLabel;
     private string? _pendingGsxChoiceRequestId;
@@ -2175,6 +2176,7 @@ internal sealed class CopilotService : Form
             "GSX advanced to a new status before the selected response could be submitted.");
         _gsxMenuOpen = false;
         _gsxMenuHiddenLogged = false;
+        _gsxMenuReceivedUtc = DateTime.MinValue;
         _gsxMenu = new GsxMenuSnapshot(
             string.Empty,
             Array.Empty<string>());
@@ -2200,6 +2202,7 @@ internal sealed class CopilotService : Form
                 _gsxMenuOpen = !_gsxMenu.IsEmpty;
                 if (_gsxMenuOpen)
                 {
+                    _gsxMenuReceivedUtc = DateTime.UtcNow;
                     AppLog.Write(
                         $"GSX menu: {_gsxMenu.Title} | "
                         + string.Join(" | ", _gsxMenu.Choices));
@@ -2256,6 +2259,7 @@ internal sealed class CopilotService : Form
                     "GSX closed or timed out the question before accepting the selection.");
                 _gsxMenuOpen = false;
                 _gsxMenuHiddenLogged = false;
+                _gsxMenuReceivedUtc = DateTime.MinValue;
                 _gsxMenu = new GsxMenuSnapshot(
                     string.Empty,
                     Array.Empty<string>());
@@ -2399,6 +2403,7 @@ internal sealed class CopilotService : Form
         SetGsxValue(Definition.GsxMenuChoice, choice);
         _gsxMenuOpen = false;
         _gsxMenuHiddenLogged = false;
+        _gsxMenuReceivedUtc = DateTime.MinValue;
         if (_gsxGoodEngineStartPromptPending && choice >= 0)
         {
             ClearGsxGoodEngineStartPrompt();
@@ -2520,6 +2525,18 @@ internal sealed class CopilotService : Form
                     false,
                     "Another GSX response is already being submitted.");
             }
+            return;
+        }
+
+        if (GsxPromptPolicy.CanSubmitRecentHiddenChoice(
+                _gsxMenuOpen,
+                _gsxMenuHiddenLogged,
+                _gsxMenuReceivedUtc,
+                DateTime.UtcNow))
+        {
+            AppLog.Write(
+                $"Submitting recent hidden GSX question directly: '{label}'.");
+            SubmitLiveGsxChoice(choice, label, requestId);
             return;
         }
 

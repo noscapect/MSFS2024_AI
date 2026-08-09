@@ -2,6 +2,9 @@ namespace Msfs2024Ai.Copilot.Gsx;
 
 internal static class GsxPromptPolicy
 {
+    private static readonly TimeSpan HiddenRemoteChoiceLifetime =
+        TimeSpan.FromSeconds(25);
+
     public static bool IsRootServicesMenu(GsxMenuSnapshot menu)
     {
         if (menu.IsEmpty)
@@ -91,6 +94,17 @@ internal static class GsxPromptPolicy
         && !IsRootServicesMenu(menu)
         && choiceIndex >= 0
         && choiceIndex < menu.Choices.Count;
+
+    public static bool CanSubmitRecentHiddenChoice(
+        bool menuOpen,
+        bool menuHidden,
+        DateTime menuReceivedUtc,
+        DateTime utcNow) =>
+        menuOpen
+        && menuHidden
+        && menuReceivedUtc != DateTime.MinValue
+        && utcNow >= menuReceivedUtc
+        && utcNow - menuReceivedUtc <= HiddenRemoteChoiceLifetime;
 
     public static int? FindMatchingChoice(
         GsxMenuSnapshot menu,

@@ -11,6 +11,7 @@ internal sealed class AircraftState
     public bool OnGround { get; set; }
     public double GroundSpeedKnots { get; set; }
     public double? LongitudinalVelocityKnots { get; set; }
+    public double MagneticHeadingDegrees { get; set; }
     public bool ForwardTaxiDetected =>
         OnGround
         && !ParkingBrakeSet
@@ -156,6 +157,7 @@ internal sealed class AircraftState
     public bool CaptainAltimeterStandard { get; set; }
     public bool FirstOfficerAltimeterStandard { get; set; }
     public double IndicatedAirspeedKnots { get; set; }
+    public double AutopilotSelectedAirspeedKnots { get; set; }
     public int TakeoffV1SpeedKnots { get; set; }
     public int TakeoffRotateSpeedKnots { get; set; }
     public int? TakeoffV2SpeedKnots { get; set; }
@@ -186,6 +188,8 @@ internal sealed class AircraftState
     public string SimBriefFuelStatus { get; set; } = "No active SimBrief flight";
     public string SimBriefTakeoffStatus { get; set; } = "No active SimBrief flight";
     public bool SayIntentionsAtcActive { get; set; }
+    public string SayIntentionsApproachRunway { get; set; } = "";
+    public bool SayIntentionsApproachIsIls { get; set; }
     public double? ApproachDistanceToTouchdownNm { get; set; }
     public string ApproachDistanceSource { get; set; } = "";
     public int ApproachFlaps1DistanceNm { get; set; } = 15;

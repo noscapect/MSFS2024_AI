@@ -188,6 +188,7 @@ public sealed class A310ProcedureLibraryTests
             .Where(step => step.Kind == ProcedureStepKind.AutomaticAction)
             .ToDictionary(step => step.Id, step => step.Command);
         Assert.AreEqual("a310 gear up", automaticCommands["fo-gear-up"]);
+        Assert.AreEqual("a310 flaps retract", automaticCommands["slats-zero"]);
         Assert.AreEqual("a310 speedbrake disarm", automaticCommands["fo-ground-spoilers-disarm"]);
         Assert.AreEqual("a310 packs on", automaticCommands["packs-on"]);
         Assert.AreEqual("a310 climb-lights", automaticCommands["climb-lights"]);
@@ -199,7 +200,22 @@ public sealed class A310ProcedureLibraryTests
             .Where(step => step.Kind == ProcedureStepKind.ManualAction)
             .Select(step => step.Id)
             .ToArray();
-        CollectionAssert.AreEqual(new[] { "slats-zero" }, blockingManualSteps);
+        Assert.AreEqual(0, blockingManualSteps.Length);
+
+        var speedGate = A310ProcedureLibrary.TakeoffAndClimb.Steps
+            .Single(step => step.Id == "slats-retraction-speed");
+        Assert.IsFalse(speedGate.IsComplete(new AircraftState
+        {
+            OnGround = false,
+            TakeoffV2SpeedKnots = 146,
+            IndicatedAirspeedKnots = 185
+        }));
+        Assert.IsTrue(speedGate.IsComplete(new AircraftState
+        {
+            OnGround = false,
+            TakeoffV2SpeedKnots = 146,
+            IndicatedAirspeedKnots = 186
+        }));
     }
 
     [TestMethod]
@@ -292,6 +308,10 @@ public sealed class A310ProcedureLibraryTests
             .ToDictionary(step => step.Id, step => step.Command);
 
         Assert.AreEqual("a310 approach-lights", automatic["approach-signs-lights"]);
+        Assert.AreEqual("a310 speed 230", automatic["speed-230"]);
+        Assert.AreEqual("a310 speed 210", automatic["speed-210"]);
+        Assert.AreEqual("a310 speed 195", automatic["speed-195"]);
+        Assert.AreEqual("a310 speed 180", automatic["speed-180"]);
         Assert.AreEqual("a310 flaps 15-0", automatic["slats-15"]);
         Assert.AreEqual("a310 flaps 15-15", automatic["flaps-15"]);
         Assert.AreEqual("a310 gear down", automatic["fo-gear-down"]);
@@ -300,6 +320,48 @@ public sealed class A310ProcedureLibraryTests
         Assert.AreEqual("a310 flaps 30-40", automatic["flaps-40"]);
         Assert.IsFalse(A310ProcedureLibrary.ApproachAndLanding.Steps.Any(
             step => step.Kind == ProcedureStepKind.ManualAction));
+    }
+
+    [TestMethod]
+    public void ApproachStartsDecelerationAndConfigurationEarlierWithoutDistance()
+    {
+        var flow = A310ProcedureLibrary.ApproachAndLanding;
+        var speed = flow.Steps.Single(step => step.Id == "speed-230");
+        var slatsPoint = flow.Steps.Single(step => step.Id == "slats-point");
+
+        Assert.IsFalse(speed.IsComplete(new AircraftState
+        {
+            AutopilotSelectedAirspeedKnots = 250
+        }));
+        Assert.IsTrue(speed.IsComplete(new AircraftState
+        {
+            AutopilotSelectedAirspeedKnots = 230
+        }));
+        Assert.IsTrue(slatsPoint.IsComplete(new AircraftState
+        {
+            ApproachDistanceToTouchdownNm = null,
+            ApproachFlaps1AltitudeFeet = 5000,
+            AltitudeAboveGroundFeet = 5000
+        }));
+    }
+
+    [TestMethod]
+    public void IlsSafetyGateRequiresLiveGuidanceMatchingAssignedRunway()
+    {
+        var gate = A310ProcedureLibrary.ApproachAndLanding.Steps
+            .Single(step => step.Id == "ils-guidance-ready");
+        var state = new AircraftState
+        {
+            SayIntentionsApproachRunway = "06",
+            SayIntentionsApproachIsIls = true,
+            Nav1HasLocalizer = true,
+            Nav1HasGlideslope = true,
+            Nav1CourseDegrees = 0
+        };
+
+        Assert.IsFalse(gate.IsComplete(state));
+        state.Nav1CourseDegrees = 58;
+        Assert.IsTrue(gate.IsComplete(state));
     }
 
     [TestMethod]

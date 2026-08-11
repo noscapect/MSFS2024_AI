@@ -11,13 +11,20 @@ public sealed class SimBriefJsonMapperTests
       "params": { "time_generated": "1752500000", "units": "kgs", "airac": "2507" },
       "general": {
         "icao_airline": "KLM", "flight_number": "1234", "route": "NORKU N873 BETUS",
+        "route_navigraph": "NORKU N873 BETUS", "sid_ident": "NORK2S",
+        "sid_trans": "NORKU", "star_ident": "BETU2A", "star_trans": "BETUS",
         "initial_altitude": "35000", "costindex": "18"
       },
       "aircraft": { "icaocode": "A20N", "reg": "PH-ABC", "max_passengers": "180" },
-      "origin": { "icao_code": "EHAM", "plan_rwy": "24", "trans_alt": "3000" },
-      "destination": { "icao_code": "EBBR", "plan_rwy": "25L" },
+      "origin": { "icao_code": "EHAM", "plan_rwy": "24", "trans_alt": "3000", "trans_level": "4500" },
+      "destination": { "icao_code": "EBBR", "plan_rwy": "25L", "trans_alt": "4500", "trans_level": "5500" },
       "alternate": { "icao_code": "EHEH" },
       "fuel": { "taxi": "250", "plan_takeoff": "7873", "plan_ramp": "8123", "plan_landing": "4200" },
+      "navlog": { "fix": [{
+        "ident": "NORKU", "name": "NORKU", "type": "wpt", "stage": "CLB",
+        "via_airway": "NORK2S", "icao_region": "EH", "pos_lat": "52.1234",
+        "pos_long": "4.5678", "altitude_feet": "12000", "is_sid_star": "1"
+      }]},
       "weights": {
         "pax_count": "166", "pax_count_actual": "164",
         "bag_count": "166", "bag_count_actual": "160",
@@ -41,6 +48,14 @@ public sealed class SimBriefJsonMapperTests
         Assert.AreEqual("EBBR", plan.DestinationIcao);
         Assert.AreEqual(35000, plan.CruiseAltitudeFeet);
         Assert.AreEqual(3000, plan.TransitionAltitudeFeet);
+        Assert.AreEqual(4500, plan.OriginTransitionLevelFeet);
+        Assert.AreEqual(4500, plan.DestinationTransitionAltitudeFeet);
+        Assert.AreEqual(5500, plan.DestinationTransitionLevelFeet);
+        Assert.AreEqual("NORK2S", plan.SidIdentifier);
+        Assert.AreEqual("NORKU", plan.SidTransition);
+        Assert.AreEqual("BETU2A", plan.StarIdentifier);
+        Assert.AreEqual("BETUS", plan.StarTransition);
+        Assert.AreEqual("NORKU N873 BETUS", plan.NavigraphRoute);
         Assert.AreEqual(137, plan.TakeoffV1Knots);
         Assert.AreEqual(139, plan.TakeoffVrKnots);
         Assert.AreEqual(143, plan.TakeoffV2Knots);
@@ -63,6 +78,13 @@ public sealed class SimBriefJsonMapperTests
         Assert.AreEqual(67549d, plan.TakeoffWeight);
         Assert.AreEqual(63876d, plan.LandingWeight);
         Assert.AreEqual(imported, plan.ImportedUtc);
+        Assert.AreEqual(1, plan.Navlog.Count);
+        Assert.AreEqual("NORKU", plan.Navlog[0].Identifier);
+        Assert.AreEqual("NORK2S", plan.Navlog[0].ViaAirway);
+        Assert.AreEqual(52.1234, plan.Navlog[0].Latitude);
+        Assert.AreEqual(4.5678, plan.Navlog[0].Longitude);
+        Assert.AreEqual(12000, plan.Navlog[0].AltitudeFeet);
+        Assert.IsTrue(plan.Navlog[0].IsSidStar);
     }
 
     [TestMethod]
@@ -75,5 +97,6 @@ public sealed class SimBriefJsonMapperTests
         Assert.IsNull(plan.TakeoffV1Knots);
         Assert.IsNull(plan.TransitionAltitudeFeet);
         Assert.AreEqual("", plan.AlternateIcao);
+        Assert.AreEqual(0, plan.Navlog.Count);
     }
 }

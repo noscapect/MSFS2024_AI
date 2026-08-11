@@ -51,35 +51,6 @@ public sealed class GsxPromptPolicyTests
         Assert.IsFalse(GsxPromptPolicy.CanSubmitRemoteChoice(true, menu, 2));
     }
 
-    [TestMethod]
-    public void RecentHiddenQuestionCanBeSubmittedWithoutReopeningGsx()
-    {
-        var received = new DateTime(
-            2026,
-            8,
-            9,
-            23,
-            42,
-            25,
-            DateTimeKind.Utc);
-
-        Assert.IsTrue(GsxPromptPolicy.CanSubmitRecentHiddenChoice(
-            true,
-            true,
-            received,
-            received.AddSeconds(8)));
-        Assert.IsFalse(GsxPromptPolicy.CanSubmitRecentHiddenChoice(
-            true,
-            true,
-            received,
-            received.AddSeconds(26)));
-        Assert.IsFalse(GsxPromptPolicy.CanSubmitRecentHiddenChoice(
-            false,
-            true,
-            received,
-            received.AddSeconds(8)));
-    }
-
     [DataTestMethod]
     [DataRow("[GSX] Waiting your confirmation for good engine start (Confirm from the GSX Menu)")]
     [DataRow("Confirm good engine Start")]

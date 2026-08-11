@@ -98,6 +98,8 @@ internal sealed class CopilotService : Form
     private ProcedureDefinition? _pendingGsxEngineStartProcedure;
     private string? _pendingGsxArrivalStand;
     private string? _selectedGsxArrivalStand;
+    private double? _sayIntentionsPushbackTargetHeadingDegrees;
+    private DateTime _sayIntentionsPushbackTargetCapturedUtc = DateTime.MinValue;
     private bool _gsxMenuOpen;
     private GsxMenuSnapshot _gsxMenu =
         new(string.Empty, Array.Empty<string>());
@@ -622,6 +624,8 @@ internal sealed class CopilotService : Form
     private bool _sayIntentionsHandoffInProgress;
     private string? _sayIntentionsCommunicationSessionKey;
     private long _sayIntentionsLastCommunicationId;
+    private string _sayIntentionsApproachRunway = "";
+    private bool _sayIntentionsApproachIsIls;
     private readonly SayIntentionsCommunicationTracker
         _sayIntentionsCommunicationTracker = new();
     private ImportedFlightPlan? _simBriefFlightPlan;
@@ -1119,6 +1123,7 @@ internal sealed class CopilotService : Form
         GearUp,
         GearDown,
         RotorBrake,
+        SetAutopilotAirspeed,
         GsxExternalSystemSet = 400,
         GsxExternalSystemToggle = 401
     }
@@ -1164,6 +1169,7 @@ internal sealed class CopilotService : Form
         public double OnGround;
         public double GroundSpeed;
         public double LongitudinalVelocity;
+        public double MagneticHeading;
         public double Engine1Combustion;
         public double Engine2Combustion;
         public double Engine1Starter;
@@ -1232,6 +1238,7 @@ internal sealed class CopilotService : Form
         public double AltitudeAboveGround;
         public double IndicatedAltitude;
         public double IndicatedAirspeed;
+        public double AutopilotSelectedAirspeed;
         public double VerticalSpeed;
         public double GForce;
         public double RadioHeight;
@@ -1622,6 +1629,7 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "SIM ON GROUND", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "GROUND VELOCITY", "Knots", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "VELOCITY BODY Z", "Feet per second", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "PLANE HEADING DEGREES MAGNETIC", "Degrees", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "GENERAL ENG COMBUSTION:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "GENERAL ENG COMBUSTION:2", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "GENERAL ENG STARTER ACTIVE:1", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
@@ -1690,6 +1698,7 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "PLANE ALT ABOVE GROUND", "Feet", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "INDICATED ALTITUDE", "Feet", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "AIRSPEED INDICATED", "Knots", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "AUTOPILOT AIRSPEED HOLD VAR", "Knots", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "VERTICAL SPEED", "Feet per minute", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "G FORCE", "GForce", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "RADIO HEIGHT", "Feet", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
@@ -1764,6 +1773,7 @@ internal sealed class CopilotService : Form
         sender.MapClientEventToSimEvent(CopilotEvent.GearUp, "GEAR_UP");
         sender.MapClientEventToSimEvent(CopilotEvent.GearDown, "GEAR_DOWN");
         sender.MapClientEventToSimEvent(CopilotEvent.RotorBrake, "ROTOR_BRAKE");
+        sender.MapClientEventToSimEvent(CopilotEvent.SetAutopilotAirspeed, "AP_SPD_VAR_SET");
         InitializeGsxProtocol(sender);
         InitializeMobiFlight(sender);
         InitializePmdgNg3Sdk(sender);
@@ -2215,6 +2225,7 @@ internal sealed class CopilotService : Form
                 }
                 TrySelectPendingGsxAction();
                 TryAutoSelectGsxArrivalStand();
+                TryAutoSelectSayIntentionsPushbackDirection();
                 if (_gsxMenuOpen)
                 {
                     if (TryAutoConfirmGsxGoodEngineStart())
@@ -2235,22 +2246,27 @@ internal sealed class CopilotService : Form
                 PublishEfbState(force: true);
                 break;
             case 2:
-                // The GSX SDK defines event 2 as hideMenu(), not as a
-                // cancellation. Keep the cached question and our remote UI
-                // available so the captain can still return a choice.
-                if (_gsxMenuOpen && !_gsxMenuHiddenLogged)
+                // The official GSX Remote Control sample makes a hidden menu
+                // non-selectable. Never retain it as an actionable EFB prompt:
+                // Couatl will reject choices submitted after this event.
+                if (_awaitingGsxChoiceAckLabel != null)
                 {
-                    AppLog.Write(
-                        "GSX requested that its menu be hidden; retaining the pending remote response.");
-                    _gsxMenuHiddenLogged = true;
+                    CompleteGsxChoiceAcknowledgement();
                 }
-                else if (!_gsxMenuOpen)
+                else if (_gsxMenuOpen)
                 {
-                    // hideMenu() is also GSX's acknowledgement after a
-                    // submitted choice. It must not resurrect that question.
+                    _gsxMenuOpen = false;
                     _gsxMenuHiddenLogged = false;
+                    _gsxMenuReceivedUtc = DateTime.MinValue;
+                    _gsxMenu = new GsxMenuSnapshot(
+                        string.Empty,
+                        Array.Empty<string>());
+                    CloseGsxChoiceDialog();
+                    AppLog.Write(
+                        "GSX hid the unanswered menu; removed the stale remote question.");
+                    UpdateDashboard();
+                    PublishEfbState(force: true);
                 }
-                CompleteGsxChoiceAcknowledgement();
                 break;
             case 3:
                 FailPendingGsxChoice(
@@ -2528,18 +2544,6 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        if (GsxPromptPolicy.CanSubmitRecentHiddenChoice(
-                _gsxMenuOpen,
-                _gsxMenuHiddenLogged,
-                _gsxMenuReceivedUtc,
-                DateTime.UtcNow))
-        {
-            AppLog.Write(
-                $"Submitting recent hidden GSX question directly: '{label}'.");
-            SubmitLiveGsxChoice(choice, label, requestId);
-            return;
-        }
-
         if (_gsxMenuHiddenLogged)
         {
             _pendingGsxChoiceTitle = _gsxMenu.Title;
@@ -2591,11 +2595,6 @@ internal sealed class CopilotService : Form
         string? requestId)
     {
         SendGsxMenuChoice(choice, label);
-        if (string.IsNullOrWhiteSpace(requestId))
-        {
-            return;
-        }
-
         _awaitingGsxChoiceAckLabel = label;
         _awaitingGsxChoiceAckRequestId = requestId;
         _awaitingGsxChoiceAckDeadlineUtc = DateTime.UtcNow.AddSeconds(6);
@@ -5824,6 +5823,7 @@ internal sealed class CopilotService : Form
             OnGround = raw.OnGround != 0,
             GroundSpeedKnots = raw.GroundSpeed,
             LongitudinalVelocityKnots = raw.LongitudinalVelocity * 0.592483801,
+            MagneticHeadingDegrees = raw.MagneticHeading,
             Engine1Running = isFlyByWireAirbus
                 ? _fbwEngine1State == 1 || (_fbwEngine1N1 ?? (float)raw.Engine1N1) >= 15
                 : isPmdg737
@@ -6247,6 +6247,7 @@ internal sealed class CopilotService : Form
                 ? _a310AltimeterStandardStates[1]!.Value > 0.5f
                 : raw.FirstOfficerBaroStandard != 0,
             IndicatedAirspeedKnots = raw.IndicatedAirspeed,
+            AutopilotSelectedAirspeedKnots = raw.AutopilotSelectedAirspeed,
             TakeoffV1SpeedKnots = effectiveV1,
             TakeoffRotateSpeedKnots = effectiveVr,
             TakeoffV2SpeedKnots = effectiveV2,
@@ -6269,6 +6270,8 @@ internal sealed class CopilotService : Form
             SimBriefTakeoffStatus = SimBriefOperationalContext.TakeoffComparison(activePlan, aircraftVariant, cockpitV1, cockpitVr, cockpitFlaps),
             SayIntentionsAtcActive = _sayIntentionsFlight != null
                                   && _settings.UseSayIntentionsCopilotCommunications,
+            SayIntentionsApproachRunway = _sayIntentionsApproachRunway,
+            SayIntentionsApproachIsIls = _sayIntentionsApproachIsIls,
             ApproachDistanceToTouchdownNm = approachDistance.DistanceNm,
             ApproachDistanceSource = approachDistance.Source,
             ApproachFlaps1DistanceNm = approachSchedule.Flaps1DistanceNm,
@@ -7823,6 +7826,18 @@ internal sealed class CopilotService : Form
             case "approach-lights" when _state?.IsIniBuildsA310 == true:
                 SetA310ApproachLights();
                 break;
+            case "speed 230" when _state?.IsIniBuildsA310 == true:
+                SetA310SelectedAirspeed(230);
+                break;
+            case "speed 210" when _state?.IsIniBuildsA310 == true:
+                SetA310SelectedAirspeed(210);
+                break;
+            case "speed 195" when _state?.IsIniBuildsA310 == true:
+                SetA310SelectedAirspeed(195);
+                break;
+            case "speed 180" when _state?.IsIniBuildsA310 == true:
+                SetA310SelectedAirspeed(180);
+                break;
             case "flaps 15-0" when _state?.IsIniBuildsA310 == true:
                 SetA310FlapsDetent(1, "15/0");
                 break;
@@ -8879,6 +8894,40 @@ internal sealed class CopilotService : Form
         || _pendingGsxChoiceLabel != null
         || _awaitingGsxChoiceAckLabel != null;
 
+    private bool TryAutoSelectSayIntentionsPushbackDirection()
+    {
+        if (!_gsxMenuOpen
+            || _state == null
+            || !_sayIntentionsPushbackTargetHeadingDegrees.HasValue
+            || DateTime.UtcNow - _sayIntentionsPushbackTargetCapturedUtc
+                > TimeSpan.FromMinutes(30))
+        {
+            return false;
+        }
+
+        var targetHeading = _sayIntentionsPushbackTargetHeadingDegrees.Value;
+        var choice = GsxPushbackDirectionCoordinator.FindChoice(
+            _gsxMenu,
+            _state.MagneticHeadingDegrees,
+            targetHeading);
+        if (!choice.HasValue)
+        {
+            return false;
+        }
+
+        var label = _gsxMenu.Choices[choice.Value];
+        var currentHeading = _state.MagneticHeadingDegrees;
+        _sayIntentionsPushbackTargetHeadingDegrees = null;
+        _sayIntentionsPushbackTargetCapturedUtc = DateTime.MinValue;
+        SubmitLiveGsxChoice(choice.Value, label, null);
+        CloseGsxChoiceDialog();
+        AppendDashboardLog(
+            $"Matched SayIntentions 'Face {targetHeading:000}' clearance: sent GSX '{label}'.");
+        AppLog.Write(
+            $"Auto-selected live GSX pushback choice '{label}' from aircraft heading {currentHeading:000.0} to SayIntentions target {targetHeading:000.0}.");
+        return true;
+    }
+
     private void TryStartPendingGsxEngineFlow()
     {
         if (_pendingGsxEngineStartProcedure == null
@@ -9648,6 +9697,8 @@ internal sealed class CopilotService : Form
         _pendingGsxEngineStartProcedure = null;
         _pendingGsxArrivalStand = null;
         _selectedGsxArrivalStand = null;
+        _sayIntentionsPushbackTargetHeadingDegrees = null;
+        _sayIntentionsPushbackTargetCapturedUtc = DateTime.MinValue;
         _pendingGsxAction = null;
         _pendingGsxActionDeadlineUtc = null;
         _procedureSession.ResetProgress(DateTime.UtcNow);
@@ -16394,11 +16445,15 @@ internal sealed class CopilotService : Form
                     StringComparison.Ordinal))
             {
                 _sayIntentionsCommunicationSessionKey = flight.SessionKey;
+                _sayIntentionsApproachRunway = "";
+                _sayIntentionsApproachIsIls = false;
                 _sayIntentionsLastCommunicationId = communications.Count == 0
                     ? 0
                     : communications.Max(item => item.Id);
                 _sayIntentionsCommunicationTracker.Reset();
                 _sayIntentionsCommunicationTracker.Prime(communications);
+                CaptureRecentSayIntentionsPushbackDirection(communications);
+                CaptureRecentSayIntentionsApproach(communications);
                 await TryCompleteCurrentSayIntentionsAtcStepFromHistoryAsync(
                     flight,
                     communications,
@@ -16446,6 +16501,8 @@ internal sealed class CopilotService : Form
                     AppendDashboardLog(
                         $"ATC -> F/O [{station}{frequency}]: "
                         + communication.OutgoingMessage.Trim());
+                    CaptureSayIntentionsPushbackDirection(communication);
+                    CaptureSayIntentionsApproach(communication);
                 }
 
                 if (change.OutgoingChanged || change.IncomingChanged)
@@ -16862,6 +16919,42 @@ internal sealed class CopilotService : Form
             "A310 approach signs and exterior-light sequence sent; awaiting native readback.");
     }
 
+    private void SetA310SelectedAirspeed(int targetKnots)
+    {
+        if (_simConnect == null
+            || _state?.IsIniBuildsA310 != true
+            || _state.OnGround)
+        {
+            AppendDashboardLog(
+                "A310 selected-speed command blocked: airborne A310 state is unavailable.");
+            FinishOneShot(4);
+            return;
+        }
+
+        if (_state.AutopilotSelectedAirspeedKnots is > 0
+            && _state.AutopilotSelectedAirspeedKnots <= targetKnots + 1)
+        {
+            AppendDashboardLog(
+                $"A310 selected speed already {_state.AutopilotSelectedAirspeedKnots:F0} kt; keeping the lower target.");
+            FinishOneShot();
+            return;
+        }
+
+        TransmitSystemEvent(
+            CopilotEvent.SetAutopilotAirspeed,
+            (uint)targetKnots,
+            0);
+        AppendDashboardLog(
+            $"A310 selected speed commanded to {targetKnots} kt; awaiting independent autopilot target readback.");
+        BeginNativeAction(
+            $"A310 selected speed {targetKnots} kt",
+            state => Math.Abs(
+                         state.AutopilotSelectedAirspeedKnots
+                         - targetKnots) <= 1,
+            true,
+            TimeSpan.FromSeconds(8));
+    }
+
     private void SetA310FlapsDetent(int detent, string label)
     {
         if (_state?.IsIniBuildsA310 != true)
@@ -17137,11 +17230,10 @@ internal sealed class CopilotService : Form
         SayIntentionsFlightContext flight,
         IReadOnlyList<SayIntentionsCommunication> communications)
     {
-        if (!CanCoordinateArrivalStandWithGsx())
-        {
-            return;
-        }
-
+        // SayIntentions is authoritative for the assigned arrival stand.
+        // Capture its assignment even while GSX is unavailable or has not
+        // yet delegated Remote Control; the pending stand can be applied as
+        // soon as a compatible GSX position menu appears.
         var assignedStand = communications
             .Where(item => item.Channel.StartsWith(
                 "COM",
@@ -17182,6 +17274,101 @@ internal sealed class CopilotService : Form
         AppLog.Write(
             $"Captured SayIntentions arrival stand {assignedStand} for optional GSX synchronization.");
         TryAutoSelectGsxArrivalStand();
+    }
+
+    private void CaptureRecentSayIntentionsPushbackDirection(
+        IReadOnlyList<SayIntentionsCommunication> communications)
+    {
+        var clearance = communications
+            .Where(item => SayIntentionsAtcResponseClassifier.IsRecent(
+                item.TimestampUtc,
+                DateTimeOffset.UtcNow,
+                TimeSpan.FromMinutes(30)))
+            .Where(item => SayIntentionsAtcResponseClassifier.IsClearanceResponse(
+                "captain-pushback-clearance",
+                item.OutgoingMessage,
+                item.IncomingMessage))
+            .OrderByDescending(item => item.Id)
+            .FirstOrDefault();
+        if (clearance != null)
+        {
+            CaptureSayIntentionsPushbackDirection(clearance);
+        }
+    }
+
+    private void CaptureRecentSayIntentionsApproach(
+        IReadOnlyList<SayIntentionsCommunication> communications)
+    {
+        var assignment = communications
+            .Where(item => item.Channel.StartsWith(
+                "COM",
+                StringComparison.OrdinalIgnoreCase))
+            .Where(item => SayIntentionsAtcResponseClassifier.IsRecent(
+                item.TimestampUtc,
+                DateTimeOffset.UtcNow,
+                TimeSpan.FromHours(2)))
+            .OrderByDescending(item => item.Id)
+            .Select(item => SayIntentionsApproachAssignment.TryParse(
+                    item.OutgoingMessage,
+                    out var parsed)
+                ? parsed
+                : (SayIntentionsApproachAssignment?)null)
+            .FirstOrDefault(item => item.HasValue);
+        if (assignment.HasValue)
+        {
+            CaptureSayIntentionsApproach(assignment.Value);
+        }
+    }
+
+    private void CaptureSayIntentionsApproach(
+        SayIntentionsCommunication communication)
+    {
+        if (SayIntentionsApproachAssignment.TryParse(
+                communication.OutgoingMessage,
+                out var assignment))
+        {
+            CaptureSayIntentionsApproach(assignment);
+        }
+    }
+
+    private void CaptureSayIntentionsApproach(
+        SayIntentionsApproachAssignment assignment)
+    {
+        if (string.Equals(
+                _sayIntentionsApproachRunway,
+                assignment.Runway,
+                StringComparison.OrdinalIgnoreCase)
+            && _sayIntentionsApproachIsIls == assignment.IsIls)
+        {
+            return;
+        }
+
+        _sayIntentionsApproachRunway = assignment.Runway;
+        _sayIntentionsApproachIsIls = assignment.IsIls;
+        AppendDashboardLog(
+            $"SayIntentions approach captured: {(assignment.IsIls ? "ILS " : "")}runway {assignment.Runway}.");
+        AppLog.Write(
+            $"Captured SayIntentions approach assignment: {(assignment.IsIls ? "ILS " : "")}runway {assignment.Runway}.");
+    }
+
+    private void CaptureSayIntentionsPushbackDirection(
+        SayIntentionsCommunication communication)
+    {
+        if (!SayIntentionsAtcResponseClassifier.IsClearanceResponse(
+                "captain-pushback-clearance",
+                communication.OutgoingMessage,
+                communication.IncomingMessage)
+            || !GsxPushbackDirectionCoordinator.TryParseTargetHeading(
+                communication.OutgoingMessage,
+                out var heading))
+        {
+            return;
+        }
+
+        _sayIntentionsPushbackTargetHeadingDegrees = heading;
+        _sayIntentionsPushbackTargetCapturedUtc = DateTime.UtcNow;
+        AppLog.Write(
+            $"Captured SayIntentions pushback target heading {heading:000} degrees magnetic.");
     }
 
     private bool CanCoordinateArrivalStandWithGsx()
@@ -18694,16 +18881,20 @@ internal sealed class CopilotService : Form
         var cruiseLine =
             $"Cruise {(plan.CruiseAltitudeFeet.HasValue ? $"FL{plan.CruiseAltitudeFeet.Value / 100:000}" : "--")} | " +
             $"cost index {plan.CostIndex?.ToString() ?? "--"} | transition altitude {plan.TransitionAltitudeFeet?.ToString("N0") ?? "--"} ft";
-        var arrivalLine =
-            $"Destination {plan.DestinationIcao ?? "--"} runway {plan.DestinationRunway ?? "--"} | alternate {plan.AlternateIcao ?? "--"}";
+        var departureNavigation = SimBriefNavigationSummary.Departure(plan);
+        var arrivalNavigation = SimBriefNavigationSummary.Arrival(plan);
+        var airacLine = SimBriefNavigationSummary.Airac(plan);
+        var navlogLine = SimBriefNavigationSummary.Navlog(plan);
         var comparison = _state?.SimBriefTakeoffStatus ?? "Cockpit comparison available after aircraft connection";
 
         MessageBox.Show(this,
             $"{plan.RouteLabel}  {plan.FlightNumber}\nAircraft {plan.AircraftIcao} {plan.AircraftRegistration}\n\n" +
+            $"NAVIGATION\n{airacLine}\n{departureNavigation}\n{arrivalNavigation}\n{navlogLine}\n\n" +
             $"TAKEOFF\n{takeoffLine}\n{comparison}\n\n" +
             $"FUEL\n{fuelLine}\n\n" +
             $"CRUISE\n{cruiseLine}\n\n" +
-            $"ARRIVAL\n{arrivalLine}\n\nROUTE\n{plan.Route ?? "--"}",
+            $"ALTERNATE\n{(string.IsNullOrWhiteSpace(plan.AlternateIcao) ? "--" : plan.AlternateIcao)}\n\n" +
+            $"ROUTE\n{SimBriefNavigationSummary.PreferredRoute(plan)}",
             "SimBrief operational briefing",
             MessageBoxButtons.OK,
             MessageBoxIcon.Information);
@@ -18853,7 +19044,7 @@ internal sealed class CopilotService : Form
             : "generation time unavailable";
         var cruise = plan.CruiseAltitudeFeet.HasValue ? $"FL{plan.CruiseAltitudeFeet.Value / 100:000}" : "cruise n/a";
         var runways = $"{(string.IsNullOrWhiteSpace(plan.OriginRunway) ? "--" : plan.OriginRunway)} -> {(string.IsNullOrWhiteSpace(plan.DestinationRunway) ? "--" : plan.DestinationRunway)}";
-        return $"{plan.RouteLabel}  {plan.FlightNumber}\nAircraft {plan.AircraftIcao} {plan.AircraftRegistration} | {cruise} | runways {runways}\n{generated}";
+        return $"{plan.RouteLabel}  {plan.FlightNumber}\nAircraft {plan.AircraftIcao} {plan.AircraftRegistration} | {cruise} | runways {runways}\n{SimBriefNavigationSummary.Airac(plan)} | {generated}";
     }
 
     private void ShowSimBriefPayloadOverview()

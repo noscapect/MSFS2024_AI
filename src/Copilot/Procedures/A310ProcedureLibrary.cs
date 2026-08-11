@@ -98,12 +98,65 @@ internal static class A310ProcedureLibrary
         state.ApproachDistanceToTouchdownNm is > 0
         && state.ApproachDistanceToTouchdownNm.Value <= distanceNm;
 
+    private static bool SlatRetractionSpeedReached(AircraftState state) =>
+        !state.OnGround
+        && state.IndicatedAirspeedKnots >=
+            (state.TakeoffV2SpeedKnots ?? 140) + 40;
+
     private static bool ApproachGate(
         AircraftState state,
         int distanceNm,
         bool altitudeFallback) =>
         ApproachDistanceReached(state, distanceNm)
         || (state.ApproachDistanceToTouchdownNm is not > 0 && altitudeFallback);
+
+    private static bool SelectedSpeedAtOrBelow(
+        AircraftState state,
+        int targetKnots) =>
+        state.AutopilotSelectedAirspeedKnots is > 0
+        && state.AutopilotSelectedAirspeedKnots <= targetKnots + 1;
+
+    private static bool IlsGuidanceMatchesSayIntentionsRunway(
+        AircraftState state)
+    {
+        if (!state.SayIntentionsApproachIsIls
+            || string.IsNullOrWhiteSpace(state.SayIntentionsApproachRunway))
+        {
+            return true;
+        }
+
+        var runwayNumberText = new string(
+            state.SayIntentionsApproachRunway
+                .TakeWhile(char.IsDigit)
+                .ToArray());
+        if (!int.TryParse(runwayNumberText, out var runwayNumber))
+        {
+            return false;
+        }
+
+        var expectedCourse = runwayNumber == 36 ? 0 : runwayNumber * 10;
+        return ReceiverMatches(
+                   state.Nav1HasLocalizer,
+                   state.Nav1HasGlideslope,
+                   state.Nav1CourseDegrees,
+                   expectedCourse)
+               || ReceiverMatches(
+                   state.Nav2HasLocalizer,
+                   state.Nav2HasGlideslope,
+                   state.Nav2CourseDegrees,
+                   expectedCourse);
+    }
+
+    private static bool ReceiverMatches(
+        bool hasLocalizer,
+        bool hasGlideslope,
+        double courseDegrees,
+        int expectedCourse)
+    {
+        var difference = Math.Abs(
+            ((courseDegrees - expectedCourse + 540) % 360) - 180);
+        return hasLocalizer && hasGlideslope && difference <= 30;
+    }
 
     public static ProcedureDefinition PowerUpAndInitialSetup { get; } =
         new(
@@ -287,7 +340,8 @@ internal static class A310ProcedureLibrary
                 Observe("thrust-reduction", "Thrust-reduction altitude reached", state => state.AltitudeAboveGroundFeet >= 1000),
                 Advisory("climb-thrust", "Climb thrust established; TRP CL and symmetric thrust checked"),
                 Advisory("flaps-zero", "Flaps remain zero; retract slats at the displayed S speed"),
-                FirstOfficer("slats-zero", "Slats zero at or above S speed", "retract slats to zero at or above S speed.", state => state.FlapsHandleIndex <= 0),
+                Observe("slats-retraction-speed", "Slat-retraction speed reached", SlatRetractionSpeedReached),
+                Automatic("slats-zero", "Slats zero at or above S speed", state => state.FlapsHandleIndex <= 0, "flaps retract"),
                 Automatic("fo-ground-spoilers-disarm", "Spoilers DISARMED", state => !state.GroundSpoilersArmed, "speedbrake disarm"),
                 Advisory("gear-off", "Landing-gear lever retained in the normal retracted position"),
                 Automatic("packs-on", "Packs ON", state => state.A310PacksOn, "packs on"),
@@ -343,10 +397,12 @@ internal static class A310ProcedureLibrary
                 Advisory("qnh", "Set and cross-check destination QNH below transition level"),
                 Observe("below-ten-thousand", "At or below 10,000 feet", state => state.IndicatedAltitudeFeet <= 10000),
                 Automatic("approach-signs-lights", "Seat belts ON and approach lights set", state => state.A310ApproachLightsSet, "approach-lights"),
-                Observe("slats-point", "Slats 15 point", state => ApproachGate(state, state.ApproachFlaps1DistanceNm, state.IndicatedAltitudeFeet <= state.ApproachFlaps1AltitudeFeet)),
+                Automatic("speed-230", "Selected speed 230 kt", state => SelectedSpeedAtOrBelow(state, 230), "speed 230"),
+                Observe("slats-point", "Slats 15 point", state => ApproachGate(state, state.ApproachFlaps1DistanceNm, state.AltitudeAboveGroundFeet <= state.ApproachFlaps1AltitudeFeet)),
                 Observe("slats-speed", "Slats 15 speed safe", state => state.IndicatedAirspeedKnots <= 245),
                 Automatic("slats-15", "Slats 15 / Flaps 0", state => state.FlapsHandleIndex >= 1, "flaps 15-0"),
                 Advisory("land-mode", "Arm LAND when cleared and monitor LOC/G/S capture"),
+                Automatic("speed-210", "Selected speed 210 kt", state => SelectedSpeedAtOrBelow(state, 210), "speed 210"),
                 Observe(
                     "flaps-15-point",
                     "Flaps 15 point",
@@ -354,18 +410,22 @@ internal static class A310ProcedureLibrary
                              || ApproachGate(
                                  state,
                                  state.ApproachFlaps2DistanceNm,
-                                 state.AltitudeAboveGroundFeet <= 2000)),
+                                 state.AltitudeAboveGroundFeet
+                                 <= state.ApproachFlaps2AltitudeAglFeet)),
                 Observe("flaps-15-speed", "Flaps 15 speed safe", state => state.IndicatedAirspeedKnots <= 210),
                 Automatic("flaps-15", "Slats 15 / Flaps 15", state => state.FlapsHandleIndex >= 2, "flaps 15-15"),
                 Automatic("speedbrakes-retracted", "Speedbrakes retracted", state => !state.GroundSpoilersArmed, "speedbrake disarm"),
-                Observe("gear-point", "Latest gear-down point", state => ApproachGate(state, 5, state.AltitudeAboveGroundFeet <= 1800)),
+                Automatic("speed-195", "Selected speed 195 kt", state => SelectedSpeedAtOrBelow(state, 195), "speed 195"),
+                Observe("gear-point", "Latest gear-down point", state => ApproachGate(state, state.ApproachGearDistanceNm, state.AltitudeAboveGroundFeet <= state.ApproachGearAltitudeAglFeet)),
                 Automatic("fo-gear-down", "Landing gear DOWN", state => state.GearHandleDown, "gear down"),
                 Automatic("fo-spoilers-arm", "Ground spoilers ARMED", state => state.GroundSpoilersArmed, "speedbrake arm"),
                 Automatic("nose-to", "Nose light T.O.", state => state.A310NoseLightTakeoff, "nose-light takeoff"),
                 Observe("flaps-20-speed", "Flaps 20 speed safe", state => state.IndicatedAirspeedKnots <= 195),
                 Automatic("flaps-20", "Slats 15 / Flaps 20", state => state.FlapsHandleIndex >= 3, "flaps 15-20"),
+                Automatic("speed-180", "Selected speed 180 kt", state => SelectedSpeedAtOrBelow(state, 180), "speed 180"),
                 Observe("flaps-40-speed", "Landing flap speed safe", state => state.IndicatedAirspeedKnots <= 180),
                 Automatic("flaps-40", "Slats 30 / Flaps 40", state => state.FlapsHandleIndex >= 4, "flaps 30-40"),
+                Observe("ils-guidance-ready", "ILS receiver, glideslope and runway course agree", IlsGuidanceMatchesSayIntentionsRunway),
                 Observe("configured-1000", "Fully configured by 1,000 feet AGL", state => state.AltitudeAboveGroundFeet <= 1000 && state.GearHandleDown && state.FlapsHandleIndex >= 4),
                 Advisory("stable-500", "Stable by 500 feet AGL; go around if unstable"),
                 Observe("fo-approaching-minimums", "Approaching minimums", state => state.DecisionHeightFeet > 0 && state.RadioHeightFeet <= state.DecisionHeightFeet + 100),

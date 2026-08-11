@@ -14,9 +14,17 @@ public sealed class ImportedFlightPlan
     public string OriginRunway { get; set; } = "";
     public string DestinationRunway { get; set; } = "";
     public string Route { get; set; } = "";
+    public string NavigraphRoute { get; set; } = "";
+    public string SidIdentifier { get; set; } = "";
+    public string SidTransition { get; set; } = "";
+    public string StarIdentifier { get; set; } = "";
+    public string StarTransition { get; set; } = "";
     public int? CruiseAltitudeFeet { get; set; }
     public int? CostIndex { get; set; }
     public int? TransitionAltitudeFeet { get; set; }
+    public int? OriginTransitionLevelFeet { get; set; }
+    public int? DestinationTransitionAltitudeFeet { get; set; }
+    public int? DestinationTransitionLevelFeet { get; set; }
     public int? TakeoffV1Knots { get; set; }
     public int? TakeoffVrKnots { get; set; }
     public int? TakeoffV2Knots { get; set; }
@@ -39,9 +47,24 @@ public sealed class ImportedFlightPlan
     public double? TakeoffWeight { get; set; }
     public double? LandingWeight { get; set; }
     public string Units { get; set; } = "";
+    public List<ImportedFlightPlanFix> Navlog { get; set; } = new();
 
     public string RouteLabel =>
         string.IsNullOrWhiteSpace(OriginIcao) || string.IsNullOrWhiteSpace(DestinationIcao)
             ? "Imported flight"
             : $"{OriginIcao}-{DestinationIcao}";
+}
+
+public sealed class ImportedFlightPlanFix
+{
+    public string Identifier { get; set; } = "";
+    public string Name { get; set; } = "";
+    public string Type { get; set; } = "";
+    public string Stage { get; set; } = "";
+    public string ViaAirway { get; set; } = "";
+    public string IcaoRegion { get; set; } = "";
+    public double? Latitude { get; set; }
+    public double? Longitude { get; set; }
+    public int? AltitudeFeet { get; set; }
+    public bool IsSidStar { get; set; }
 }

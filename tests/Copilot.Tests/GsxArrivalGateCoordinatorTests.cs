@@ -95,6 +95,25 @@ public sealed class GsxArrivalGateCoordinatorTests
     }
 
     [TestMethod]
+    public void ExistingWrongGsxFacilityAdvancesToChangeFacility()
+    {
+        var menu = new GsxMenuSnapshot(
+            "Change parking or service",
+            new[]
+            {
+                "Change Facility [Gate E 24]",
+                "Request FollowMe",
+                "Request Progressive Taxi"
+            });
+
+        var selection = GsxArrivalGateCoordinator.FindSelection(menu, "C13");
+
+        Assert.IsNotNull(selection);
+        Assert.AreEqual(0, selection!.ChoiceIndex);
+        Assert.IsFalse(selection.CompletesSelection);
+    }
+
+    [TestMethod]
     public void UnrelatedGsxQuestionIsNeverAnswered()
     {
         var menu = new GsxMenuSnapshot(

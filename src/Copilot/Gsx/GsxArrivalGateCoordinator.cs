@@ -88,6 +88,21 @@ internal static class GsxArrivalGateCoordinator
             }
         }
 
+        if (menu.Title.IndexOf(
+                "change parking or service",
+                StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            for (var index = 0; index < menu.Choices.Count; index++)
+            {
+                if (menu.Choices[index].IndexOf(
+                        "change facility",
+                        StringComparison.OrdinalIgnoreCase) >= 0)
+                {
+                    return new GsxArrivalGateSelection(index, false);
+                }
+            }
+        }
+
         if (menu.Title.StartsWith(
                 "All Gate ",
                 StringComparison.OrdinalIgnoreCase))

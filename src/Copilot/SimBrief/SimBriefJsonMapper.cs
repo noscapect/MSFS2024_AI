@@ -47,9 +47,23 @@ internal static class SimBriefJsonMapper
             Route = FirstText(root,
                 new[] { "general", "route_ifps" },
                 new[] { "general", "route" }),
+            NavigraphRoute = Text(root, "general", "route_navigraph"),
+            SidIdentifier = Text(root, "general", "sid_ident").ToUpperInvariant(),
+            SidTransition = Text(root, "general", "sid_trans").ToUpperInvariant(),
+            StarIdentifier = Text(root, "general", "star_ident").ToUpperInvariant(),
+            StarTransition = Text(root, "general", "star_trans").ToUpperInvariant(),
             CruiseAltitudeFeet = Integer(root, "general", "initial_altitude"),
             CostIndex = Integer(root, "general", "costindex"),
             TransitionAltitudeFeet = Integer(root, "origin", "trans_alt"),
+            OriginTransitionLevelFeet = Integer(root, "origin", "trans_level"),
+            DestinationTransitionAltitudeFeet = Integer(
+                root,
+                "destination",
+                "trans_alt"),
+            DestinationTransitionLevelFeet = Integer(
+                root,
+                "destination",
+                "trans_level"),
             BlockFuel = Number(root, "fuel", "plan_ramp")
                         ?? Number(root, "fuel", "plan_block"),
             TaxiFuel = Number(root, "fuel", "taxi"),
@@ -77,6 +91,42 @@ internal static class SimBriefJsonMapper
         result.TakeoffVrKnots = FindInteger(root, "speeds_vr", "vr");
         result.TakeoffV2Knots = FindInteger(root, "speeds_v2", "v2");
         result.TakeoffFlaps = FindText(root, "flap_setting", "flaps");
+        result.Navlog = Navlog(root);
+        return result;
+    }
+
+    private static List<ImportedFlightPlanFix> Navlog(
+        IDictionary<string, object> root)
+    {
+        var fixes = Value(root, new[] { "navlog", "fix" });
+        if (fixes is not IEnumerable items || fixes is string)
+        {
+            return new List<ImportedFlightPlanFix>();
+        }
+
+        var result = new List<ImportedFlightPlanFix>();
+        foreach (var item in items)
+        {
+            if (item is not IDictionary<string, object> values)
+            {
+                continue;
+            }
+
+            result.Add(new ImportedFlightPlanFix
+            {
+                Identifier = Text(values, "ident").ToUpperInvariant(),
+                Name = Text(values, "name"),
+                Type = Text(values, "type").ToUpperInvariant(),
+                Stage = Text(values, "stage").ToUpperInvariant(),
+                ViaAirway = Text(values, "via_airway").ToUpperInvariant(),
+                IcaoRegion = Text(values, "icao_region").ToUpperInvariant(),
+                Latitude = Number(values, "pos_lat"),
+                Longitude = Number(values, "pos_long"),
+                AltitudeFeet = Integer(values, "altitude_feet"),
+                IsSidStar = Boolean(values, "is_sid_star")
+            });
+        }
+
         return result;
     }
 
@@ -112,6 +162,15 @@ internal static class SimBriefJsonMapper
         return double.TryParse(value, NumberStyles.Float, CultureInfo.InvariantCulture, out var parsed)
             ? parsed
             : null;
+    }
+
+    private static bool Boolean(
+        IDictionary<string, object> root,
+        params string[] path)
+    {
+        var value = Text(root, path);
+        return value.Equals("1", StringComparison.OrdinalIgnoreCase)
+               || value.Equals("true", StringComparison.OrdinalIgnoreCase);
     }
 
     private static DateTime? UnixDate(IDictionary<string, object> root, params string[] path)

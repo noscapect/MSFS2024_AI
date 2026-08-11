@@ -155,6 +155,8 @@ ID or username, and import the latest generated OFP.
 The app uses the OFP as a read-only operational briefing for route, runway,
 cruise, fuel, flap, and takeoff-reference comparisons. It never writes to the
 aircraft FMC or MCDU and will not block a flight if SimBrief is unavailable.
+Pilots with a paid Navigraph subscription can generate the OFP using the current
+AIRAC; the app still connects only to SimBrief and requires no Navigraph login.
 
 ## SayIntentions
 

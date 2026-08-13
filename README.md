@@ -230,9 +230,9 @@ installed or disabled.
   remain manual. Further A310 work is maintenance and field validation rather
   than planned feature development.
 - PMDG 777-300ER integration has started. The app recognizes the installed
-  `777-300ER` title and isolates the official `PMDG_777X` SDK namespace, but it
-  does not yet expose 777 procedures or send cockpit controls. Detection is not
-  a claim of operational support.
+  `777-300ER` title, isolates the official `PMDG_777X` SDK namespace, and
+  exposes a read-only Flow 1 for gate validation. It does not send 777 cockpit
+  controls, and Flow 1 availability is not a claim of gate-to-gate support.
 
 ## Troubleshooting and issue reports
 

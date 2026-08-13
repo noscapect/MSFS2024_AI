@@ -5,6 +5,7 @@ using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA320;
 using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA321;
 using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA330;
 using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA310;
+using Msfs2024Ai.Copilot.AircraftAdapters.Pmdg777;
 using Msfs2024Ai.Copilot.AircraftIdentity;
 using Msfs2024Ai.Copilot.Checklists;
 using Msfs2024Ai.Copilot.Companion;
@@ -149,6 +150,10 @@ internal sealed class CopilotService : Form
     private DateTime? _mobiFlightRuntimeInitializedUtc;
     private bool _pmdgNg3DataReady;
     private PmdgNg3State? _pmdgNg3State;
+    private bool _pmdg777SdkInitialized;
+    private bool _pmdg777DataReady;
+    private Pmdg777SdkData? _pmdg777State;
+    private string? _loggedPmdg777FlowOneSignature;
     private byte? _loggedPmdgBatterySelector;
     private bool? _loggedPmdgGroundPowerAvailable;
     private bool? _loggedPmdgGroundPowerOn;
@@ -904,7 +909,8 @@ internal sealed class CopilotService : Form
         A310FirstOfficerAltimeterStandard = 368,
         A310StandbyAltimeterStandard = 369,
         PmdgNg3Data = 300,
-        PmdgNg3Control = 301
+        PmdgNg3Control = 301,
+        Pmdg777Data = 302
     }
 
     private enum ClientDataArea
@@ -915,7 +921,8 @@ internal sealed class CopilotService : Form
         MobiFlightRuntimeCommand = 111,
         MobiFlightRuntimeResponse = 112,
         PmdgNg3Data = unchecked((int)PmdgNg3DataId),
-        PmdgNg3Control = unchecked((int)PmdgNg3ControlId)
+        PmdgNg3Control = unchecked((int)PmdgNg3ControlId),
+        Pmdg777Data = unchecked((int)Pmdg777ControlProfile.DataId)
     }
 
     private enum ClientDataDefinition
@@ -1104,7 +1111,8 @@ internal sealed class CopilotService : Form
         A310FirstOfficerAltimeterStandard = 290,
         A310StandbyAltimeterStandard = 291,
         PmdgNg3Data = unchecked((int)PmdgNg3DataDefinition),
-        PmdgNg3Control = unchecked((int)PmdgNg3ControlDefinition)
+        PmdgNg3Control = unchecked((int)PmdgNg3ControlDefinition),
+        Pmdg777Data = unchecked((int)Pmdg777ControlProfile.DataDefinition)
     }
 
     private enum CopilotEvent
@@ -1378,6 +1386,13 @@ internal sealed class CopilotService : Form
     {
         public uint Event;
         public uint Parameter;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    private struct Pmdg777RawData
+    {
+        [MarshalAs(UnmanagedType.ByValArray, SizeConst = Pmdg777ControlProfile.DataSize)]
+        public byte[] Data;
     }
 
     private sealed class PmdgNg3State
@@ -3871,6 +3886,28 @@ internal sealed class CopilotService : Form
         }
 
         var request = (Request)data.dwRequestID;
+        if (request == Request.Pmdg777Data)
+        {
+            var raw = (Pmdg777RawData)data.dwData[0];
+            if (!Pmdg777SdkData.TryParse(raw.Data, out var parsed))
+            {
+                AppLog.Write(
+                    $"PMDG 777X SDK data block rejected: expected {Pmdg777ControlProfile.DataSize} bytes, received {raw.Data?.Length ?? 0}.");
+                return;
+            }
+
+            _pmdg777State = parsed;
+            LogPmdg777FlowOneState(parsed);
+            if (!_pmdg777DataReady)
+            {
+                _pmdg777DataReady = true;
+                AppendDashboardLog("PMDG 777X SDK data broadcast received; Flow 1 readbacks active.");
+                AppLog.Write("PMDG 777X SDK data broadcast received; Flow 1 readbacks active.");
+            }
+            ApplyPmdg777SdkState();
+            return;
+        }
+
         if (request == Request.PmdgNg3Data)
         {
             var raw = (PmdgNg3RawData)data.dwData[0];
@@ -5683,9 +5720,15 @@ internal sealed class CopilotService : Form
         var isFlyByWireA320Neo =
             aircraftVariant == AircraftVariant.FlyByWireA320Neo;
         var isFlyByWireAirbus = isFlyByWireA320Neo || isFlyByWireA380X;
+        var isPmdg777 = aircraftVariant == AircraftVariant.Pmdg777300Er;
         var isPmdg737 = aircraftVariant == AircraftVariant.Pmdg737800;
         var isAsobo737Max = aircraftVariant == AircraftVariant.Asobo737Max8;
         var pmdg = _pmdgNg3State;
+        var pmdg777 = _pmdg777State;
+        if (isPmdg777 && !_pmdg777SdkInitialized)
+        {
+            InitializePmdg777Sdk(sender);
+        }
         if (isIniBuildsAirbusFamily)
         {
             LogChangedFloat(
@@ -5820,6 +5863,28 @@ internal sealed class CopilotService : Form
         _state = new AircraftState
         {
             Title = raw.Title,
+            Pmdg777SdkDataReady = isPmdg777 && _pmdg777DataReady,
+            Pmdg777BatteryOn = isPmdg777 && pmdg777?.BatteryOn == true,
+            Pmdg777HydraulicPanelSafe = isPmdg777
+                                          && pmdg777?.CenterPrimaryPumpsOff == true
+                                          && pmdg777.DemandPumpsOff,
+            Pmdg777WipersOff = isPmdg777 && pmdg777?.WipersOff == true,
+            Pmdg777GearLeverDown = isPmdg777 && pmdg777?.GearLeverDown == true,
+            Pmdg777AlternateFlapsOff = isPmdg777 && pmdg777?.AlternateFlapsOff == true,
+            Pmdg777ExternalPowerAvailable = isPmdg777
+                                             && pmdg777?.PrimaryExternalPowerAvailable == true
+                                             && pmdg777.SecondaryExternalPowerAvailable,
+            Pmdg777ExternalPowerOn = isPmdg777
+                                      && pmdg777?.PrimaryExternalPowerOn == true
+                                      && pmdg777.SecondaryExternalPowerOn,
+            Pmdg777NavigationLightOn = isPmdg777 && pmdg777?.NavigationLightOn == true,
+            Pmdg777LogoLightOn = isPmdg777 && pmdg777?.LogoLightOn == true,
+            Pmdg777GroundAirConfigurationSet = isPmdg777
+                                                && pmdg777?.PacksOff == true
+                                                && pmdg777.RecirculationFansOff,
+            Pmdg777AdiruOn = isPmdg777 && pmdg777?.AdiruOn == true,
+            Pmdg777EmergencyLightsArmed = isPmdg777
+                                          && pmdg777?.EmergencyLightsSelector == 1,
             OnGround = raw.OnGround != 0,
             GroundSpeedKnots = raw.GroundSpeed,
             LongitudinalVelocityKnots = raw.LongitudinalVelocity * 0.592483801,
@@ -7271,6 +7336,68 @@ internal sealed class CopilotService : Form
             IrsAligned = BoolAt(654),
             GroundConnectionAvailable = BoolAt(658)
         };
+    }
+
+    private void ApplyPmdg777SdkState()
+    {
+        if (_state?.IsPmdg777300Er != true || _pmdg777State == null)
+        {
+            return;
+        }
+
+        var sdk = _pmdg777State;
+        _state.Pmdg777SdkDataReady = _pmdg777DataReady;
+        _state.Pmdg777BatteryOn = sdk.BatteryOn;
+        _state.Pmdg777HydraulicPanelSafe =
+            sdk.CenterPrimaryPumpsOff && sdk.DemandPumpsOff;
+        _state.Pmdg777WipersOff = sdk.WipersOff;
+        _state.Pmdg777GearLeverDown = sdk.GearLeverDown;
+        _state.Pmdg777AlternateFlapsOff = sdk.AlternateFlapsOff;
+        _state.Pmdg777ExternalPowerAvailable =
+            sdk.PrimaryExternalPowerAvailable && sdk.SecondaryExternalPowerAvailable;
+        _state.Pmdg777ExternalPowerOn =
+            sdk.PrimaryExternalPowerOn && sdk.SecondaryExternalPowerOn;
+        _state.Pmdg777NavigationLightOn = sdk.NavigationLightOn;
+        _state.Pmdg777LogoLightOn = sdk.LogoLightOn;
+        _state.Pmdg777GroundAirConfigurationSet =
+            sdk.PacksOff && sdk.RecirculationFansOff;
+        _state.Pmdg777AdiruOn = sdk.AdiruOn;
+        _state.Pmdg777EmergencyLightsArmed = sdk.EmergencyLightsSelector == 1;
+
+        _state.Battery1On = sdk.BatteryOn;
+        _state.ExternalPowerAvailable = _state.Pmdg777ExternalPowerAvailable;
+        _state.ExternalPowerOn = _state.Pmdg777ExternalPowerOn;
+        _state.NavigationLightsOn = sdk.NavigationLightOn;
+        _state.LogoLightsOn = sdk.LogoLightOn;
+        _state.ParkingBrakeSet = sdk.ParkingBrakeSet;
+
+        _procedureRunner.Update(_state);
+        UpdateDashboard();
+        PublishEfbState();
+    }
+
+    private void LogPmdg777FlowOneState(Pmdg777SdkData sdk)
+    {
+        var signature =
+            $"BAT={sdk.BatteryOn.ToOnOff()} "
+            + $"EXT_AVAIL={sdk.PrimaryExternalPowerAvailable.ToOnOff()}/{sdk.SecondaryExternalPowerAvailable.ToOnOff()} "
+            + $"EXT_ON={sdk.PrimaryExternalPowerOn.ToOnOff()}/{sdk.SecondaryExternalPowerOn.ToOnOff()} "
+            + $"HYD_SAFE={(sdk.CenterPrimaryPumpsOff && sdk.DemandPumpsOff).ToOnOff()} "
+            + $"WIPERS_OFF={sdk.WipersOff.ToOnOff()} GEAR_DOWN={sdk.GearLeverDown.ToOnOff()} "
+            + $"ALT_FLAPS_OFF={sdk.AlternateFlapsOff.ToOnOff()} PARK_BRAKE={sdk.ParkingBrakeSet.ToOnOff()} "
+            + $"NAV={sdk.NavigationLightOn.ToOnOff()} LOGO={sdk.LogoLightOn.ToOnOff()} "
+            + $"PACKS_OFF={sdk.PacksOff.ToOnOff()} RECIRC_OFF={sdk.RecirculationFansOff.ToOnOff()} "
+            + $"ADIRU={sdk.AdiruOn.ToOnOff()} EMER={sdk.EmergencyLightsSelector}";
+        if (string.Equals(
+                signature,
+                _loggedPmdg777FlowOneSignature,
+                StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _loggedPmdg777FlowOneSignature = signature;
+        AppLog.Write($"PMDG 777 Flow 1 readbacks: {signature}.");
     }
 
     private void SendPmdgNg3Control(uint sdkEventOffset, uint parameter)
@@ -16528,6 +16655,44 @@ internal sealed class CopilotService : Form
         }
     }
 
+    private void InitializePmdg777Sdk(SimConnect sender)
+    {
+        if (_pmdg777SdkInitialized)
+        {
+            return;
+        }
+
+        try
+        {
+            sender.MapClientDataNameToID(
+                Pmdg777ControlProfile.DataName,
+                ClientDataArea.Pmdg777Data);
+            sender.AddToClientDataDefinition(
+                ClientDataDefinition.Pmdg777Data,
+                0,
+                Pmdg777ControlProfile.DataSize,
+                0,
+                0);
+            sender.RegisterStruct<SIMCONNECT_RECV_CLIENT_DATA, Pmdg777RawData>(
+                ClientDataDefinition.Pmdg777Data);
+            sender.RequestClientData(
+                ClientDataArea.Pmdg777Data,
+                Request.Pmdg777Data,
+                ClientDataDefinition.Pmdg777Data,
+                SIMCONNECT_CLIENT_DATA_PERIOD.VISUAL_FRAME,
+                SIMCONNECT_CLIENT_DATA_REQUEST_FLAG.CHANGED,
+                0,
+                0,
+                0);
+            _pmdg777SdkInitialized = true;
+            AppLog.Write("PMDG 777X read-only SDK data connection initialized.");
+        }
+        catch (Exception ex)
+        {
+            AppLog.Write($"PMDG 777X SDK initialization failed: {ex.Message}");
+        }
+    }
+
     private void SetA310BatteriesAuto()
     {
         if (_simConnect == null || _state?.IsIniBuildsA310 != true)
@@ -20150,7 +20315,9 @@ internal sealed class CopilotService : Form
         SetStatusBadge(
             _adapterBadgeLabel,
             _state.IsPmdg777300Er
-                ? "777 SDK PENDING"
+                ? _pmdg777DataReady
+                    ? "777 SDK OK"
+                    : "777 SDK WAITING"
             : _state.IsPmdg737800
                 ? _pmdgNg3DataReady
                     ? "PMDG SDK OK"
@@ -20159,7 +20326,9 @@ internal sealed class CopilotService : Form
                     ? "MSFS/ASOBO OK"
                 : _mobiFlightReady ? "MOBIFLIGHT OK" : "ADAPTER OFFLINE",
             _state.IsPmdg777300Er
-                ? System.Drawing.Color.FromArgb(172, 113, 37)
+                ? _pmdg777DataReady
+                    ? System.Drawing.Color.FromArgb(39, 130, 87)
+                    : System.Drawing.Color.FromArgb(172, 113, 37)
             : _state.IsPmdg737800
                 ? _pmdgNg3DataReady
                     ? System.Drawing.Color.FromArgb(39, 130, 87)
@@ -20177,7 +20346,9 @@ internal sealed class CopilotService : Form
             $"{(_state.NavLogoSelectorPosition.HasValue ? FormatNavLogoPosition((int)Math.Round(_state.NavLogoSelectorPosition.Value)) : "UNKNOWN")} | " +
             $"APU {_state.ApuMasterSwitchOn.ToOnOff()}/{_state.ApuRpmPercent:F0}%";
         _adapterLabel!.Text = _state.IsPmdg777300Er
-            ? "PMDG 777X SDK profile detected; procedures and cockpit controls remain disabled during integration."
+            ? _pmdg777DataReady
+                ? "PMDG 777X SDK connected; Flow 1 readbacks active and automatic controls disabled."
+                : "PMDG 777X SDK waiting - enable [SDK] EnableDataBroadcast=1 in 777_Options.ini and restart MSFS."
         : _state.IsPmdg737800
             ? _pmdgNg3DataReady
                 ? "PMDG NG3 SDK data connected"
@@ -20190,7 +20361,9 @@ internal sealed class CopilotService : Form
                 ? "MobiFlight connected"
                 : "MobiFlight not connected - aircraft controls unavailable";
         _adapterLabel.ForeColor = _state.IsPmdg777300Er
-            ? System.Drawing.Color.DarkOrange
+            ? _pmdg777DataReady
+                ? System.Drawing.Color.DarkGreen
+                : System.Drawing.Color.DarkOrange
         : _state.IsPmdg737800
             ? _pmdgNg3DataReady
                 ? System.Drawing.Color.DarkGreen
@@ -21836,6 +22009,10 @@ internal sealed class CopilotService : Form
         _pendingGsxActionDeadlineUtc = null;
         UpdateGsxStatus(false);
         _mobiFlightReady = false;
+        _pmdg777SdkInitialized = false;
+        _pmdg777DataReady = false;
+        _pmdg777State = null;
+        _loggedPmdg777FlowOneSignature = null;
         ResetMobiFlightRuntimeAfterDisconnect();
         _simConnect?.Dispose();
         _simConnect = null;

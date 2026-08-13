@@ -23,6 +23,11 @@ internal static class ProcedureCatalog
 
         switch (state.Variant)
         {
+            case AircraftVariant.Pmdg777300Er:
+                return new AircraftProcedureLibrary(
+                    Pmdg777ProcedureLibrary.GateToGate,
+                    Pmdg777ProcedureLibrary.Find,
+                    Pmdg777ChecklistLibrary.FindForProcedure);
             case AircraftVariant.Pmdg737800:
                 return new AircraftProcedureLibrary(
                     B737ProcedureLibrary.GateToGate,

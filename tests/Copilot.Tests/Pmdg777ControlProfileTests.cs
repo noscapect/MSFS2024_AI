@@ -10,6 +10,7 @@ public sealed class Pmdg777ControlProfileTests
     [TestMethod]
     public void SdkBoundaryUsesOfficial777XClientDataIdentifiers()
     {
+        Assert.AreEqual(684, Pmdg777ControlProfile.DataSize);
         Assert.AreEqual("PMDG_777X_Data", Pmdg777ControlProfile.DataName);
         Assert.AreEqual(0x504D4447U, Pmdg777ControlProfile.DataId);
         Assert.AreEqual(0x504D4448U, Pmdg777ControlProfile.DataDefinition);
@@ -34,8 +35,58 @@ public sealed class Pmdg777ControlProfileTests
             CapabilitySupport.Supported,
             Pmdg777ControlProfile.Capabilities.Single(item =>
                 item.Id == "aircraft-identity").Support);
+        Assert.AreEqual(
+            CapabilitySupport.ReadOnly,
+            Pmdg777ControlProfile.Capabilities.Single(item =>
+                item.Id == "sdk-telemetry").Support);
         Assert.IsTrue(Pmdg777ControlProfile.Capabilities
-            .Where(item => item.Id != "aircraft-identity")
+            .Where(item => item.Id is not "aircraft-identity" and not "sdk-telemetry")
             .All(item => item.Support == CapabilitySupport.NotImplemented));
+    }
+
+    [TestMethod]
+    public void FlowOneSdkParserMapsTheShippedStructureOffsets()
+    {
+        var data = new byte[Pmdg777ControlProfile.DataSize];
+        data[28] = 1;
+        data[37] = 1;
+        data[43] = 1;
+        data[44] = 1;
+        data[49] = 1;
+        data[50] = 1;
+        data[51] = 1;
+        data[52] = 1;
+        data[67] = 1;
+        data[113] = 1;
+        data[114] = 1;
+        data[212] = 1;
+        data[416] = 1;
+        data[424] = 1;
+
+        Assert.IsTrue(Pmdg777SdkData.TryParse(data, out var state));
+        Assert.IsTrue(state.AdiruOn);
+        Assert.IsTrue(state.BatteryOn);
+        Assert.IsTrue(state.BusTiesAuto);
+        Assert.IsTrue(state.PrimaryExternalPowerOn);
+        Assert.IsTrue(state.SecondaryExternalPowerOn);
+        Assert.IsTrue(state.PrimaryExternalPowerAvailable);
+        Assert.IsTrue(state.SecondaryExternalPowerAvailable);
+        Assert.IsTrue(state.CenterPrimaryPumpsOff);
+        Assert.IsTrue(state.DemandPumpsOff);
+        Assert.IsTrue(state.WipersOff);
+        Assert.AreEqual(1, state.EmergencyLightsSelector);
+        Assert.IsTrue(state.PacksOff);
+        Assert.IsTrue(state.RecirculationFansOff);
+        Assert.IsTrue(state.NavigationLightOn);
+        Assert.IsTrue(state.LogoLightOn);
+        Assert.IsTrue(state.GearLeverDown);
+        Assert.IsTrue(state.AlternateFlapsOff);
+        Assert.IsTrue(state.ParkingBrakeSet);
+    }
+
+    [TestMethod]
+    public void FlowOneSdkParserRejectsAnUnverifiedStructureSize()
+    {
+        Assert.IsFalse(Pmdg777SdkData.TryParse(new byte[683], out _));
     }
 }

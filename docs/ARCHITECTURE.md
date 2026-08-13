@@ -171,7 +171,9 @@ aircraft detection and the official `PMDG_777X_Data` / `PMDG_777X_Control`
 identifiers live in `Pmdg777ControlProfile`. A detected 777 does not route to
 the 737 procedure library, parse `PMDG_NG3_Data`, or send NG3 controls. It
 remains excluded from `IsSupportedAircraft` until its own telemetry parser,
-procedures, checklists, commands, readbacks, and live validation exist.
+remaining procedures, commands, readbacks, and live validation exist. Its
+initial Flow 1 uses a read-only subset of the exact 777X data structure and has
+no automatic command steps.
 
 ### SimConnect transport
 

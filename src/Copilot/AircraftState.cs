@@ -39,6 +39,19 @@ internal sealed class AircraftState
     public bool Battery1On { get; set; }
     public bool Battery2On { get; set; }
     public bool Battery3On { get; set; }
+    public bool Pmdg777SdkDataReady { get; set; }
+    public bool Pmdg777BatteryOn { get; set; }
+    public bool Pmdg777HydraulicPanelSafe { get; set; }
+    public bool Pmdg777WipersOff { get; set; }
+    public bool Pmdg777GearLeverDown { get; set; }
+    public bool Pmdg777AlternateFlapsOff { get; set; }
+    public bool Pmdg777ExternalPowerAvailable { get; set; }
+    public bool Pmdg777ExternalPowerOn { get; set; }
+    public bool Pmdg777NavigationLightOn { get; set; }
+    public bool Pmdg777LogoLightOn { get; set; }
+    public bool Pmdg777GroundAirConfigurationSet { get; set; }
+    public bool Pmdg777AdiruOn { get; set; }
+    public bool Pmdg777EmergencyLightsArmed { get; set; }
     public bool A310HydraulicPanelSafe { get; set; }
     public bool A310WipersAndWeatherRadarOff { get; set; }
     public bool A310ApuFireTestCompleted { get; set; }

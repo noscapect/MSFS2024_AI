@@ -9,6 +9,7 @@ namespace Msfs2024Ai.Copilot.AircraftAdapters.Pmdg777;
 /// </summary>
 internal static class Pmdg777ControlProfile
 {
+    public const int DataSize = 684;
     public const string DataName = "PMDG_777X_Data";
     public const uint DataId = 0x504D4447;
     public const uint DataDefinition = 0x504D4448;
@@ -30,7 +31,7 @@ internal static class Pmdg777ControlProfile
             new AircraftCapability(
                 "sdk-telemetry",
                 "PMDG 777X SDK data broadcast",
-                CapabilitySupport.NotImplemented,
+                CapabilitySupport.ReadOnly,
                 DataName),
             new AircraftCapability(
                 "sdk-controls",

@@ -166,6 +166,13 @@ released PMDG flow. Shared transport and normalized-domain changes still run
 the complete regression suite before release; no software test can guarantee
 compatibility with future simulator or aircraft updates.
 
+PMDG 777-300ER integration is a separate, pre-operational boundary. Exact
+aircraft detection and the official `PMDG_777X_Data` / `PMDG_777X_Control`
+identifiers live in `Pmdg777ControlProfile`. A detected 777 does not route to
+the 737 procedure library, parse `PMDG_NG3_Data`, or send NG3 controls. It
+remains excluded from `IsSupportedAircraft` until its own telemetry parser,
+procedures, checklists, commands, readbacks, and live validation exist.
+
 ### SimConnect transport
 
 Maintains the simulator connection, subscriptions, event transmission,

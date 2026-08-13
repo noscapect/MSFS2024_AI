@@ -18,6 +18,8 @@ public sealed class AircraftIsolationTests
     [DataRow("FlyByWire A32NX", (int)AircraftVariant.FlyByWireA320Neo)]
     [DataRow("737-800 PAX BW TC", (int)AircraftVariant.Pmdg737800)]
     [DataRow("PMDG 737-800", (int)AircraftVariant.Pmdg737800)]
+    [DataRow("777-300ER", (int)AircraftVariant.Pmdg777300Er)]
+    [DataRow("PMDG 777-300ER", (int)AircraftVariant.Pmdg777300Er)]
     [DataRow("737 Max 8 Passengers", (int)AircraftVariant.Asobo737Max8)]
     [DataRow("Boeing 737 MAX 8", (int)AircraftVariant.Asobo737Max8)]
     [DataRow("B38M", (int)AircraftVariant.Asobo737Max8)]
@@ -25,6 +27,7 @@ public sealed class AircraftIsolationTests
     [DataRow("Fenix A320", (int)AircraftVariant.Unsupported)]
     [DataRow("Headwind A330-900neo", (int)AircraftVariant.Unsupported)]
     [DataRow("Generic A330", (int)AircraftVariant.Unsupported)]
+    [DataRow("Captain Sim 777-300ER", (int)AircraftVariant.Unsupported)]
     public void ResolverSelectsExactlyOneImplementation(
         string title,
         int expectedValue)
@@ -41,6 +44,7 @@ public sealed class AircraftIsolationTests
             state.IsIniBuildsA310,
             state.IsFlyByWireA320Neo,
             state.IsFlyByWireA380X,
+            state.IsPmdg777300Er,
             state.IsPmdg737800,
             state.IsAsobo737Max8
         }.Count(flag => flag);
@@ -49,6 +53,20 @@ public sealed class AircraftIsolationTests
             expected == AircraftVariant.Unsupported ? 0 : 1,
             activeFlags,
             $"Aircraft '{title}' crossed an implementation boundary.");
+    }
+
+    [TestMethod]
+    public void Pmdg777IsDetectedButCannotInheritTheReleased737Profile()
+    {
+        var state = new AircraftState { Title = "777-300ER" };
+
+        Assert.IsTrue(state.IsPmdg777300Er);
+        Assert.IsFalse(state.IsPmdg737800);
+        Assert.IsFalse(state.IsSupportedBoeing737);
+        Assert.IsFalse(state.IsSupportedAircraft);
+        Assert.AreEqual("PMDG 777-300ER", state.AircraftFamilyLabel);
+        Assert.AreEqual(0, ProcedureCatalog.ForAircraft(state).Count);
+        Assert.IsNull(ProcedureCatalog.Find(state, "power-up-initial-setup"));
     }
 
     [TestMethod]

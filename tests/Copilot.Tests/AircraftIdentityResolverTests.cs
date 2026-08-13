@@ -7,6 +7,53 @@ namespace Msfs2024Ai.Copilot.Tests;
 public sealed class AircraftIdentityResolverTests
 {
     [TestMethod]
+    public void ResolverDiscoversThePmdg77wPackageByInstalledTitle()
+    {
+        var root = Path.Combine(
+            Path.GetTempPath(),
+            "MSFS2024_AI-identity-tests",
+            Guid.NewGuid().ToString("N"));
+        try
+        {
+            var configDirectory = Path.Combine(
+                root,
+                "Community",
+                "pmdg-aircraft-77w",
+                "SimObjects",
+                "Airplanes",
+                "PMDG 777-300ER",
+                "presets",
+                "pmdg",
+                "PMDG 777-300ER",
+                "config");
+            Directory.CreateDirectory(configDirectory);
+            File.WriteAllText(
+                Path.Combine(configDirectory, "aircraft.cfg"),
+                """
+                [FLTSIM.0]
+                title="777-300ER"
+                ui_manufacturer="Boeing"
+                ui_type="777-300ER"
+                ui_createdby="PMDG"
+                """);
+
+            var resolver = new AircraftIdentityResolver(new[] { Path.Combine(root, "Community") });
+            var identity = resolver.Resolve("777-300ER");
+
+            Assert.IsNotNull(identity);
+            Assert.AreEqual("Boeing 777-300ER", identity!.DisplayName);
+            Assert.AreEqual("PMDG", identity.DisplayVariation);
+        }
+        finally
+        {
+            if (Directory.Exists(root))
+            {
+                Directory.Delete(root, true);
+            }
+        }
+    }
+
+    [TestMethod]
     public void ResolverMatchesAircraftTitleAndFindsThumbnail()
     {
         var root = Path.Combine(

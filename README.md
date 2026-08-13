@@ -229,6 +229,10 @@ installed or disabled.
   Deliberate captain decisions and controls without a safe native interface
   remain manual. Further A310 work is maintenance and field validation rather
   than planned feature development.
+- PMDG 777-300ER integration has started. The app recognizes the installed
+  `777-300ER` title and isolates the official `PMDG_777X` SDK namespace, but it
+  does not yet expose 777 procedures or send cockpit controls. Detection is not
+  a claim of operational support.
 
 ## Troubleshooting and issue reports
 
@@ -259,6 +263,7 @@ retained flight recordings.
 - [Supported-aircraft and live-test status](docs/LIVE_TESTS.md)
 - [Asobo 737 MAX development status](docs/ASOBO_737_MAX_SUPPORT_STATUS.md)
 - [iniBuilds A310-300 support status](docs/A310_SUPPORT_PLAN.md)
+- [PMDG 777-300ER integration status](docs/PMDG_777_300ER_SUPPORT_PLAN.md)
 - [SayIntentions integration status](docs/SAYINTENTIONS_INTEGRATION_PLAN.md)
 - [SimBrief integration](docs/SIMBRIEF_INTEGRATION_PLAN.md)
 - [Product roadmap](docs/ROADMAP.md)

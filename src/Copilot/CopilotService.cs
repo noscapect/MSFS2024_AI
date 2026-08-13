@@ -20137,6 +20137,8 @@ internal sealed class CopilotService : Form
                     ? "iniBuilds A310-300"
                     : _state.IsFlyByWireA320Neo
                     ? "FBW A32NX"
+                    : _state.IsPmdg777300Er
+                    ? "PMDG 777-300ER INTEGRATION"
                     : _state.IsPmdg737800
                     ? "PMDG 737-800"
                     : _state.IsAsobo737Max8
@@ -20147,14 +20149,18 @@ internal sealed class CopilotService : Form
                 : System.Drawing.Color.FromArgb(172, 113, 37));
         SetStatusBadge(
             _adapterBadgeLabel,
-            _state.IsPmdg737800
+            _state.IsPmdg777300Er
+                ? "777 SDK PENDING"
+            : _state.IsPmdg737800
                 ? _pmdgNg3DataReady
                     ? "PMDG SDK OK"
                     : "PMDG SDK WAITING"
                 : _state.IsAsobo737Max8
                     ? "MSFS/ASOBO OK"
                 : _mobiFlightReady ? "MOBIFLIGHT OK" : "ADAPTER OFFLINE",
-            _state.IsPmdg737800
+            _state.IsPmdg777300Er
+                ? System.Drawing.Color.FromArgb(172, 113, 37)
+            : _state.IsPmdg737800
                 ? _pmdgNg3DataReady
                     ? System.Drawing.Color.FromArgb(39, 130, 87)
                     : System.Drawing.Color.FromArgb(172, 113, 37)
@@ -20170,18 +20176,22 @@ internal sealed class CopilotService : Form
             $"Beacon {_state.BeaconOn.ToOnOff()} | NAV&LOGO " +
             $"{(_state.NavLogoSelectorPosition.HasValue ? FormatNavLogoPosition((int)Math.Round(_state.NavLogoSelectorPosition.Value)) : "UNKNOWN")} | " +
             $"APU {_state.ApuMasterSwitchOn.ToOnOff()}/{_state.ApuRpmPercent:F0}%";
-        _adapterLabel!.Text = _state.IsPmdg737800
+        _adapterLabel!.Text = _state.IsPmdg777300Er
+            ? "PMDG 777X SDK profile detected; procedures and cockpit controls remain disabled during integration."
+        : _state.IsPmdg737800
             ? _pmdgNg3DataReady
                 ? "PMDG NG3 SDK data connected"
                 : "PMDG NG3 SDK waiting - enable [SDK] EnableDataBroadcast=1 in 737_Options.ini"
             : _state.IsAsobo737Max8
                 ? "EXPERIMENTAL Asobo 737 MAX profile; incomplete live validation and no unattended Flow 7 use."
             : _state.IsIniBuildsA310
-                ? "A310-300 procedure framework active; cockpit actions remain manual until native mappings are live-validated."
+                ? "A310-300 gate-to-gate profile active."
             : _mobiFlightReady
                 ? "MobiFlight connected"
                 : "MobiFlight not connected - aircraft controls unavailable";
-        _adapterLabel.ForeColor = _state.IsPmdg737800
+        _adapterLabel.ForeColor = _state.IsPmdg777300Er
+            ? System.Drawing.Color.DarkOrange
+        : _state.IsPmdg737800
             ? _pmdgNg3DataReady
                 ? System.Drawing.Color.DarkGreen
                 : System.Drawing.Color.DarkOrange
@@ -20427,7 +20437,7 @@ internal sealed class CopilotService : Form
                 identity?.DisplayVariation
             }.Where(value => !string.IsNullOrWhiteSpace(value))).ToUpperInvariant();
 
-        if (probe.Contains("737") || probe.Contains("B738") || probe.Contains("PMDG"))
+        if (probe.Contains("737") || probe.Contains("B738"))
         {
             return "boeing-737-800.jpg";
         }

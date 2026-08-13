@@ -10,6 +10,7 @@ internal static class SimBriefOperationalContext
     public static IReadOnlyList<string> ExpectedAircraftIcaos(AircraftVariant variant) =>
         variant switch
         {
+            AircraftVariant.Pmdg777300Er => new[] { "B77W" },
             AircraftVariant.Pmdg737800 => new[] { "B738" },
             AircraftVariant.Asobo737Max8 => new[] { "B38M", "B737" },
             AircraftVariant.IniBuildsA321Lr => new[] { "A21N", "A321" },
@@ -85,6 +86,17 @@ internal static class SimBriefOperationalContext
         var value = plan?.TakeoffFlaps?.Trim().ToUpperInvariant();
         if (string.IsNullOrWhiteSpace(value))
         {
+            return null;
+        }
+
+        if (variant == AircraftVariant.Pmdg777300Er)
+        {
+            var digits = new string(value!.Where(char.IsDigit).ToArray());
+            if (int.TryParse(digits, out var boeing777Flaps)
+                && boeing777Flaps is 5 or 15 or 20)
+            {
+                return boeing777Flaps;
+            }
             return null;
         }
 

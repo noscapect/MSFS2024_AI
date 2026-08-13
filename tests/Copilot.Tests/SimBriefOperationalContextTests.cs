@@ -9,6 +9,15 @@ namespace Copilot.Tests;
 public sealed class SimBriefOperationalContextTests
 {
     [TestMethod]
+    public void ExpectedAircraftIcaos_UsesDedicatedPmdg777Profile()
+    {
+        CollectionAssert.AreEqual(
+            new[] { "B77W" },
+            SimBriefOperationalContext.ExpectedAircraftIcaos(
+                AircraftVariant.Pmdg777300Er).ToArray());
+    }
+
+    [TestMethod]
     public void ExpectedAircraftIcaos_UsesDedicatedA330Profile()
     {
         CollectionAssert.AreEqual(
@@ -29,6 +38,10 @@ public sealed class SimBriefOperationalContextTests
     {
         Assert.AreEqual(5, SimBriefOperationalContext.TakeoffFlapSetting(
             new ImportedFlightPlan { TakeoffFlaps = "Flaps 5" }, AircraftVariant.Pmdg737800));
+        Assert.AreEqual(15, SimBriefOperationalContext.TakeoffFlapSetting(
+            new ImportedFlightPlan { TakeoffFlaps = "Flaps 15" }, AircraftVariant.Pmdg777300Er));
+        Assert.IsNull(SimBriefOperationalContext.TakeoffFlapSetting(
+            new ImportedFlightPlan { TakeoffFlaps = "Flaps 10" }, AircraftVariant.Pmdg777300Er));
         Assert.AreEqual(5, SimBriefOperationalContext.TakeoffFlapSetting(
             new ImportedFlightPlan { TakeoffFlaps = "Flaps 5" }, AircraftVariant.Asobo737Max8));
         Assert.AreEqual(1, SimBriefOperationalContext.TakeoffFlapSetting(

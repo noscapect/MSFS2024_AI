@@ -14,6 +14,7 @@ internal enum AircraftVariant
     IniBuildsA310,
     FlyByWireA320Neo,
     FlyByWireA380XExperimental,
+    Pmdg777300Er,
     Pmdg737800,
     Asobo737Max8
 }
@@ -39,6 +40,16 @@ internal static class AircraftVariantResolver
             || string.Equals(value, "FlyByWire A32NX", StringComparison.OrdinalIgnoreCase))
         {
             return AircraftVariant.FlyByWireA320Neo;
+        }
+
+        var trimmed = value.Trim();
+        if (string.Equals(trimmed, "777-300ER", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(trimmed, "PMDG 777-300ER", StringComparison.OrdinalIgnoreCase)
+            || trimmed.IndexOf("PMDG", StringComparison.OrdinalIgnoreCase) >= 0
+            && trimmed.IndexOf("777", StringComparison.OrdinalIgnoreCase) >= 0
+            && trimmed.IndexOf("300ER", StringComparison.OrdinalIgnoreCase) >= 0)
+        {
+            return AircraftVariant.Pmdg777300Er;
         }
 
         var isPmdg737 =

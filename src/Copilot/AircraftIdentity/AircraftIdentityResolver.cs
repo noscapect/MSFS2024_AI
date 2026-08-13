@@ -104,6 +104,13 @@ internal sealed class AircraftIdentityResolver
 
     private static bool IsLikelyPackageForTitle(string packageName, string title)
     {
+        if (title.Contains("777") || title.Contains("77w"))
+        {
+            return packageName.Contains("777")
+                   || packageName.Contains("77w")
+                   || packageName.Contains("pmdg");
+        }
+
         if (title.Contains("737") || title.Contains("738"))
         {
             return packageName.Contains("737")

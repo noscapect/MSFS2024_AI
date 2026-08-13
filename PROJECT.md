@@ -322,6 +322,8 @@ Important layers and files:
 - `src/Copilot/Procedures/A310ProcedureLibrary.cs` - iniBuilds A310-300
 - `src/Copilot/Procedures/B737ProcedureLibrary.cs` - PMDG 737-800
 - `src/Copilot/Procedures/Asobo737MaxProcedureLibrary.cs` - Asobo 737 MAX 8
+- `src/Copilot/AircraftAdapters/Pmdg777/Pmdg777ControlProfile.cs` - PMDG
+  777-300ER SDK identity and isolation boundary; operational support pending
 - `src/Copilot/AircraftAdapters/Asobo737Max/Asobo737MaxControlProfile.cs` -
   live-derived MAX selector values and normalization
 - Matching aircraft-specific libraries under `src/Copilot/Checklists`

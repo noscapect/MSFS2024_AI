@@ -5,9 +5,11 @@
 Integration is a deliberately pre-operational profile. The app now
 recognizes the PMDG aircraft's installed `777-300ER` title, exposes a distinct
 `Pmdg777300Er` variant, validates the SimBrief `B77W` contract, and records the
-official PMDG 777X SDK client-data identifiers. A read-only Flow 1 procedure
-and checklist are available for live gate validation. The app does not execute
-777 cockpit commands or classify the aircraft as gate-to-gate supported.
+official PMDG 777X SDK client-data identifiers. The complete dedicated
+twelve-flow gate-to-gate procedure and checklist catalog is visible. Flow 1
+has initial read-only telemetry; unvalidated steps throughout the catalog are
+manual crew confirmations. The app does not execute 777 cockpit commands or
+classify the aircraft as operationally supported.
 
 ## Research basis
 
@@ -38,9 +40,34 @@ both aircraft are Boeing products.
 7. Exact 684-byte 777X data subscription and a tested read-only parser for the
    Flow 1 battery, electrical, hydraulic, wiper, gear, alternate-flap, exterior
    light, pack/recirculation, ADIRU, emergency-light, and parking-brake state.
-8. A dedicated Flow 1 procedure and checklist based on the PMDG tutorial's
-   electrical power-up and preliminary-preflight sequence. It contains no
-   automatic commands.
+8. A dedicated twelve-flow procedure and checklist catalog based on the PMDG
+   tutorial's preparation, departure, cruise, descent, approach, landing and
+   shutdown sequence. Every flow contains zero automatic commands at this
+   integration stage.
+9. A unique SimConnect request ID for the 777 data block, payload-type guards,
+   fatal exception logging, and idempotent application disposal. This prevents
+   unrelated MobiFlight float callbacks from entering the 777 parser.
+
+## Prepared flow catalog
+
+1. Power Up & Preliminary Preflight
+2. Flight Deck & Preflight
+3. Before Start & Pushback
+4. Engine Start
+5. Before Taxi & Taxi
+6. Before Takeoff
+7. Takeoff & Climb
+8. Climb & Cruise
+9. Descent Preparation
+10. Approach & Landing
+11. After Landing & Taxi In
+12. Parking, Shutdown & Secure
+
+The canonical procedure IDs match the other gate-to-gate aircraft profiles so
+the desktop and EFB clients can navigate them consistently. The procedures and
+checklists themselves are 777-specific objects and do not reuse the 737
+library. An unknown checklist result means that the crew must confirm the item;
+it must not be presented as telemetry-verified.
 
 ## Next implementation slice
 
@@ -48,8 +75,8 @@ both aircraft are Boeing products.
    checklist results from cold and dark at the gate.
 2. Capture before/after data for each candidate Flow 1 control event without
    enabling automatic execution.
-3. Research and encode the remaining dedicated twelve-flow 777-300ER procedure and
-   checklist catalog.
+3. Progress through Flows 2-12 in order, adding readbacks and tightening manual
+   gates only after the preceding flow passes live validation.
 4. Enable each automatic action only after its 777X event semantics,
    independent readback, momentary/held behavior, and in-simulator result are
    verified.

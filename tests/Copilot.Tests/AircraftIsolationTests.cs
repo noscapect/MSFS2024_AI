@@ -56,7 +56,7 @@ public sealed class AircraftIsolationTests
     }
 
     [TestMethod]
-    public void Pmdg777FlowOneCannotInheritTheReleased737Profile()
+    public void Pmdg777CatalogCannotInheritTheReleased737Profile()
     {
         var state = new AircraftState { Title = "777-300ER" };
 
@@ -65,7 +65,7 @@ public sealed class AircraftIsolationTests
         Assert.IsFalse(state.IsSupportedBoeing737);
         Assert.IsFalse(state.IsSupportedAircraft);
         Assert.AreEqual("PMDG 777-300ER", state.AircraftFamilyLabel);
-        Assert.AreEqual(1, ProcedureCatalog.ForAircraft(state).Count);
+        Assert.AreEqual(12, ProcedureCatalog.ForAircraft(state).Count);
         Assert.AreSame(
             Pmdg777ProcedureLibrary.PowerUpAndPreliminaryPreflight,
             ProcedureCatalog.Find(state, "power-up-initial-setup"));

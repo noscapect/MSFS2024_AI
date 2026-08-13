@@ -42,7 +42,7 @@ internal static class Pmdg777ControlProfile
             new AircraftCapability(
                 "procedures",
                 "Dedicated 777 gate-to-gate procedures",
-                CapabilitySupport.NotImplemented,
-                "Dedicated profile required")
+                CapabilitySupport.ReadOnly,
+                "Twelve manual/monitored flows; automatic controls disabled")
         };
 }

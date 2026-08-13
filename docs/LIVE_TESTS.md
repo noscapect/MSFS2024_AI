@@ -4,12 +4,13 @@
 
 MSFS 2024 reported the loaded aircraft title as `777-300ER`, confirming the
 dedicated variant route against the locally installed aircraft. The read-only
-684-byte `PMDG_777X_Data` subscription and Flow 1 procedure/checklist are
-implemented, with change-bounded logging for every mapped Flow 1 readback and
-no automatic 777 commands. The first connection attempt correctly remained in
-`777 SDK WAITING`: the aircraft had not published its data area because
-`EnableDataBroadcast=1` was not yet present in `777_Options.ini`. Selector and
-offset validation remains pending a simulator restart with broadcast enabled.
+684-byte `PMDG_777X_Data` subscription connected after SDK broadcast was
+enabled, and the app received the first data block. A duplicate SimConnect
+request ID initially routed MobiFlight float payloads into the 777 callback;
+the collision was reproduced, guarded, assigned a unique request ID, and then
+verified live with the app remaining responsive. The complete twelve-flow
+procedure/checklist catalog is now visible, with zero automatic 777 commands.
+Flow 1 selector and offset validation remains the next live activity.
 
 ## 2026-08-13 - iniBuilds A310-300 implementation scope complete
 

@@ -40,8 +40,12 @@ public sealed class Pmdg777ControlProfileTests
             CapabilitySupport.ReadOnly,
             Pmdg777ControlProfile.Capabilities.Single(item =>
                 item.Id == "sdk-telemetry").Support);
+        Assert.AreEqual(
+            CapabilitySupport.ReadOnly,
+            Pmdg777ControlProfile.Capabilities.Single(item =>
+                item.Id == "procedures").Support);
         Assert.IsTrue(Pmdg777ControlProfile.Capabilities
-            .Where(item => item.Id is not "aircraft-identity" and not "sdk-telemetry")
+            .Where(item => item.Id is not "aircraft-identity" and not "sdk-telemetry" and not "procedures")
             .All(item => item.Support == CapabilitySupport.NotImplemented));
     }
 

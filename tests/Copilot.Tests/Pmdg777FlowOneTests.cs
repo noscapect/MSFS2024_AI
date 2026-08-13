@@ -7,6 +7,47 @@ namespace Msfs2024Ai.Copilot.Tests;
 [TestClass]
 public sealed class Pmdg777FlowOneTests
 {
+    private static readonly string[] ExpectedFlowIds =
+    {
+        "power-up-initial-setup",
+        "flight-computer-preflight",
+        "apu-start-pushback",
+        "engine-start-sequence",
+        "after-start-taxi",
+        "before-takeoff",
+        "takeoff-climb",
+        "cruise",
+        "descent-preparation",
+        "approach-landing",
+        "after-landing-taxi",
+        "parking-shutdown"
+    };
+
+    [TestMethod]
+    public void CompleteGateToGateCatalogIsVisibleAndReadOnly()
+    {
+        var flows = Pmdg777ProcedureLibrary.GateToGate;
+
+        CollectionAssert.AreEqual(ExpectedFlowIds, flows.Select(flow => flow.Id).ToArray());
+        Assert.AreEqual(12, Pmdg777ChecklistLibrary.GateToGate.Count);
+        Assert.IsTrue(flows.All(flow => flow.Steps.Count > 0));
+        Assert.IsTrue(flows.All(flow => flow.AutomaticStepCount == 0));
+        Assert.IsTrue(flows.SelectMany(flow => flow.Steps)
+            .All(step => string.IsNullOrWhiteSpace(step.Command)));
+        Assert.IsTrue(flows.All(flow =>
+            Pmdg777ChecklistLibrary.FindForProcedure(flow.Id) != null));
+    }
+
+    [TestMethod]
+    public void CompatibilityAliasesResolveToDedicated777Flows()
+    {
+        Assert.AreEqual("power-up-initial-setup", Pmdg777ProcedureLibrary.Find("cockpit-preparation")!.Id);
+        Assert.AreEqual("apu-start-pushback", Pmdg777ProcedureLibrary.Find("before-start")!.Id);
+        Assert.AreEqual("engine-start-sequence", Pmdg777ProcedureLibrary.Find("engine-start")!.Id);
+        Assert.AreEqual("after-start-taxi", Pmdg777ProcedureLibrary.Find("taxi")!.Id);
+        Assert.AreEqual("takeoff-climb", Pmdg777ProcedureLibrary.Find("climb-to-cruise")!.Id);
+    }
+
     [TestMethod]
     public void FlowOneIsReadOnlyAndHasItsOwnChecklist()
     {

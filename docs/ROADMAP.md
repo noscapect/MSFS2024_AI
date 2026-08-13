@@ -13,9 +13,9 @@ paused while UX, EFB, and integration reliability are stabilized on `main`.
 
 Priorities are:
 
-1. Begin the PMDG 777-300ER integration as an isolated aircraft profile,
-   starting with exact aircraft detection, SDK transport boundaries, and a
-   dedicated procedure/checklist contract.
+1. Live-validate the PMDG 777-300ER integration, starting with the read-only
+   Flow 1 offsets and then progressing through its dedicated twelve-flow
+   procedure/checklist catalog one flow at a time.
 2. Continue live validation of the MSFS 2024 EFB companion,
    including start, confirm, pause, resume, cancel, reconnect, and stale-state
    behavior.

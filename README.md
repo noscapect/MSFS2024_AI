@@ -231,8 +231,10 @@ installed or disabled.
   than planned feature development.
 - PMDG 777-300ER integration has started. The app recognizes the installed
   `777-300ER` title, isolates the official `PMDG_777X` SDK namespace, and
-  exposes a read-only Flow 1 for gate validation. It does not send 777 cockpit
-  controls, and Flow 1 availability is not a claim of gate-to-gate support.
+  exposes the complete dedicated twelve-flow gate-to-gate catalog. Flow 1 has
+  initial read-only SDK coverage; all unvalidated 777 actions in every flow
+  remain explicit crew confirmations. It does not send 777 cockpit controls,
+  and catalog availability is not a claim of operational support.
 
 ## Troubleshooting and issue reports
 

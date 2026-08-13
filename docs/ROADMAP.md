@@ -13,9 +13,9 @@ paused while UX, EFB, and integration reliability are stabilized on `main`.
 
 Priorities are:
 
-1. Capture and live-validate native MSFS 2024 A310 controls/readbacks against
-   the dedicated researched flow framework without reusing modern-Airbus
-   mappings.
+1. Begin the PMDG 777-300ER integration as an isolated aircraft profile,
+   starting with exact aircraft detection, SDK transport boundaries, and a
+   dedicated procedure/checklist contract.
 2. Continue live validation of the MSFS 2024 EFB companion,
    including start, confirm, pause, resume, cancel, reconnect, and stale-state
    behavior.
@@ -32,6 +32,10 @@ Priorities are:
    behavior without making them mandatory for normal flows.
 8. Keep customer-facing diagnostics concise while retaining bounded flight
    recordings for support.
+
+The iniBuilds A310-300 implementation is complete for its current gate-to-gate
+scope. Future work on that profile is limited to maintenance, simulator-update
+compatibility, and field-validation corrections.
 
 The EFB may expose existing flow controls and operational state, but must not
 refactor simulator command paths or weaken procedure verification.

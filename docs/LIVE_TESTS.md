@@ -1,5 +1,15 @@
 # Live test evidence
 
+## 2026-08-13 - iniBuilds A310-300 implementation scope complete
+
+The dedicated twelve-flow procedure and checklist implementation, aircraft
+identity, SimBrief and approach contracts, A310-only control boundary, native
+readbacks, and regression coverage are complete for the current product scope.
+Further A310 changes are maintenance or field-validation corrections rather
+than continued feature development. Deliberately manual controls remain manual
+until a safe native command and independent readback satisfy the criteria in
+`A310_SUPPORT_PLAN.md`.
+
 ## 2026-08-02 - iniBuilds A310-300 framework research
 
 The official Microsoft-hosted iniBuilds A310 manual and the locally installed

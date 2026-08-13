@@ -6,7 +6,7 @@ verification throughout gate-to-gate operation.
 ## Highlights
 
 - Added the dedicated twelve-flow iniBuilds A310-300 procedure and checklist
-  framework as experimental support, using A310-specific commands and native
+  framework, using A310-specific commands and native
   readbacks instead of modern-Airbus mappings.
 - Expanded A310 startup, payload, takeoff, climb, approach, landing, and
   turnaround automation, including corrected gear, altimeter, and approach
@@ -28,7 +28,8 @@ SayIntentions, SimBrief, or the development Android companion. Every
 integration remains optional and normal flows continue with any combination
 of them enabled or unavailable.
 
-The iniBuilds A310-300 and Asobo 737 MAX 8 profiles remain experimental. This
-is beta assistance software: the pilot remains responsible for aircraft
+The iniBuilds A310-300 implementation is complete for its current scope. The
+Asobo 737 MAX 8 profile remains experimental. This is beta assistance
+software: the pilot remains responsible for aircraft
 configuration, flight-path control, and deciding whether it is safe to
 continue each phase.

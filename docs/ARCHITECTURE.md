@@ -84,7 +84,7 @@ Boeing aircraft profiles:
 - iniBuilds A320neo V2
 - iniBuilds A321LR
 - iniBuilds A330-300 (GE)
-- iniBuilds A310-300 (experimental native adapter; preliminary-panel mapping active)
+- iniBuilds A310-300 (dedicated gate-to-gate native adapter)
 - FlyByWire A32NX for MSFS 2024
 - PMDG 737-800
 - Asobo 737 MAX 8 (development beta)
@@ -132,14 +132,11 @@ where required.
 
 The A310 is a legacy-Airbus boundary, not part of `IsSupportedA320` or the
 modern iniBuilds Airbus command family. `A310ProcedureLibrary`,
-`A310ChecklistLibrary`, and `A310ControlProfile` own its procedures,
-checklists, and native-state research. Its preliminary-panel F/O sequence now
-maps the batteries, wipers/radar, APU fire test, IRS, oxygen, annunciator test,
-and initial exterior lights to A310-only commands and native panel readbacks.
-Flow 2 extends this boundary to signs, ATS/flight-control computers, heat,
-emergency lights, smoke/EGPWS tests, and the preflight pedestal.
-Other commands become eligible only after A310-native validation. See
-`docs/A310_SUPPORT_PLAN.md`.
+`A310ChecklistLibrary`, and `A310ControlProfile` own its complete current
+twelve-flow implementation, checklists, commands, and native state. Automatic
+actions stay inside the A310 namespace and require an independent native
+readback; intentionally manual actions preserve this boundary where no safe
+interface exists. See `docs/A310_SUPPORT_PLAN.md`.
 
 The Asobo 737 MAX is a second, independent Boeing profile. It uses
 `Asobo737MaxProcedureLibrary`, `Asobo737MaxChecklistLibrary`, and

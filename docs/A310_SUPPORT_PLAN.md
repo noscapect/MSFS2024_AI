@@ -4,8 +4,9 @@
 
 The iniBuilds Airbus A310-300 has a dedicated twelve-flow procedure catalog,
 checklist library, aircraft identity, SimBrief ICAO contract, approach
-schedule, and control-profile boundary. It is an **experimental profile under
-live validation**, not a released aircraft profile.
+schedule, and control-profile boundary. Its implementation is **complete for
+the current gate-to-gate scope**. Further work is maintenance, simulator-update
+compatibility, and field validation rather than planned feature expansion.
 
 The preliminary-panel flow has isolated automatic F/O actions for BAT 1/2/3,
 wipers/radar, APU fire testing, IRS, oxygen, annunciator testing, and initial
@@ -14,9 +15,10 @@ ATS/flight-control computers, window/probe heat, emergency lights,
 cargo-smoke and EGPWS tests, autobrake deselection, rudder-trim reset, TCAS
 preflight mode, and weather-radar OFF. Flow 3 maps APU start and availability,
 APU generator/bleed, beacon, XPDR ground mode, and external-power disconnect,
-and uses the shared SayIntentions/GSX pushback-clearance gate. Unmapped cockpit actions remain
-manual, while informational scans and conditional reminders do not create
-confirmation gates. The app must never send A320,
+and uses the shared SayIntentions/GSX pushback-clearance gate. Cockpit actions
+without a safe validated interface deliberately remain manual, while
+informational scans and conditional reminders do not create confirmation
+gates. The app must never send A320,
 A321, A330, FBW, PMDG, or 737 MAX commands to the A310 merely because a panel
 or control looks similar.
 
@@ -35,8 +37,7 @@ confirm an aircraft-specific `a310_` state namespace, including three
 batteries, APU, bleed/pack, ignition, hydraulic, electrical-bus and flap
 states. Those names are recorded in `A310ControlProfile`. Directly writing an
 internal state variable is prohibited unless it is an aircraft control
-interface with a live panel-state readback. The currently mapped preliminary
-panel sequence is being live-tested in normal order.
+interface with a live panel-state readback.
 
 ## Implemented flow content
 
@@ -69,9 +70,11 @@ panel sequence is being live-tested in normal order.
 These are guards for the normal flow, not a substitute for the aircraft
 manual, current charts, performance calculation, ECAM, or abnormal procedure.
 
-## Automation gates
+## Maintenance boundary
 
-An A310 item can move from manual to automatic only after all of the following
+The current implementation is frozen unless a simulator compatibility issue,
+field-validation correction, or clearly bounded safety improvement justifies a
+change. A manual A310 item can become automatic only after all of the following
 exist:
 
 1. Exact aircraft identification in MSFS 2024.
@@ -82,7 +85,5 @@ exist:
 5. A cold-and-dark and in-sequence live test.
 6. A regression test proving the command remains inside the A310 boundary.
 
-Priority mapping work after the preliminary panel is external power, APU,
-signs and preflight systems,
-engine start controls, packs, spoilers, slat/flap detents, gear UP/OFF/DOWN,
-autobrake, radar, ATC/TCAS and the takeoff-config test.
+There is no remaining planned A310 mapping backlog for the current product
+scope.

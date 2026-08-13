@@ -24,9 +24,10 @@ input, STS/MCAS commands, or the aircraft takeoff-configuration warning.
 The pilot must verify those items directly before commencing takeoff.
 
 The iniBuilds A310-300 uses a separate legacy-Airbus catalog in
-`A310ProcedureLibrary`. Its researched twelve-flow content and current manual
-control boundary are documented in `docs/A310_SUPPORT_PLAN.md`; it does not
-inherit the detailed modern-Airbus steps below.
+`A310ProcedureLibrary`. Its current twelve-flow implementation is complete;
+the deliberate manual-control boundary is documented in
+`docs/A310_SUPPORT_PLAN.md`. It does not inherit the detailed modern-Airbus
+steps below.
 
 An interrupted active flow is saved locally and restored at its exact step
 after restart. During restoration, transient milestones that have already

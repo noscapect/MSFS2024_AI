@@ -3,14 +3,14 @@
 This file is the primary technical handoff for continuing development. The
 current public release is **v0.9.7** from August 9, 2026. It contains the
 dashboard and optional MSFS 2024 EFB companion, expanded optional GSX
-coordination, the experimental iniBuilds A310-300 profile, and the Asobo 737
-MAX profile under an explicit experimental warning. The flows implemented in the
+coordination, the implementation-complete iniBuilds A310-300 profile, and the
+Asobo 737 MAX profile under an explicit experimental warning. The flows implemented in the
 application are authoritative; supporting documents must follow the application
 when they differ.
 
-The iniBuilds A310-300 procedure and checklist framework is included in v0.9.7
-as experimental support. Its native MSFS 2024 controls and readbacks continue
-to receive live gate-to-gate validation.
+The iniBuilds A310-300 procedure and checklist framework is included in v0.9.7.
+Its current twelve-flow implementation is complete; native MSFS 2024 controls
+and readbacks remain subject to routine field validation and maintenance.
 
 Suggested opening prompt for a new development chat:
 
@@ -82,7 +82,7 @@ Build and installation details are in `docs/EFB_COMPANION.md`.
 | FlyByWire A32NX for MSFS 2024 | Gate-to-gate live validated | SimConnect and MobiFlight WASM |
 | PMDG 737-800 | Gate-to-gate live validated | SimConnect and PMDG SDK data broadcast |
 | iniBuilds A330-300 (GE) | Gate-to-gate implemented and live tested; continue field validation | SimConnect and MobiFlight WASM |
-| iniBuilds A310-300 | Dedicated twelve-flow framework; validated preliminary-panel actions are automated and remaining native controls are being mapped | SimConnect base state plus A310-native command/readback telemetry |
+| iniBuilds A310-300 | Current twelve-flow gate-to-gate scope implemented; field validation and maintenance continue | SimConnect plus A310-native command/readback telemetry |
 | Asobo 737 MAX 8 | Development beta; Flows 1–6 iteratively live tested, Flow 7 not cleared | SimConnect Input Events, SimVars, and MobiFlight WASM |
 
 Unsupported aircraft are identified but never controlled with guessed generic

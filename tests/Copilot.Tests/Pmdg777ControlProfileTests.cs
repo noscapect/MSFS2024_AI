@@ -11,6 +11,7 @@ public sealed class Pmdg777ControlProfileTests
     public void SdkBoundaryUsesOfficial777XClientDataIdentifiers()
     {
         Assert.AreEqual(684, Pmdg777ControlProfile.DataSize);
+        Assert.AreEqual(370, Pmdg777ControlProfile.DataRequestId);
         Assert.AreEqual("PMDG_777X_Data", Pmdg777ControlProfile.DataName);
         Assert.AreEqual(0x504D4447U, Pmdg777ControlProfile.DataId);
         Assert.AreEqual(0x504D4448U, Pmdg777ControlProfile.DataDefinition);
@@ -82,6 +83,10 @@ public sealed class Pmdg777ControlProfileTests
         Assert.IsTrue(state.GearLeverDown);
         Assert.IsTrue(state.AlternateFlapsOff);
         Assert.IsTrue(state.ParkingBrakeSet);
+        Assert.AreEqual((byte)1, state.GearLeverRaw);
+        Assert.AreEqual((byte)0, state.AlternateFlapsArmRaw);
+        Assert.AreEqual((byte)1, state.AlternateFlapsControlRaw);
+        Assert.AreEqual((byte)1, state.ParkingBrakeRaw);
     }
 
     [TestMethod]

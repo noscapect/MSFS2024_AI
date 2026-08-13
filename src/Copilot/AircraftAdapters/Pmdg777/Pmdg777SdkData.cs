@@ -30,6 +30,10 @@ internal sealed class Pmdg777SdkData
     public bool GearLeverDown { get; private set; }
     public bool AlternateFlapsOff { get; private set; }
     public bool ParkingBrakeSet { get; private set; }
+    public byte GearLeverRaw { get; private set; }
+    public byte AlternateFlapsArmRaw { get; private set; }
+    public byte AlternateFlapsControlRaw { get; private set; }
+    public byte ParkingBrakeRaw { get; private set; }
 
     public static bool TryParse(byte[]? data, out Pmdg777SdkData state)
     {
@@ -63,9 +67,14 @@ internal sealed class Pmdg777SdkData
         state.RecirculationFansOff = !BoolAt(177) && !BoolAt(178);
         state.NavigationLightOn = BoolAt(113);
         state.LogoLightOn = BoolAt(114);
-        state.GearLeverDown = data[212] == 1;
-        state.AlternateFlapsOff = !BoolAt(415) && data[416] == 1;
-        state.ParkingBrakeSet = BoolAt(424);
+        state.GearLeverRaw = data[212];
+        state.AlternateFlapsArmRaw = data[415];
+        state.AlternateFlapsControlRaw = data[416];
+        state.ParkingBrakeRaw = data[424];
+        state.GearLeverDown = state.GearLeverRaw == 1;
+        state.AlternateFlapsOff = state.AlternateFlapsArmRaw == 0
+                                  && state.AlternateFlapsControlRaw == 1;
+        state.ParkingBrakeSet = state.ParkingBrakeRaw != 0;
         return true;
     }
 }

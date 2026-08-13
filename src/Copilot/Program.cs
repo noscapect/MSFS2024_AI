@@ -1,5 +1,6 @@
 using System.Windows.Forms;
 using System.Threading;
+using Msfs2024Ai.Copilot.Diagnostics;
 
 namespace Msfs2024Ai.Copilot;
 
@@ -8,6 +9,16 @@ internal static class Program
     [STAThread]
     private static void Main(string[] args)
     {
+        Application.SetUnhandledExceptionMode(UnhandledExceptionMode.ThrowException);
+        AppDomain.CurrentDomain.UnhandledException += (_, eventArgs) =>
+            AppLog.Write($"Unhandled process exception: {eventArgs.ExceptionObject}");
+        TaskScheduler.UnobservedTaskException += (_, eventArgs) =>
+        {
+            AppLog.Write($"Unobserved task exception: {eventArgs.Exception}");
+            eventArgs.SetObserved();
+        };
+        AppLog.Write($"Copilot process starting (PID {System.Diagnostics.Process.GetCurrentProcess().Id}).");
+
         using var instanceMutex = new Mutex(
             initiallyOwned: false,
             name: @"Local\MSFS2024_AI_Copilot");
@@ -55,8 +66,14 @@ internal static class Program
                 Application.Run();
             }
         }
+        catch (Exception exception)
+        {
+            AppLog.Write($"Copilot process terminating after fatal exception: {exception}");
+            throw;
+        }
         finally
         {
+            AppLog.Write("Copilot application loop exited.");
             instanceMutex.ReleaseMutex();
         }
     }

@@ -111,6 +111,7 @@ internal sealed class CopilotService : Form
     private int _sayIntentionsIntercomSignalObserved;
     private readonly SemaphoreSlim _sayIntentionsCommsModeGate = new(1, 1);
     private readonly CancellationTokenSource _sayIntentionsCancellation = new();
+    private bool _disposingOrDisposed;
     private SayIntentionsFlightContext? _sayIntentionsFlight;
     private System.Windows.Forms.Timer? _sayIntentionsTimer;
     private bool _sayIntentionsRefreshInProgress;
@@ -154,6 +155,7 @@ internal sealed class CopilotService : Form
     private bool _pmdg777DataReady;
     private Pmdg777SdkData? _pmdg777State;
     private string? _loggedPmdg777FlowOneSignature;
+    private byte[]? _pmdg777RawSnapshot;
     private byte? _loggedPmdgBatterySelector;
     private bool? _loggedPmdgGroundPowerAvailable;
     private bool? _loggedPmdgGroundPowerOn;
@@ -910,7 +912,7 @@ internal sealed class CopilotService : Form
         A310StandbyAltimeterStandard = 369,
         PmdgNg3Data = 300,
         PmdgNg3Control = 301,
-        Pmdg777Data = 302
+        Pmdg777Data = Pmdg777ControlProfile.DataRequestId
     }
 
     private enum ClientDataArea
@@ -3888,7 +3890,14 @@ internal sealed class CopilotService : Form
         var request = (Request)data.dwRequestID;
         if (request == Request.Pmdg777Data)
         {
-            var raw = (Pmdg777RawData)data.dwData[0];
+            if (data.dwData[0] is not Pmdg777RawData raw)
+            {
+                AppLog.Write(
+                    $"PMDG 777X SDK payload rejected: expected {nameof(Pmdg777RawData)}, "
+                    + $"received {data.dwData[0]?.GetType().FullName ?? "null"}.");
+                return;
+            }
+            LogPmdg777ChangedOffsets(raw.Data);
             if (!Pmdg777SdkData.TryParse(raw.Data, out var parsed))
             {
                 AppLog.Write(
@@ -7385,6 +7394,8 @@ internal sealed class CopilotService : Form
             + $"HYD_SAFE={(sdk.CenterPrimaryPumpsOff && sdk.DemandPumpsOff).ToOnOff()} "
             + $"WIPERS_OFF={sdk.WipersOff.ToOnOff()} GEAR_DOWN={sdk.GearLeverDown.ToOnOff()} "
             + $"ALT_FLAPS_OFF={sdk.AlternateFlapsOff.ToOnOff()} PARK_BRAKE={sdk.ParkingBrakeSet.ToOnOff()} "
+            + $"RAW_GEAR={sdk.GearLeverRaw} RAW_ALT={sdk.AlternateFlapsArmRaw}/{sdk.AlternateFlapsControlRaw} "
+            + $"RAW_PARK={sdk.ParkingBrakeRaw} "
             + $"NAV={sdk.NavigationLightOn.ToOnOff()} LOGO={sdk.LogoLightOn.ToOnOff()} "
             + $"PACKS_OFF={sdk.PacksOff.ToOnOff()} RECIRC_OFF={sdk.RecirculationFansOff.ToOnOff()} "
             + $"ADIRU={sdk.AdiruOn.ToOnOff()} EMER={sdk.EmergencyLightsSelector}";
@@ -7398,6 +7409,38 @@ internal sealed class CopilotService : Form
 
         _loggedPmdg777FlowOneSignature = signature;
         AppLog.Write($"PMDG 777 Flow 1 readbacks: {signature}.");
+    }
+
+    private void LogPmdg777ChangedOffsets(byte[]? data)
+    {
+        if (data == null || data.Length < Pmdg777ControlProfile.DataSize)
+        {
+            return;
+        }
+
+        if (_pmdg777RawSnapshot == null)
+        {
+            _pmdg777RawSnapshot = (byte[])data.Clone();
+            AppLog.Write("PMDG 777X raw-data change monitor initialized for Flow 1 validation.");
+            return;
+        }
+
+        var changes = new List<string>();
+        for (var offset = 0; offset < Pmdg777ControlProfile.DataSize; offset++)
+        {
+            if (_pmdg777RawSnapshot[offset] == data[offset])
+            {
+                continue;
+            }
+
+            changes.Add($"{offset}:{_pmdg777RawSnapshot[offset]}>{data[offset]}");
+        }
+
+        if (changes.Count > 0)
+        {
+            AppLog.Write($"PMDG 777X raw-data changes: {string.Join(", ", changes)}.");
+            Buffer.BlockCopy(data, 0, _pmdg777RawSnapshot, 0, Pmdg777ControlProfile.DataSize);
+        }
     }
 
     private void SendPmdgNg3Control(uint sdkEventOffset, uint parameter)
@@ -22107,6 +22150,12 @@ internal sealed class CopilotService : Form
 
     protected override void Dispose(bool disposing)
     {
+        if (_disposingOrDisposed)
+        {
+            return;
+        }
+
+        _disposingOrDisposed = true;
         if (disposing)
         {
             _pendingFuelPumpSequence = null;

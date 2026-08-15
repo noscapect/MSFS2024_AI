@@ -11,6 +11,7 @@ internal sealed class ProcedureRunner
     private bool _manualConfirmationReceived;
     private string? _lastAutomaticStepId;
     private DateTime _nextAutomaticActionUtc;
+    private DateTime _currentStepStartedUtc;
     private bool _recovering;
 
     public ProcedureRunner(
@@ -41,6 +42,7 @@ internal sealed class ProcedureRunner
         _manualConfirmationReceived = false;
         _lastAutomaticStepId = null;
         _nextAutomaticActionUtc = DateTime.MinValue;
+        _currentStepStartedUtc = DateTime.UtcNow;
         _recovering = true;
         Status = ProcedureStatus.Running;
         Message = $"Started {definition.Name}.";
@@ -57,6 +59,7 @@ internal sealed class ProcedureRunner
         _manualConfirmationReceived = false;
         _lastAutomaticStepId = null;
         _nextAutomaticActionUtc = DateTime.MinValue;
+        _currentStepStartedUtc = DateTime.UtcNow;
         _recovering = true;
         Status = ProcedureStatus.Running;
         Message = $"Resumed {definition.Name} from saved step {_stepIndex + 1}.";
@@ -72,6 +75,7 @@ internal sealed class ProcedureRunner
         _manualConfirmationReceived = false;
         _lastAutomaticStepId = null;
         _nextAutomaticActionUtc = DateTime.MinValue;
+        _currentStepStartedUtc = DateTime.UtcNow;
         _recovering = true;
         Status = ProcedureStatus.Paused;
         Message =
@@ -120,12 +124,13 @@ internal sealed class ProcedureRunner
     {
         if (Status == ProcedureStatus.Failed)
         {
-            _stepIndex++;
             _manualConfirmationReceived = false;
             _lastAutomaticStepId = null;
+            _nextAutomaticActionUtc = DateTime.MinValue;
             _recovering = false;
+            _currentStepStartedUtc = DateTime.UtcNow;
             Status = ProcedureStatus.Running;
-            Message = "Procedure resumed (skipped failed step).";
+            Message = "Procedure retrying the failed step.";
             Advance(state);
             return;
         }
@@ -147,6 +152,7 @@ internal sealed class ProcedureRunner
         _manualConfirmationReceived = false;
         _lastAutomaticStepId = null;
         _nextAutomaticActionUtc = DateTime.MinValue;
+        _currentStepStartedUtc = DateTime.MinValue;
         _recovering = false;
         Status = ProcedureStatus.Idle;
         Message = "Procedure cancelled.";
@@ -180,6 +186,9 @@ internal sealed class ProcedureRunner
                 step.IsComplete(state)
                 || (_recovering
                     && step.IsCompleteWhenRecovering?.Invoke(state) == true);
+            var remainingDuration = step.MinimumDuration
+                                  - (DateTime.UtcNow - _currentStepStartedUtc);
+            var dwellSatisfied = remainingDuration <= TimeSpan.Zero;
             if (step.Kind == ProcedureStepKind.AutomaticAction
                 && step.RequireCommandExecution
                 && !string.Equals(
@@ -189,7 +198,7 @@ internal sealed class ProcedureRunner
             {
                 complete = false;
             }
-            if (complete)
+            if (complete && dwellSatisfied)
             {
                 var automaticActionWasIssued =
                     step.Kind == ProcedureStepKind.AutomaticAction
@@ -198,6 +207,7 @@ internal sealed class ProcedureRunner
                         step.Id,
                         StringComparison.Ordinal);
                 _stepIndex++;
+                _currentStepStartedUtc = DateTime.UtcNow;
                 _manualConfirmationReceived = false;
                 _lastAutomaticStepId = null;
                 if (automaticActionWasIssued)
@@ -220,6 +230,14 @@ internal sealed class ProcedureRunner
             }
 
             _recovering = false;
+
+            if (complete && !dwellSatisfied)
+            {
+                SetWaitingState(
+                    ProcedureStatus.WaitingForVerification,
+                    $"Deliberate cockpit scan: {step.Label} ({Math.Ceiling(remainingDuration.TotalSeconds):0} seconds remaining).");
+                return;
+            }
 
             switch (step.Kind)
             {

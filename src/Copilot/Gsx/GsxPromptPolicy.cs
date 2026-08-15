@@ -51,6 +51,46 @@ internal static class GsxPromptPolicy
                 || choice.Contains("straight pushback"));
     }
 
+    public static int? FindAttachPushbackTugConfirmation(GsxMenuSnapshot menu)
+    {
+        if (menu.IsEmpty
+            || !Normalize(menu.Title).Contains("attach pushback tug now"))
+        {
+            return null;
+        }
+
+        for (var index = 0; index < menu.Choices.Count; index++)
+        {
+            if (string.Equals(Normalize(menu.Choices[index]), "yes", StringComparison.Ordinal))
+            {
+                return index;
+            }
+        }
+
+        return null;
+    }
+
+    public static int? FindContinuePushbackAction(GsxMenuSnapshot menu)
+    {
+        if (menu.IsEmpty || !IsRootServicesMenu(menu))
+        {
+            return null;
+        }
+
+        for (var index = 0; index < menu.Choices.Count; index++)
+        {
+            if (string.Equals(
+                    Normalize(menu.Choices[index]),
+                    "continue pushback",
+                    StringComparison.Ordinal))
+            {
+                return index;
+            }
+        }
+
+        return null;
+    }
+
     public static bool RequiresGoodEngineStartMenu(IReadOnlyList<string> statusLines)
     {
         var status = string.Join(" ", statusLines).ToLowerInvariant();

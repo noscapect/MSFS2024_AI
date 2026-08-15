@@ -28,6 +28,13 @@ gate-to-gate First Officer experience: it performs supported cockpit actions,
 monitors Captain actions, verifies actual aircraft state, gives spoken
 callouts, and coordinates optional flight-planning and ATC integrations.
 
+The product is automation-first. A manual-confirmation step must never be used
+as a placeholder for an action assigned to the virtual First Officer or for a
+condition available through telemetry. FO actions require aircraft-specific
+commands with independent readbacks; FO checks advance from readbacks without
+pilot confirmation. A flow is not ready for testing until every such step has
+been implemented or explicitly removed from the claimed scope.
+
 The project is multi-aircraft and remains beta software. It is assistance
 software, not an autopilot, and the pilot must always be able to take over.
 

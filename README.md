@@ -231,10 +231,17 @@ installed or disabled.
   than planned feature development.
 - PMDG 777-300ER integration has started. The app recognizes the installed
   `777-300ER` title, isolates the official `PMDG_777X` SDK namespace, and
-  exposes the complete dedicated twelve-flow gate-to-gate catalog. Flow 1 has
-  initial read-only SDK coverage; all unvalidated 777 actions in every flow
-  remain explicit crew confirmations. It does not send 777 cockpit controls,
-  and catalog availability is not a claim of operational support.
+  exposes the complete dedicated twelve-flow gate-to-gate catalog. Active Flow
+  1 uses PMDG-native readbacks for BATTERY, both external-power sources, bus
+  ties, hydraulic-pump starting state, wipers, gear, alternate flaps, and
+  ADIRU. Its deliberate 3–5 second verification intervals and the 30-second
+  ADIRU-off requirement keep the flow usable at normal cockpit pace. Flow 2
+  follows the same Boeing crew-workflow pattern as the 737: explicit Captain
+  flight-deck, UFT, CDU and clearance work followed by the detailed First
+  Officer preflight. FO electrical, emergency-light selector and guard,
+  navigation-light, flight-director and transponder actions have independent
+  readbacks. Display, console, IRS, CDU and electronic PREFLIGHT-checklist
+  gates use exact PMDG data; MCP setup remains in Before Start per PMDG SOP.
 
 ## Troubleshooting and issue reports
 

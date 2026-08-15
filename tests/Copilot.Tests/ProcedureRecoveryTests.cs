@@ -9,6 +9,31 @@ namespace Msfs2024Ai.Copilot.Tests;
 public sealed class ProcedureRecoveryTests
 {
     [TestMethod]
+    public void ResumeAfterFailureRetriesCurrentStepWithoutSkipping()
+    {
+        var commands = new List<string>();
+        var runner = new ProcedureRunner(
+            commands.Add,
+            () => AutomationPolicy.AutomaticWhenSupported);
+        var step = new ProcedureStep(
+            "strict-action",
+            "Strict action",
+            ProcedureStepKind.AutomaticAction,
+            _ => false,
+            command: "strict command");
+        var definition = new ProcedureDefinition("strict-flow", "Strict flow", new[] { step });
+        var state = new AircraftState();
+
+        runner.Start(definition, state);
+        runner.Fail("readback failed");
+        runner.Resume(state);
+
+        Assert.AreEqual("strict-action", runner.CurrentStep?.Id);
+        Assert.AreEqual(0, runner.CompletedStepCount);
+        CollectionAssert.AreEqual(new[] { "strict command", "strict command" }, commands);
+    }
+
+    [TestMethod]
     public void SavedSessionRestoreIsPausedUntilPilotResumes()
     {
         var commands = new List<string>();

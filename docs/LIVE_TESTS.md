@@ -1,16 +1,125 @@
 # Live test evidence
 
+## 2026-08-14 - PMDG 777 SayIntentions push/start request routing
+
+The completed Flow 3 review showed that its `pushback-clearance` step did not
+use the canonical `captain-pushback-clearance` identifier recognized by the
+SayIntentions dispatcher. Captain confirmation therefore advanced the 777 flow
+without asking the SayIntentions FO to transmit. Flow 3 now uses the shared
+identifier and maps to `preflight_request_push_and_start`; after the Captain
+instructs the FO, the step waits for the matching ATC clearance response.
+
+## 2026-08-14 - PMDG 777 human-paced grouped controls
+
+The completed Flow 3 review showed that grouped FO switch inputs were visibly
+too fast even though each procedure step had a dwell time. PMDG 777 queued
+controls are now separated by 900 ms instead of 200 ms, so the cockpit controls
+themselves move at a manageable human pace. The APU power/air and external
+power groups retain post-action scan time, while the six-switch hydraulic and
+fuel groups each require a ten-second action-and-verification window.
+
+## 2026-08-14 - PMDG 777 Flow 3 FO confirmation removal
+
+The first Flow 3 run stopped at a manual FO confirmation for passenger and
+cargo doors while GSX boarding and aircraft door telemetry were available.
+That gate now observes the configured doors and completes only when their
+readbacks report closed. The same audit removed the remaining Flow 3 manual FO
+placeholders: APU start, APU generator/bleed supply, external-power disconnect,
+seat-belts AUTO and electronic BEFORE START checklist completion now use PMDG
+commands and independent SDK readbacks. Manual Flow 3 steps are limited to
+genuine Captain work. Live validation is pending.
+
+The first subsequent run exposed an ordering error at the electronic BEFORE
+START checklist: the flow waited for PMDG's completion bit before configuring
+the required hydraulic pumps, fuel pumps, beacon and transponder. The revised
+order obtains Captain pushback/start clearance, commands and verifies the FO
+hydraulic and fuel configurations, observes the Captain's beacon readback,
+sets XPNDR, and then completes an app-level virtual-FO verification from those
+independent readbacks. It does not fake or wait on PMDG's cockpit ECL flag.
+
+## 2026-08-14 - PMDG 777 passenger-sign schedule correction
+
+The completed Flow 2 cockpit review found the no-smoking selector at ON and
+the seat-belt selector at OFF. The PMDG 777 preflight procedure specifies seat
+belts OFF; Before Start specifies AUTO. The 777 Flow 2 grouped exterior
+lights/signs action now commands and independently verifies no-smoking AUTO
+while retaining seat belts OFF. Flow 3 has a distinct automatic FO action and
+readback gate that moves seat belts to AUTO. Live validation remains pending.
+
+## 2026-08-14 - PMDG 777-300ER Flow 2 correction
+
+Flow 2 was re-audited against the PMDG 777 checklist and the app's established
+737 crew-workflow pattern. It now contains explicit Captain flight-deck, UFT,
+CDU and clearance work followed by system-grouped FO preflight actions and
+checks. MCP initial-altitude setup was removed from Flow 2 because PMDG places
+it in Before Start. The emergency-light selector and guard are separate steps;
+the guard uses its own `L:switch_50_a` readback and official PMDG guard event,
+so an open guard cannot pass because the selector happens to be ARMED.
+
+The first corrected live connection reported FO sources and displays ready,
+flight `KLM1701`, cruise altitude 13,000 feet, 149.5 NM to destination, FMC
+performance complete, MCP altitude 10,000 feet, and takeoff data 5/133/143/158.
+Emergency lights were OFF, transponder was not STBY, and the electronic
+PREFLIGHT checklist was incomplete. Those are now genuine ordered Flow 2
+actions/gates rather than reasons to skip or falsely complete unrelated tasks.
+The revised SOP ordering and emergency-light guard still require the next live
+Flow 2 run; the earlier 394-test result predates this revision.
+
+The subsequent automation audit removed every manual-confirmation placeholder
+assigned to the virtual FO. Live 777X telemetry after the rebuild reported the
+TAC, primary flight computers, fire, engine-control, fuel, anti-ice, exterior-
+light and air-system panel predicates all in the required preflight state. The
+transponder altitude source was NORM. AUTOBRAKE was not at RTO, giving the next
+ordered run one genuine automatic action/readback pair to exercise. Both Debug
+and Release verification now pass **395 tests with no failures**. This records
+pre-test readiness, not a completed live Flow 2 pass.
+
 ## 2026-08-13 - PMDG 777-300ER Flow 1 preparation
 
 MSFS 2024 reported the loaded aircraft title as `777-300ER`, confirming the
 dedicated variant route against the locally installed aircraft. The read-only
-684-byte `PMDG_777X_Data` subscription connected after SDK broadcast was
-enabled, and the app received the first data block. A duplicate SimConnect
+684-byte `PMDG_777X_Data` subscription connected, but the active PMDG WASM
+work-folder `777_Options.ini` did not contain `[SDK] EnableDataBroadcast=1`.
+The received zero-filled client area was therefore not published aircraft
+state. The parser now requires aircraft model `6` (777-300ER) before declaring
+SDK data ready, and the active options file has been corrected. A PMDG reload
+is required for the live retest. A duplicate SimConnect
 request ID initially routed MobiFlight float payloads into the 777 callback;
 the collision was reproduced, guarded, assigned a unique request ID, and then
 verified live with the app remaining responsive. The complete twelve-flow
-procedure/checklist catalog is now visible, with zero automatic 777 commands.
-Flow 1 selector and offset validation remains the next live activity.
+procedure/checklist catalog is now visible. Flow 1 is narrowed to the automatic
+First Officer BATTERY ON action only; no external-power or later placeholder
+step can run. Live validation remains pending after the required PMDG reload.
+
+The first live BATTERY ON command moved the cockpit switch using official event
+`EVT_OH_ELEC_BATTERY_SWITCH` with direct position parameter `1`. The PMDG data
+block did not publish a change and continued to report its candidate battery
+byte as OFF. The independent native SimConnect readback
+`ELECTRICAL MASTER BATTERY:1` remained `1`, but subsequent visual inspection
+proved the PMDG BATTERY switch was actually OFF. The generic value is therefore
+not a valid PMDG switch-position readback and has been removed from completion.
+The battery step can complete only from the published PMDG
+`ELEC_Battery_Sw_ON` field; an absent or zero-filled broadcast blocks the
+command instead of passing or silently advancing.
+
+After the first restart with broadcasting enabled, PMDG published valid model
+`6` telemetry and correctly reported BATTERY OFF. The first command attempt was
+still blocked because the app required an initial callback from the PMDG
+control client area. PMDG's shipped connection sample does not make that
+callback a prerequisite for the first control write. The app now requires the
+initialized control mapping and valid published telemetry, while retaining the
+pending-event guard after a command is written.
+
+The primary external-power test also established that the live 777-300ER uses
+the reverse primary/secondary order from the SDK header's array comment:
+`EVT_OH_ELEC_GRD_PWR_PRIM_SWITCH` updates entry `1`. The parser now maps the
+live aircraft order, so the primary completion readback and the subsequent
+secondary command use their matching source.
+
+Following the primary/secondary validation, Flow 1 received deliberate timing:
+three seconds for BATTERY and each short switch scan, five seconds for each
+external-power transfer and ADIRU indication, and four seconds for the
+hydraulic scan. The existing 30-second ADIRU-off interval remains mandatory.
 
 ## 2026-08-13 - iniBuilds A310-300 implementation scope complete
 

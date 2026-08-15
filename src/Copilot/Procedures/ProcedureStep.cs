@@ -13,7 +13,8 @@ internal sealed class ProcedureStep
         string? command = null,
         string? manualInstruction = null,
         Func<AircraftState, bool>? isCompleteWhenRecovering = null,
-        bool requireCommandExecution = false)
+        bool requireCommandExecution = false,
+        TimeSpan? minimumDuration = null)
     {
         Id = id;
         Label = label;
@@ -24,6 +25,7 @@ internal sealed class ProcedureStep
         ManualInstruction = manualInstruction;
         IsCompleteWhenRecovering = isCompleteWhenRecovering;
         RequireCommandExecution = requireCommandExecution;
+        MinimumDuration = minimumDuration ?? TimeSpan.Zero;
     }
 
     public string Id { get; }
@@ -35,4 +37,5 @@ internal sealed class ProcedureStep
     public string? ManualInstruction { get; }
     public Func<AircraftState, bool>? IsCompleteWhenRecovering { get; }
     public bool RequireCommandExecution { get; }
+    public TimeSpan MinimumDuration { get; }
 }

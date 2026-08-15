@@ -173,9 +173,30 @@ the 737 procedure library, parse `PMDG_NG3_Data`, or send NG3 controls. It
 remains excluded from `IsSupportedAircraft` until its own telemetry parser,
 commands, readbacks, and live validation exist. Its dedicated twelve-flow
 catalog and matching checklist set define the full integration surface without
-borrowing 737 procedure objects. Flow 1 uses a read-only subset of the exact
-777X data structure. All twelve flows have zero automatic command steps until
-each 777X event and independent readback are validated in the simulator.
+borrowing 737 procedure objects. Flows 1 and 2 use a read-only subset of the exact
+777X data structure. A data block is accepted only when its aircraft-model byte
+identifies the 777-300ER; the zero-filled client area that exists when PMDG data
+broadcast is disabled is never treated as ready. Flow 1 uses the PMDG battery,
+external-power, bus-tie, hydraulic, wiper, gear, alternate-flap and ADIRU
+fields, with deliberate 3–5 second per-item scan intervals. The generic MSFS
+battery state is explicitly not a 777 switch-position readback.
+
+Flow 2 follows the app's established Boeing division: explicit Captain flight
+deck, UFT, CDU and clearance work precedes the detailed First Officer preflight.
+The FO scan is split into PMDG-checklist system groups instead of one broad
+proxy gate. Executable gates use exact PMDG fields for the emergency-light
+selector and its separate guard, navigation light, right flight director,
+display sources and formats, console positions, IRS alignment, CDU
+route/performance/takeoff values, and `ECL_ChecklistComplete[0]`. MCP setup is
+kept in Before Start, where the PMDG checklist places it. A failed automatic
+action retries the same step; Resume never advances past it.
+
+The automation-first contract forbids manual-confirmation placeholders for
+virtual-FO work. Flow 2 therefore has no manual FO steps: deterministic panel
+configuration is executed through PMDG controls, checks advance from PMDG
+readbacks, and the final virtual-FO PREFLIGHT verification is derived from the
+complete readback set. Manual steps in this flow are reserved for genuine
+Captain setup and clearance work.
 
 ### SimConnect transport
 

@@ -120,6 +120,8 @@ internal sealed class CopilotService : Form
     private string? _pendingSayIntentionsAtcStepId;
     private long _pendingSayIntentionsAtcBaselineId;
     private DateTime? _pendingSayIntentionsAtcStartedUtc;
+    private bool _taxiClearanceReceived;
+    private bool _takeoffClearanceReceived;
     private readonly FlightTelemetryStore _flightTelemetryStore;
     private readonly AircraftIdentityResolver _aircraftIdentityResolver = new();
     private System.Windows.Forms.Timer? _replayTimer;
@@ -154,8 +156,17 @@ internal sealed class CopilotService : Form
     private bool _pmdg777SdkInitialized;
     private bool _pmdg777DataReady;
     private Pmdg777SdkData? _pmdg777State;
+    private Pmdg777Control _pmdg777ControlState;
+    private readonly Queue<(uint EventId, uint Parameter, string Label)> _pmdg777ControlQueue = new();
+    private System.Windows.Forms.Timer? _pmdg777ControlQueueTimer;
+    private bool _pmdg777FireOverheatTestObserved;
+    private bool _pmdg777FirstOfficerOxygenTestObserved;
+    private bool _pmdg777ControlReady;
     private string? _loggedPmdg777FlowOneSignature;
     private byte[]? _pmdg777RawSnapshot;
+    private bool? _loggedPmdg777GenericBattery;
+    private DateTime? _pmdg777AdiruOffSinceUtc;
+    private System.Windows.Forms.Timer? _pmdg777AdiruOnTimer;
     private byte? _loggedPmdgBatterySelector;
     private bool? _loggedPmdgGroundPowerAvailable;
     private bool? _loggedPmdgGroundPowerOn;
@@ -912,7 +923,8 @@ internal sealed class CopilotService : Form
         A310StandbyAltimeterStandard = 369,
         PmdgNg3Data = 300,
         PmdgNg3Control = 301,
-        Pmdg777Data = Pmdg777ControlProfile.DataRequestId
+        Pmdg777Data = Pmdg777ControlProfile.DataRequestId,
+        Pmdg777Control = Pmdg777ControlProfile.ControlRequestId
     }
 
     private enum ClientDataArea
@@ -924,7 +936,8 @@ internal sealed class CopilotService : Form
         MobiFlightRuntimeResponse = 112,
         PmdgNg3Data = unchecked((int)PmdgNg3DataId),
         PmdgNg3Control = unchecked((int)PmdgNg3ControlId),
-        Pmdg777Data = unchecked((int)Pmdg777ControlProfile.DataId)
+        Pmdg777Data = unchecked((int)Pmdg777ControlProfile.DataId),
+        Pmdg777Control = unchecked((int)Pmdg777ControlProfile.ControlId)
     }
 
     private enum ClientDataDefinition
@@ -1114,7 +1127,8 @@ internal sealed class CopilotService : Form
         A310StandbyAltimeterStandard = 291,
         PmdgNg3Data = unchecked((int)PmdgNg3DataDefinition),
         PmdgNg3Control = unchecked((int)PmdgNg3ControlDefinition),
-        Pmdg777Data = unchecked((int)Pmdg777ControlProfile.DataDefinition)
+        Pmdg777Data = unchecked((int)Pmdg777ControlProfile.DataDefinition),
+        Pmdg777Control = unchecked((int)Pmdg777ControlProfile.ControlDefinition)
     }
 
     private enum CopilotEvent
@@ -1333,6 +1347,11 @@ internal sealed class CopilotService : Form
         public double GsxRemoteControl;
         public double IniBuildsIgnitionKnob;
         public double IniBuildsTurnoffLightSwitch;
+        public double Pmdg777EmergencyLightsGuard;
+        public double Pmdg777PassengerOxygenGuard;
+        public double Pmdg777PrimaryFlightComputersGuard;
+        public double Pmdg777FireOverheatTestSwitch;
+        public double Pmdg777FirstOfficerOxygenTestSwitch;
     }
 
     [StructLayout(LayoutKind.Sequential, Pack = 1)]
@@ -1395,6 +1414,13 @@ internal sealed class CopilotService : Form
     {
         [MarshalAs(UnmanagedType.ByValArray, SizeConst = Pmdg777ControlProfile.DataSize)]
         public byte[] Data;
+    }
+
+    [StructLayout(LayoutKind.Sequential, Pack = 1)]
+    private struct Pmdg777Control
+    {
+        public uint Event;
+        public uint Parameter;
     }
 
     private sealed class PmdgNg3State
@@ -1768,6 +1794,11 @@ internal sealed class CopilotService : Form
         sender.AddToDataDefinition(Definition.AircraftState, "L:FSDT_GSX_SET_REMOTECONTROL", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "L:INI_IGNITION_KNOB", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.AircraftState, "L:INI_TURNOFF_LIGHT_SWITCH", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:switch_50_a", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:switch_53_a", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:switch_56_a", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:switch_89_a", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
+        sender.AddToDataDefinition(Definition.AircraftState, "L:switch_1066_a", "Number", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.RegisterDataDefineStruct<AircraftData>(Definition.AircraftState);
         sender.AddToDataDefinition(Definition.FlightCalloutState, "SIM ON GROUND", "Bool", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
         sender.AddToDataDefinition(Definition.FlightCalloutState, "AIRSPEED INDICATED", "Knots", SIMCONNECT_DATATYPE.FLOAT64, 0, SimConnect.SIMCONNECT_UNUSED);
@@ -2242,6 +2273,18 @@ internal sealed class CopilotService : Form
                 }
                 TrySelectPendingGsxAction();
                 TryAutoSelectGsxArrivalStand();
+                if (TryAutoAcceptGsxAttachPushbackTug())
+                {
+                    UpdateDashboard();
+                    PublishEfbState(force: true);
+                    break;
+                }
+                if (TryAutoContinueGsxPushback())
+                {
+                    UpdateDashboard();
+                    PublishEfbState(force: true);
+                    break;
+                }
                 TryAutoSelectSayIntentionsPushbackDirection();
                 if (_gsxMenuOpen)
                 {
@@ -3888,6 +3931,20 @@ internal sealed class CopilotService : Form
         }
 
         var request = (Request)data.dwRequestID;
+        if (request == Request.Pmdg777Control)
+        {
+            if (data.dwData[0] is Pmdg777Control control)
+            {
+                var becameReady = !_pmdg777ControlReady;
+                _pmdg777ControlState = control;
+                _pmdg777ControlReady = true;
+                if (becameReady)
+                {
+                    AppLog.Write("PMDG 777X control channel ready.");
+                }
+            }
+            return;
+        }
         if (request == Request.Pmdg777Data)
         {
             if (data.dwData[0] is not Pmdg777RawData raw)
@@ -3897,11 +3954,11 @@ internal sealed class CopilotService : Form
                     + $"received {data.dwData[0]?.GetType().FullName ?? "null"}.");
                 return;
             }
-            LogPmdg777ChangedOffsets(raw.Data);
             if (!Pmdg777SdkData.TryParse(raw.Data, out var parsed))
             {
                 AppLog.Write(
-                    $"PMDG 777X SDK data block rejected: expected {Pmdg777ControlProfile.DataSize} bytes, received {raw.Data?.Length ?? 0}.");
+                    $"PMDG 777X SDK data block rejected: no published 777-300ER state "
+                    + $"(expected {Pmdg777ControlProfile.DataSize} bytes with model ID 6; received {raw.Data?.Length ?? 0} bytes).");
                 return;
             }
 
@@ -5640,6 +5697,7 @@ internal sealed class CopilotService : Form
         VerifyPendingBatteryProcedure();
         VerifyPendingFireTest();
         TryAutoConfirmGsxGoodEngineStart();
+        TryAutoContinueGsxPushback();
         UpdateDashboard();
         TryExecuteOneShotCommand();
     }
@@ -5737,6 +5795,13 @@ internal sealed class CopilotService : Form
         if (isPmdg777 && !_pmdg777SdkInitialized)
         {
             InitializePmdg777Sdk(sender);
+        }
+        if (isPmdg777)
+        {
+            SetLoggedBool(
+                ref _loggedPmdg777GenericBattery,
+                (float)raw.Battery1,
+                "PMDG 777 native ELECTRICAL MASTER BATTERY:1");
         }
         if (isIniBuildsAirbusFamily)
         {
@@ -5850,9 +5915,15 @@ internal sealed class CopilotService : Form
         var plannedBlockFuelKg = SimBriefOperationalContext.BlockFuelKilograms(activePlan);
         var actualFuelKg = raw.TotalFuelWeightPounds / 2.20462262185;
         var plannedTakeoffFlaps = SimBriefOperationalContext.TakeoffFlapSetting(activePlan, aircraftVariant);
-        int? cockpitV1 = isPmdg737 && pmdg?.V1 > 0 ? pmdg.V1 : null;
-        int? cockpitVr = isPmdg737 && pmdg?.Vr > 0 ? pmdg.Vr : null;
-        int? cockpitFlaps = isPmdg737 && pmdg?.TakeoffFlaps > 0 ? pmdg.TakeoffFlaps : null;
+        int? cockpitV1 = isPmdg777 && pmdg777?.FmcV1 > 0
+            ? pmdg777.FmcV1
+            : isPmdg737 && pmdg?.V1 > 0 ? pmdg.V1 : null;
+        int? cockpitVr = isPmdg777 && pmdg777?.FmcVr > 0
+            ? pmdg777.FmcVr
+            : isPmdg737 && pmdg?.Vr > 0 ? pmdg.Vr : null;
+        int? cockpitFlaps = isPmdg777 && pmdg777?.FmcTakeoffFlaps > 0
+            ? pmdg777.FmcTakeoffFlaps
+            : isPmdg737 && pmdg?.TakeoffFlaps > 0 ? pmdg.TakeoffFlaps : null;
         var effectiveV1 = cockpitV1
             ?? _settings.TakeoffV1SpeedKnots;
         var effectiveVr = cockpitVr
@@ -5860,7 +5931,9 @@ internal sealed class CopilotService : Form
         effectiveVr = Math.Max(effectiveV1, effectiveVr);
         var effectiveV2 = Math.Max(
             effectiveVr,
-            _settings.TakeoffV2SpeedKnots);
+            isPmdg777 && pmdg777?.FmcV2 > 0
+                ? pmdg777.FmcV2
+                : _settings.TakeoffV2SpeedKnots);
         var engineModeSelectorPosition = ResolveEngineModeSelectorPosition(
             isIniBuildsAirbusFamily
                 ? raw.IniBuildsIgnitionKnob
@@ -5869,11 +5942,20 @@ internal sealed class CopilotService : Form
             raw.Engine1IgnitionSwitch,
             raw.Engine2IgnitionSwitch);
 
+        if (isPmdg777)
+        {
+            _pmdg777FireOverheatTestObserved |= raw.Pmdg777FireOverheatTestSwitch > 0.5;
+            _pmdg777FirstOfficerOxygenTestObserved |= raw.Pmdg777FirstOfficerOxygenTestSwitch > 0.5;
+        }
+
         _state = new AircraftState
         {
             Title = raw.Title,
             Pmdg777SdkDataReady = isPmdg777 && _pmdg777DataReady,
             Pmdg777BatteryOn = isPmdg777 && pmdg777?.BatteryOn == true,
+            Pmdg777IfePassengerSeatsOn = isPmdg777 && pmdg777?.IfePassengerSeatsOn == true,
+            Pmdg777CabinUtilityOn = isPmdg777 && pmdg777?.CabinUtilityOn == true,
+            Pmdg777BusTiesAuto = isPmdg777 && pmdg777?.BusTiesAuto == true,
             Pmdg777HydraulicPanelSafe = isPmdg777
                                           && pmdg777?.CenterPrimaryPumpsOff == true
                                           && pmdg777.DemandPumpsOff,
@@ -5886,6 +5968,14 @@ internal sealed class CopilotService : Form
             Pmdg777ExternalPowerOn = isPmdg777
                                       && pmdg777?.PrimaryExternalPowerOn == true
                                       && pmdg777.SecondaryExternalPowerOn,
+            Pmdg777PrimaryExternalPowerAvailable = isPmdg777
+                                                     && pmdg777?.PrimaryExternalPowerAvailable == true,
+            Pmdg777SecondaryExternalPowerAvailable = isPmdg777
+                                                       && pmdg777?.SecondaryExternalPowerAvailable == true,
+            Pmdg777PrimaryExternalPowerOn = isPmdg777
+                                             && pmdg777?.PrimaryExternalPowerOn == true,
+            Pmdg777SecondaryExternalPowerOn = isPmdg777
+                                               && pmdg777?.SecondaryExternalPowerOn == true,
             Pmdg777NavigationLightOn = isPmdg777 && pmdg777?.NavigationLightOn == true,
             Pmdg777LogoLightOn = isPmdg777 && pmdg777?.LogoLightOn == true,
             Pmdg777GroundAirConfigurationSet = isPmdg777
@@ -5894,6 +5984,93 @@ internal sealed class CopilotService : Form
             Pmdg777AdiruOn = isPmdg777 && pmdg777?.AdiruOn == true,
             Pmdg777EmergencyLightsArmed = isPmdg777
                                           && pmdg777?.EmergencyLightsSelector == 1,
+            Pmdg777EmergencyLightsGuardClosed = isPmdg777
+                                                 && raw.Pmdg777EmergencyLightsGuard < 0.5,
+            Pmdg777PassengerOxygenGuardClosed = isPmdg777
+                                                && raw.Pmdg777PassengerOxygenGuard < 0.5,
+            Pmdg777PrimaryFlightComputersGuardClosed = isPmdg777
+                                                       && raw.Pmdg777PrimaryFlightComputersGuard < 0.5,
+            Pmdg777FirstOfficerFlightDirectorOn = isPmdg777 && pmdg777?.FirstOfficerFlightDirectorOn == true,
+            Pmdg777ServiceInterphoneOff = isPmdg777 && pmdg777?.ServiceInterphoneOff == true,
+            Pmdg777PassengerOxygenNormal = isPmdg777 && pmdg777?.PassengerOxygenNormal == true,
+            Pmdg777ThrustAsymmetryCompensationAuto = isPmdg777 && pmdg777?.ThrustAsymmetryCompensationAuto == true,
+            Pmdg777PrimaryFlightComputersAuto = isPmdg777 && pmdg777?.PrimaryFlightComputersAuto == true,
+            Pmdg777ApuGeneratorSwitchOn = isPmdg777 && pmdg777?.ApuGeneratorSwitchOn == true,
+            Pmdg777ApuRunning = isPmdg777 && pmdg777?.ApuRunning == true,
+            Pmdg777ApuGeneratorPowerEstablished = isPmdg777 && pmdg777?.ApuGeneratorPowerEstablished == true,
+            Pmdg777ApuBleedAirAvailable = isPmdg777 && pmdg777?.ApuBleedAirAvailable == true,
+            Pmdg777BeforeStartChecklistComplete = isPmdg777 && pmdg777?.BeforeStartChecklistComplete == true,
+            Pmdg777BeaconOn = isPmdg777 && pmdg777?.BeaconOn == true,
+            Pmdg777HydraulicsBeforeStart = isPmdg777 && pmdg777?.HydraulicsBeforeStart == true,
+            Pmdg777FuelPumpsBeforeStart = isPmdg777 && pmdg777?.FuelPumpsBeforeStart == true,
+            Pmdg777CenterFuelPumpsRequired = isPmdg777 && pmdg777?.CenterFuelPumpsRequired == true,
+            Pmdg777TransponderXpndr = isPmdg777 && pmdg777?.TransponderXpndr == true,
+            Pmdg777SecondaryEngineDisplaySelected = isPmdg777 && pmdg777?.SecondaryEngineDisplaySelected == true,
+            Pmdg777EngineOneStartSelectorStart = isPmdg777 && pmdg777?.EngineOneStartSelectorStart == true,
+            Pmdg777EngineTwoStartSelectorStart = isPmdg777 && pmdg777?.EngineTwoStartSelectorStart == true,
+            Pmdg777EngineOneStartValveOpen = isPmdg777 && pmdg777?.EngineOneStartValveOpen == true,
+            Pmdg777EngineTwoStartValveOpen = isPmdg777 && pmdg777?.EngineTwoStartValveOpen == true,
+            Pmdg777EngineOneFuelControlRun = isPmdg777 && pmdg777?.EngineOneFuelControlRun == true,
+            Pmdg777EngineTwoFuelControlRun = isPmdg777 && pmdg777?.EngineTwoFuelControlRun == true,
+            Pmdg777WheelChocksSet = isPmdg777 && pmdg777?.WheelChocksSet == true,
+            Pmdg777ApuSelectorOff = isPmdg777 && pmdg777?.ApuSelectorOff == true,
+            Pmdg777EngineBleedsAuto = isPmdg777 && pmdg777?.EngineBleedsAuto == true,
+            Pmdg777PacksAuto = isPmdg777 && pmdg777?.PacksAuto == true,
+            Pmdg777ApuBleedOff = isPmdg777 && pmdg777?.ApuBleedOff == true,
+            Pmdg777TakeoffFlapsSet = isPmdg777 && pmdg777?.TakeoffFlapsSet == true,
+            Pmdg777TransponderTaRa = isPmdg777 && pmdg777?.TransponderTaRa == true,
+            Pmdg777TaxiLightsSet = isPmdg777 && pmdg777?.TaxiLightsSet == true,
+            Pmdg777TakeoffLightsSet = isPmdg777 && pmdg777?.TakeoffLightsSet == true,
+            Pmdg777ClimbLightsSet = isPmdg777 && pmdg777?.ClimbLightsSet == true,
+            Pmdg777GearLeverUp = isPmdg777 && pmdg777?.GearLeverUp == true,
+            Pmdg777BeforeTaxiChecklistComplete = isPmdg777 && pmdg777?.BeforeTaxiChecklistComplete == true,
+            Pmdg777BeforeTakeoffChecklistComplete = isPmdg777 && pmdg777?.BeforeTakeoffChecklistComplete == true,
+            Pmdg777AfterTakeoffChecklistComplete = isPmdg777 && pmdg777?.AfterTakeoffChecklistComplete == true,
+            TaxiClearanceReceived = _taxiClearanceReceived,
+            TakeoffClearanceReceived = _takeoffClearanceReceived,
+            Pmdg777EngineGeneratorOneSwitchOn = isPmdg777 && pmdg777?.EngineGeneratorOneSwitchOn == true,
+            Pmdg777EngineGeneratorTwoSwitchOn = isPmdg777 && pmdg777?.EngineGeneratorTwoSwitchOn == true,
+            Pmdg777BackupGeneratorOneSwitchOn = isPmdg777 && pmdg777?.BackupGeneratorOneSwitchOn == true,
+            Pmdg777BackupGeneratorTwoSwitchOn = isPmdg777 && pmdg777?.BackupGeneratorTwoSwitchOn == true,
+            Pmdg777LeftSideWindowHeatOn = isPmdg777 && pmdg777?.LeftSideWindowHeatOn == true,
+            Pmdg777LeftForwardWindowHeatOn = isPmdg777 && pmdg777?.LeftForwardWindowHeatOn == true,
+            Pmdg777RightForwardWindowHeatOn = isPmdg777 && pmdg777?.RightForwardWindowHeatOn == true,
+            Pmdg777RightSideWindowHeatOn = isPmdg777 && pmdg777?.RightSideWindowHeatOn == true,
+            Pmdg777LeftEnginePrimaryHydraulicPumpOn = isPmdg777 && pmdg777?.LeftEnginePrimaryHydraulicPumpOn == true,
+            Pmdg777RightEnginePrimaryHydraulicPumpOn = isPmdg777 && pmdg777?.RightEnginePrimaryHydraulicPumpOn == true,
+            Pmdg777FirePanelNormal = isPmdg777 && pmdg777?.FirePanelNormal == true,
+            Pmdg777EngineControlPanelNormal = isPmdg777 && pmdg777?.EngineControlPanelNormal == true,
+            Pmdg777FuelPanelPreflight = isPmdg777 && pmdg777?.FuelPanelPreflight == true,
+            Pmdg777AntiIceAuto = isPmdg777 && pmdg777?.AntiIceAuto == true,
+            Pmdg777ExteriorLightsPreflight = isPmdg777 && pmdg777?.ExteriorLightsPreflight == true,
+            Pmdg777AirPanelPreflight = isPmdg777 && pmdg777?.AirPanelPreflight == true,
+            Pmdg777AutobrakeRto = isPmdg777 && pmdg777?.AutobrakeRto == true,
+            Pmdg777TransponderAltitudeSourceNormal = isPmdg777 && pmdg777?.TransponderAltitudeSourceNormal == true,
+            Pmdg777SeatBeltsOff = isPmdg777 && pmdg777?.SeatBeltsOff == true,
+            Pmdg777SeatBeltsAuto = isPmdg777 && pmdg777?.SeatBeltsAuto == true,
+            Pmdg777NoSmokingAuto = isPmdg777 && pmdg777?.NoSmokingAuto == true,
+            Pmdg777FuelToRemainSelectorIn = isPmdg777 && pmdg777?.FuelToRemainSelectorIn == true,
+            Pmdg777TemperatureControlsPreflight = isPmdg777 && pmdg777?.TemperatureControlsPreflight == true,
+            Pmdg777FirstOfficerNdMap = isPmdg777 && pmdg777?.FirstOfficerNdMap == true,
+            Pmdg777FireOverheatTestComplete = isPmdg777 && _pmdg777FireOverheatTestObserved,
+            Pmdg777FirstOfficerOxygenTestComplete = isPmdg777 && _pmdg777FirstOfficerOxygenTestObserved,
+            Pmdg777FirstOfficerSourcesNormal = isPmdg777 && pmdg777?.FirstOfficerSourcesNormal == true,
+            Pmdg777FirstOfficerDisplaysReady = isPmdg777 && pmdg777?.FirstOfficerDisplaysReady == true,
+            Pmdg777SpeedbrakeDown = isPmdg777 && pmdg777?.SpeedbrakeDown == true,
+            Pmdg777FlapsUp = isPmdg777 && pmdg777?.FlapsUp == true,
+            Pmdg777FuelControlsCutoff = isPmdg777 && pmdg777?.FuelControlsCutoff == true,
+            Pmdg777TransponderStandby = isPmdg777 && pmdg777?.TransponderStandby == true,
+            Pmdg777McpAltitude = isPmdg777 ? pmdg777?.McpAltitude ?? 0 : 0,
+            Pmdg777FmcPerformanceInputComplete = isPmdg777 && pmdg777?.FmcPerformanceInputComplete == true,
+            Pmdg777FmcTakeoffFlaps = isPmdg777 ? pmdg777?.FmcTakeoffFlaps ?? 0 : 0,
+            Pmdg777FmcV1 = isPmdg777 ? pmdg777?.FmcV1 ?? 0 : 0,
+            Pmdg777FmcVr = isPmdg777 ? pmdg777?.FmcVr ?? 0 : 0,
+            Pmdg777FmcV2 = isPmdg777 ? pmdg777?.FmcV2 ?? 0 : 0,
+            Pmdg777FmcCruiseAltitude = isPmdg777 ? pmdg777?.FmcCruiseAltitude ?? 0 : 0,
+            Pmdg777FmcDistanceToDestination = isPmdg777 ? pmdg777?.FmcDistanceToDestination ?? -1 : -1,
+            Pmdg777FmcFlightNumber = isPmdg777 ? pmdg777?.FmcFlightNumber ?? string.Empty : string.Empty,
+            Pmdg777PreflightChecklistComplete = isPmdg777 && pmdg777?.PreflightChecklistComplete == true,
+            Pmdg777IrsAligned = isPmdg777 && pmdg777?.IrsAligned == true,
             OnGround = raw.OnGround != 0,
             GroundSpeedKnots = raw.GroundSpeed,
             LongitudinalVelocityKnots = raw.LongitudinalVelocity * 0.592483801,
@@ -5908,7 +6085,9 @@ internal sealed class CopilotService : Form
                 : isPmdg737
                     ? raw.Engine2Combustion != 0 || raw.Engine2N1 >= 15
                 : raw.Engine2Combustion != 0,
-            Engine1StarterActive = isFlyByWireAirbus
+            Engine1StarterActive = isPmdg777
+                ? pmdg777?.EngineOneStartValveOpen == true || raw.Engine1Starter != 0
+                : isFlyByWireAirbus
                 ? _fbwEngine1StarterValveOpen == true
                   || _fbwEngine1State == 2
                   || _fbwEngine1State == 3
@@ -5916,7 +6095,9 @@ internal sealed class CopilotService : Form
                 : isPmdg737
                     ? pmdg?.Engine1StartValveOpen == true || raw.Engine1Starter != 0
                 : raw.Engine1Starter != 0,
-            Engine2StarterActive = isFlyByWireAirbus
+            Engine2StarterActive = isPmdg777
+                ? pmdg777?.EngineTwoStartValveOpen == true || raw.Engine2Starter != 0
+                : isFlyByWireAirbus
                 ? _fbwEngine2StarterValveOpen == true
                   || _fbwEngine2State == 2
                   || _fbwEngine2State == 3
@@ -6169,6 +6350,8 @@ internal sealed class CopilotService : Form
                       && _nativeApuAvailable.Value != 0
                 : isPmdg737 && pmdg != null
                     ? pmdgApuAvailable
+                : isPmdg777
+                    ? pmdg777?.ApuRunning == true
                 : isAsobo737Max
                     ? IsAsobo737MaxApuAvailable(raw.ApuRpm, raw.ApuVolts)
                 : _nativeApuAvailable.HasValue && _nativeApuAvailable.Value != 0,
@@ -7357,6 +7540,9 @@ internal sealed class CopilotService : Form
         var sdk = _pmdg777State;
         _state.Pmdg777SdkDataReady = _pmdg777DataReady;
         _state.Pmdg777BatteryOn = sdk.BatteryOn;
+        _state.Pmdg777IfePassengerSeatsOn = sdk.IfePassengerSeatsOn;
+        _state.Pmdg777CabinUtilityOn = sdk.CabinUtilityOn;
+        _state.Pmdg777BusTiesAuto = sdk.BusTiesAuto;
         _state.Pmdg777HydraulicPanelSafe =
             sdk.CenterPrimaryPumpsOff && sdk.DemandPumpsOff;
         _state.Pmdg777WipersOff = sdk.WipersOff;
@@ -7366,14 +7552,107 @@ internal sealed class CopilotService : Form
             sdk.PrimaryExternalPowerAvailable && sdk.SecondaryExternalPowerAvailable;
         _state.Pmdg777ExternalPowerOn =
             sdk.PrimaryExternalPowerOn && sdk.SecondaryExternalPowerOn;
+        _state.Pmdg777PrimaryExternalPowerAvailable = sdk.PrimaryExternalPowerAvailable;
+        _state.Pmdg777SecondaryExternalPowerAvailable = sdk.SecondaryExternalPowerAvailable;
+        _state.Pmdg777PrimaryExternalPowerOn = sdk.PrimaryExternalPowerOn;
+        _state.Pmdg777SecondaryExternalPowerOn = sdk.SecondaryExternalPowerOn;
         _state.Pmdg777NavigationLightOn = sdk.NavigationLightOn;
         _state.Pmdg777LogoLightOn = sdk.LogoLightOn;
         _state.Pmdg777GroundAirConfigurationSet =
             sdk.PacksOff && sdk.RecirculationFansOff;
         _state.Pmdg777AdiruOn = sdk.AdiruOn;
+        if (sdk.AdiruOn)
+        {
+            _pmdg777AdiruOffSinceUtc = null;
+        }
+        else if (!_pmdg777AdiruOffSinceUtc.HasValue)
+        {
+            _pmdg777AdiruOffSinceUtc = DateTime.UtcNow;
+        }
         _state.Pmdg777EmergencyLightsArmed = sdk.EmergencyLightsSelector == 1;
+        _state.Pmdg777FirstOfficerFlightDirectorOn = sdk.FirstOfficerFlightDirectorOn;
+        _state.Pmdg777ServiceInterphoneOff = sdk.ServiceInterphoneOff;
+        _state.Pmdg777PassengerOxygenNormal = sdk.PassengerOxygenNormal;
+        _state.Pmdg777ThrustAsymmetryCompensationAuto = sdk.ThrustAsymmetryCompensationAuto;
+        _state.Pmdg777PrimaryFlightComputersAuto = sdk.PrimaryFlightComputersAuto;
+        _state.Pmdg777ApuGeneratorSwitchOn = sdk.ApuGeneratorSwitchOn;
+        _state.Pmdg777ApuRunning = sdk.ApuRunning;
+        _state.Pmdg777ApuGeneratorPowerEstablished = sdk.ApuGeneratorPowerEstablished;
+        _state.Pmdg777ApuBleedAirAvailable = sdk.ApuBleedAirAvailable;
+        _state.Pmdg777BeforeStartChecklistComplete = sdk.BeforeStartChecklistComplete;
+        _state.Pmdg777BeaconOn = sdk.BeaconOn;
+        _state.Pmdg777HydraulicsBeforeStart = sdk.HydraulicsBeforeStart;
+        _state.Pmdg777FuelPumpsBeforeStart = sdk.FuelPumpsBeforeStart;
+        _state.Pmdg777CenterFuelPumpsRequired = sdk.CenterFuelPumpsRequired;
+        _state.Pmdg777TransponderXpndr = sdk.TransponderXpndr;
+        _state.Pmdg777SecondaryEngineDisplaySelected = sdk.SecondaryEngineDisplaySelected;
+        _state.Pmdg777EngineOneStartSelectorStart = sdk.EngineOneStartSelectorStart;
+        _state.Pmdg777EngineTwoStartSelectorStart = sdk.EngineTwoStartSelectorStart;
+        _state.Pmdg777EngineOneStartValveOpen = sdk.EngineOneStartValveOpen;
+        _state.Pmdg777EngineTwoStartValveOpen = sdk.EngineTwoStartValveOpen;
+        _state.Pmdg777EngineOneFuelControlRun = sdk.EngineOneFuelControlRun;
+        _state.Pmdg777EngineTwoFuelControlRun = sdk.EngineTwoFuelControlRun;
+        _state.Pmdg777WheelChocksSet = sdk.WheelChocksSet;
+        _state.Pmdg777ApuSelectorOff = sdk.ApuSelectorOff;
+        _state.Pmdg777EngineBleedsAuto = sdk.EngineBleedsAuto;
+        _state.Pmdg777PacksAuto = sdk.PacksAuto;
+        _state.Pmdg777ApuBleedOff = sdk.ApuBleedOff;
+        _state.Pmdg777TakeoffFlapsSet = sdk.TakeoffFlapsSet;
+        _state.Pmdg777TransponderTaRa = sdk.TransponderTaRa;
+        _state.Pmdg777TaxiLightsSet = sdk.TaxiLightsSet;
+        _state.Pmdg777TakeoffLightsSet = sdk.TakeoffLightsSet;
+        _state.Pmdg777ClimbLightsSet = sdk.ClimbLightsSet;
+        _state.Pmdg777GearLeverUp = sdk.GearLeverUp;
+        _state.Pmdg777BeforeTaxiChecklistComplete = sdk.BeforeTaxiChecklistComplete;
+        _state.Pmdg777BeforeTakeoffChecklistComplete = sdk.BeforeTakeoffChecklistComplete;
+        _state.Pmdg777AfterTakeoffChecklistComplete = sdk.AfterTakeoffChecklistComplete;
+        _state.Engine1StarterActive = sdk.EngineOneStartValveOpen;
+        _state.Engine2StarterActive = sdk.EngineTwoStartValveOpen;
+        _state.ApuAvailable = sdk.ApuRunning;
+        _state.Pmdg777EngineGeneratorOneSwitchOn = sdk.EngineGeneratorOneSwitchOn;
+        _state.Pmdg777EngineGeneratorTwoSwitchOn = sdk.EngineGeneratorTwoSwitchOn;
+        _state.Pmdg777BackupGeneratorOneSwitchOn = sdk.BackupGeneratorOneSwitchOn;
+        _state.Pmdg777BackupGeneratorTwoSwitchOn = sdk.BackupGeneratorTwoSwitchOn;
+        _state.Pmdg777LeftSideWindowHeatOn = sdk.LeftSideWindowHeatOn;
+        _state.Pmdg777LeftForwardWindowHeatOn = sdk.LeftForwardWindowHeatOn;
+        _state.Pmdg777RightForwardWindowHeatOn = sdk.RightForwardWindowHeatOn;
+        _state.Pmdg777RightSideWindowHeatOn = sdk.RightSideWindowHeatOn;
+        _state.Pmdg777LeftEnginePrimaryHydraulicPumpOn = sdk.LeftEnginePrimaryHydraulicPumpOn;
+        _state.Pmdg777RightEnginePrimaryHydraulicPumpOn = sdk.RightEnginePrimaryHydraulicPumpOn;
+        _state.Pmdg777FirePanelNormal = sdk.FirePanelNormal;
+        _state.Pmdg777EngineControlPanelNormal = sdk.EngineControlPanelNormal;
+        _state.Pmdg777FuelPanelPreflight = sdk.FuelPanelPreflight;
+        _state.Pmdg777AntiIceAuto = sdk.AntiIceAuto;
+        _state.Pmdg777ExteriorLightsPreflight = sdk.ExteriorLightsPreflight;
+        _state.Pmdg777AirPanelPreflight = sdk.AirPanelPreflight;
+        _state.Pmdg777AutobrakeRto = sdk.AutobrakeRto;
+        _state.Pmdg777TransponderAltitudeSourceNormal = sdk.TransponderAltitudeSourceNormal;
+        _state.Pmdg777SeatBeltsOff = sdk.SeatBeltsOff;
+        _state.Pmdg777SeatBeltsAuto = sdk.SeatBeltsAuto;
+        _state.Pmdg777NoSmokingAuto = sdk.NoSmokingAuto;
+        _state.Pmdg777FuelToRemainSelectorIn = sdk.FuelToRemainSelectorIn;
+        _state.Pmdg777TemperatureControlsPreflight = sdk.TemperatureControlsPreflight;
+        _state.Pmdg777FirstOfficerNdMap = sdk.FirstOfficerNdMap;
+        _state.Pmdg777FireOverheatTestComplete = _pmdg777FireOverheatTestObserved;
+        _state.Pmdg777FirstOfficerOxygenTestComplete = _pmdg777FirstOfficerOxygenTestObserved;
+        _state.Pmdg777FirstOfficerSourcesNormal = sdk.FirstOfficerSourcesNormal;
+        _state.Pmdg777FirstOfficerDisplaysReady = sdk.FirstOfficerDisplaysReady;
+        _state.Pmdg777SpeedbrakeDown = sdk.SpeedbrakeDown;
+        _state.Pmdg777FlapsUp = sdk.FlapsUp;
+        _state.Pmdg777FuelControlsCutoff = sdk.FuelControlsCutoff;
+        _state.Pmdg777TransponderStandby = sdk.TransponderStandby;
+        _state.Pmdg777McpAltitude = sdk.McpAltitude;
+        _state.Pmdg777FmcPerformanceInputComplete = sdk.FmcPerformanceInputComplete;
+        _state.Pmdg777FmcTakeoffFlaps = sdk.FmcTakeoffFlaps;
+        _state.Pmdg777FmcV1 = sdk.FmcV1;
+        _state.Pmdg777FmcVr = sdk.FmcVr;
+        _state.Pmdg777FmcV2 = sdk.FmcV2;
+        _state.Pmdg777FmcCruiseAltitude = sdk.FmcCruiseAltitude;
+        _state.Pmdg777FmcDistanceToDestination = sdk.FmcDistanceToDestination;
+        _state.Pmdg777FmcFlightNumber = sdk.FmcFlightNumber;
+        _state.Pmdg777PreflightChecklistComplete = sdk.PreflightChecklistComplete;
+        _state.Pmdg777IrsAligned = sdk.IrsAligned;
 
-        _state.Battery1On = sdk.BatteryOn;
         _state.ExternalPowerAvailable = _state.Pmdg777ExternalPowerAvailable;
         _state.ExternalPowerOn = _state.Pmdg777ExternalPowerOn;
         _state.NavigationLightsOn = sdk.NavigationLightOn;
@@ -7398,7 +7677,14 @@ internal sealed class CopilotService : Form
             + $"RAW_PARK={sdk.ParkingBrakeRaw} "
             + $"NAV={sdk.NavigationLightOn.ToOnOff()} LOGO={sdk.LogoLightOn.ToOnOff()} "
             + $"PACKS_OFF={sdk.PacksOff.ToOnOff()} RECIRC_OFF={sdk.RecirculationFansOff.ToOnOff()} "
-            + $"ADIRU={sdk.AdiruOn.ToOnOff()} EMER={sdk.EmergencyLightsSelector}";
+            + $"ADIRU={sdk.AdiruOn.ToOnOff()} IRS_ALIGNED={sdk.IrsAligned.ToOnOff()} EMER={sdk.EmergencyLightsSelector} "
+            + $"EMER_GUARD={(_state?.Pmdg777EmergencyLightsGuardClosed == true ? "CLOSED" : "OPEN")} "
+            + $"FO_FD={sdk.FirstOfficerFlightDirectorOn.ToOnOff()} FO_SRC={sdk.FirstOfficerSourcesNormal.ToOnOff()} "
+            + $"FO_DSP={sdk.FirstOfficerDisplaysReady.ToOnOff()} CONSOLE={sdk.SpeedbrakeDown.ToOnOff()}/{sdk.FlapsUp.ToOnOff()}/{sdk.FuelControlsCutoff.ToOnOff()}/{sdk.TransponderStandby.ToOnOff()} "
+            + $"FLOW2_PANEL={sdk.ThrustAsymmetryCompensationAuto.ToOnOff()}/{sdk.PrimaryFlightComputersAuto.ToOnOff()}/{sdk.FirePanelNormal.ToOnOff()}/{sdk.EngineControlPanelNormal.ToOnOff()}/{sdk.FuelPanelPreflight.ToOnOff()}/{sdk.AntiIceAuto.ToOnOff()}/{sdk.ExteriorLightsPreflight.ToOnOff()}/{sdk.AirPanelPreflight.ToOnOff()}/{sdk.AutobrakeRto.ToOnOff()}/{sdk.TransponderAltitudeSourceNormal.ToOnOff()} "
+            + $"FLOW2_DETAIL=SEAT_OFF_{sdk.SeatBeltsOff.ToOnOff()}/SEAT_AUTO_{sdk.SeatBeltsAuto.ToOnOff()}/NOSMOKE_AUTO_{sdk.NoSmokingAuto.ToOnOff()}/FUELSEL_{sdk.FuelToRemainSelectorIn.ToOnOff()}/TEMP_{sdk.TemperatureControlsPreflight.ToOnOff()}/FO_ND_MAP_{sdk.FirstOfficerNdMap.ToOnOff()}/FIRETEST_{_pmdg777FireOverheatTestObserved.ToOnOff()}/OXYTEST_{_pmdg777FirstOfficerOxygenTestObserved.ToOnOff()} "
+            + $"FMC={sdk.FmcFlightNumber}/{sdk.FmcCruiseAltitude}/{sdk.FmcDistanceToDestination:0.0}/{sdk.FmcPerformanceInputComplete.ToOnOff()} "
+            + $"MCP_ALT={sdk.McpAltitude} TO={sdk.FmcTakeoffFlaps}/{sdk.FmcV1}/{sdk.FmcVr}/{sdk.FmcV2} ECL_PREFLIGHT={sdk.PreflightChecklistComplete.ToOnOff()}";
         if (string.Equals(
                 signature,
                 _loggedPmdg777FlowOneSignature,
@@ -7408,7 +7694,7 @@ internal sealed class CopilotService : Form
         }
 
         _loggedPmdg777FlowOneSignature = signature;
-        AppLog.Write($"PMDG 777 Flow 1 readbacks: {signature}.");
+        AppLog.Write($"PMDG 777 Flow 1/2 readbacks: {signature}.");
     }
 
     private void LogPmdg777ChangedOffsets(byte[]? data)
@@ -7421,7 +7707,7 @@ internal sealed class CopilotService : Form
         if (_pmdg777RawSnapshot == null)
         {
             _pmdg777RawSnapshot = (byte[])data.Clone();
-            AppLog.Write("PMDG 777X raw-data change monitor initialized for Flow 1 validation.");
+            AppLog.Write("PMDG 777X raw-data change monitor initialized for Flow 1/2 validation.");
             return;
         }
 
@@ -7744,6 +8030,14 @@ internal sealed class CopilotService : Form
                 return;
             }
         }
+        if (normalized.StartsWith("pmdg777 ", StringComparison.Ordinal)
+            && _state?.IsPmdg777300Er != true)
+        {
+            AppendDashboardLog("Blocked PMDG 777 cockpit command: a different aircraft profile is active.");
+            AppLog.Write($"Blocked PMDG 777 command outside its aircraft profile: {normalized}.");
+            FinishOneShot(2);
+            return;
+        }
         if (_replayActive
             && !normalized.StartsWith("procedure ", StringComparison.Ordinal)
             && normalized is not "status"
@@ -7759,6 +8053,193 @@ internal sealed class CopilotService : Form
         }
         switch (normalized)
         {
+            case "pmdg777 battery on":
+                SetPmdg777BatteryOn();
+                break;
+            case "pmdg777 primary external power on":
+                SetPmdg777PrimaryExternalPowerOn();
+                break;
+            case "pmdg777 secondary external power on":
+                SetPmdg777SecondaryExternalPowerOn();
+                break;
+            case "pmdg777 adiru on":
+                SetPmdg777AdiruOn();
+                break;
+            case "pmdg777 ife passenger seats on":
+                SetPmdg777IfePassengerSeatsOn();
+                break;
+            case "pmdg777 cabin utility on":
+                SetPmdg777CabinUtilityOn();
+                break;
+            case "pmdg777 emergency lights armed":
+                SetPmdg777EmergencyLightsArmed();
+                break;
+            case "pmdg777 emergency lights guard closed":
+                SetPmdg777EmergencyLightsGuardClosed();
+                break;
+            case "pmdg777 navigation light on":
+                SetPmdg777NavigationLightOn();
+                break;
+            case "pmdg777 thrust asymmetry compensation auto":
+                SetPmdg777SwitchOn(_state?.Pmdg777ThrustAsymmetryCompensationAuto == true, Pmdg777ControlProfile.ThrustAsymmetryCompensationEvent, "thrust-asymmetry compensation AUTO");
+                break;
+            case "pmdg777 primary flight computers auto":
+                SetPmdg777SwitchOn(_state?.Pmdg777PrimaryFlightComputersAuto == true, Pmdg777ControlProfile.PrimaryFlightComputersEvent, "PRIMARY FLIGHT COMPUTERS AUTO");
+                break;
+            case "pmdg777 primary flight computers guard closed":
+                SetPmdg777GuardClosed(_state?.Pmdg777PrimaryFlightComputersGuardClosed == true, Pmdg777ControlProfile.PrimaryFlightComputersGuardEvent, "PRIMARY FLIGHT COMPUTERS guard CLOSED");
+                break;
+            case "pmdg777 apu generator switch on":
+                SetPmdg777SwitchOn(_state?.Pmdg777ApuGeneratorSwitchOn == true, Pmdg777ControlProfile.ApuGeneratorSwitchEvent, "APU GENERATOR switch ON");
+                break;
+            case "pmdg777 engine generator one switch on":
+                SetPmdg777SwitchOn(_state?.Pmdg777EngineGeneratorOneSwitchOn == true, Pmdg777ControlProfile.EngineGeneratorOneSwitchEvent, "left GENERATOR switch ON");
+                break;
+            case "pmdg777 engine generator two switch on":
+                SetPmdg777SwitchOn(_state?.Pmdg777EngineGeneratorTwoSwitchOn == true, Pmdg777ControlProfile.EngineGeneratorTwoSwitchEvent, "right GENERATOR switch ON");
+                break;
+            case "pmdg777 backup generator one switch on":
+                SetPmdg777SwitchOn(_state?.Pmdg777BackupGeneratorOneSwitchOn == true, Pmdg777ControlProfile.BackupGeneratorOneSwitchEvent, "left BACKUP GENERATOR switch ON");
+                break;
+            case "pmdg777 backup generator two switch on":
+                SetPmdg777SwitchOn(_state?.Pmdg777BackupGeneratorTwoSwitchOn == true, Pmdg777ControlProfile.BackupGeneratorTwoSwitchEvent, "right BACKUP GENERATOR switch ON");
+                break;
+            case "pmdg777 passenger oxygen guard closed":
+                SetPmdg777GuardClosed(_state?.Pmdg777PassengerOxygenGuardClosed == true, Pmdg777ControlProfile.PassengerOxygenGuardEvent, "PASSENGER OXYGEN guard CLOSED");
+                break;
+            case "pmdg777 left side window heat on":
+                SetPmdg777SwitchOn(_state?.Pmdg777LeftSideWindowHeatOn == true, Pmdg777ControlProfile.LeftSideWindowHeatEvent, "left side WINDOW HEAT ON");
+                break;
+            case "pmdg777 left forward window heat on":
+                SetPmdg777SwitchOn(_state?.Pmdg777LeftForwardWindowHeatOn == true, Pmdg777ControlProfile.LeftForwardWindowHeatEvent, "left forward WINDOW HEAT ON");
+                break;
+            case "pmdg777 right forward window heat on":
+                SetPmdg777SwitchOn(_state?.Pmdg777RightForwardWindowHeatOn == true, Pmdg777ControlProfile.RightForwardWindowHeatEvent, "right forward WINDOW HEAT ON");
+                break;
+            case "pmdg777 right side window heat on":
+                SetPmdg777SwitchOn(_state?.Pmdg777RightSideWindowHeatOn == true, Pmdg777ControlProfile.RightSideWindowHeatEvent, "right side WINDOW HEAT ON");
+                break;
+            case "pmdg777 left engine primary hydraulic pump on":
+                SetPmdg777SwitchOn(_state?.Pmdg777LeftEnginePrimaryHydraulicPumpOn == true, Pmdg777ControlProfile.LeftEnginePrimaryHydraulicPumpEvent, "left engine PRIMARY hydraulic pump ON");
+                break;
+            case "pmdg777 right engine primary hydraulic pump on":
+                SetPmdg777SwitchOn(_state?.Pmdg777RightEnginePrimaryHydraulicPumpOn == true, Pmdg777ControlProfile.RightEnginePrimaryHydraulicPumpEvent, "right engine PRIMARY hydraulic pump ON");
+                break;
+            case "pmdg777 engine fuel fire preflight":
+                ConfigurePmdg777EngineFuelFirePreflight();
+                break;
+            case "pmdg777 electrical hydraulic preflight":
+                ConfigurePmdg777ElectricalHydraulicPreflight();
+                break;
+            case "pmdg777 fire overheat test":
+                SendPmdg777Control(Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 89, Pmdg777ControlProfile.MouseLeftSingle, "OVHT/FIRE test");
+                break;
+            case "pmdg777 fo oxygen test":
+                SendPmdg777Control(Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 1066, Pmdg777ControlProfile.MouseLeftSingle, "First Officer oxygen test/reset");
+                break;
+            case "pmdg777 exterior lights preflight":
+                ConfigurePmdg777ExteriorLightsPreflight();
+                break;
+            case "pmdg777 air panel preflight":
+                ConfigurePmdg777AirPanelPreflight();
+                break;
+            case "pmdg777 autobrake rto":
+                QueuePmdg777Controls((Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 292, 0, "AUTOBRAKE RTO"));
+                break;
+            case "pmdg777 instruments preflight":
+                QueuePmdg777Controls(
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 252, 2, "First Officer ND MAP"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 292, 0, "AUTOBRAKE RTO"));
+                break;
+            case "pmdg777 seatbelts auto":
+                QueuePmdg777Controls((Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 30, 1, "seat-belt selector AUTO"));
+                break;
+            case "pmdg777 apu start":
+                QueuePmdg777Controls((Pmdg777ControlProfile.ApuSelectorEvent, 2, "APU selector START"));
+                break;
+            case "pmdg777 apu power air":
+                QueuePmdg777Controls(
+                    (Pmdg777ControlProfile.ApuGeneratorSwitchEvent, 1, "APU GENERATOR switch ON"),
+                    (Pmdg777ControlProfile.ApuBleedSwitchEvent, 1, "APU bleed AUTO"));
+                break;
+            case "pmdg777 external power off":
+                DisconnectPmdg777ExternalPower();
+                break;
+            case "pmdg777 hydraulics before start":
+                ConfigurePmdg777HydraulicsBeforeStart();
+                break;
+            case "pmdg777 fuel pumps before start":
+                ConfigurePmdg777FuelPumpsBeforeStart();
+                break;
+            case "pmdg777 transponder xpndr":
+                QueuePmdg777Controls((Pmdg777ControlProfile.TransponderModeSelectorEvent, 2, "transponder mode XPNDR"));
+                break;
+            case "pmdg777 transponder standby":
+                SetPmdg777TransponderStandby();
+                break;
+            case "pmdg777 secondary engine display":
+                QueuePmdg777Controls((Pmdg777ControlProfile.EngineDisplaySwitchEvent, Pmdg777ControlProfile.MouseLeftSingle, "secondary engine display"));
+                break;
+            case "pmdg777 engine one fuel control run":
+                QueuePmdg777Controls((Pmdg777ControlProfile.EngineOneFuelControlEvent, 1, "Engine 1 fuel control RUN"));
+                break;
+            case "pmdg777 engine two fuel control run":
+                QueuePmdg777Controls((Pmdg777ControlProfile.EngineTwoFuelControlEvent, 1, "Engine 2 fuel control RUN"));
+                break;
+            case "pmdg777 after start air apu":
+                QueuePmdg777Controls(
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 129, 1, "left engine bleed AUTO"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 130, 1, "right engine bleed AUTO"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 135, 1, "left pack AUTO"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 136, 1, "right pack AUTO"),
+                    (Pmdg777ControlProfile.ApuBleedSwitchEvent, 0, "APU bleed OFF"),
+                    (Pmdg777ControlProfile.ApuSelectorEvent, 0, "APU selector OFF"));
+                break;
+            case "pmdg777 takeoff flaps":
+                SetPmdg777TakeoffFlaps();
+                break;
+            case "pmdg777 taxi lights":
+                QueuePmdg777Controls(
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 119, 1, "left runway-turnoff light ON"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 120, 1, "right runway-turnoff light ON"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 121, 1, "taxi light ON"));
+                break;
+            case "pmdg777 transponder tara":
+                QueuePmdg777Controls((Pmdg777ControlProfile.TransponderModeSelectorEvent, 4, "transponder TA/RA"));
+                break;
+            case "pmdg777 takeoff lights":
+                QueuePmdg777Controls(
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 22, 1, "left landing light ON"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 23, 1, "nose landing light ON"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 24, 1, "right landing light ON"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 119, 1, "left runway-turnoff light ON"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 120, 1, "right runway-turnoff light ON"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 122, 1, "strobe light ON"));
+                break;
+            case "pmdg777 gear up":
+                QueuePmdg777Controls((Pmdg777ControlProfile.GearLeverEvent, 0, "landing gear UP"));
+                break;
+            case "pmdg777 flaps up":
+                QueuePmdg777Controls((Pmdg777ControlProfile.FlapsUpEvent, 0, "flaps UP"));
+                break;
+            case "pmdg777 climb lights":
+                QueuePmdg777Controls(
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 22, 0, "left landing light OFF"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 23, 0, "nose landing light OFF"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 24, 0, "right landing light OFF"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 116, 0, "logo light OFF"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 119, 0, "left runway-turnoff light OFF"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 120, 0, "right runway-turnoff light OFF"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 121, 0, "taxi light OFF"));
+                break;
+            case "sayintentions taxi clearance":
+            case "sayintentions takeoff clearance":
+                BeginAutomatedSayIntentionsAtcStep();
+                FinishOneShot();
+                break;
+            case "pmdg777 fo flight director on":
+                SetPmdg777FirstOfficerFlightDirectorOn();
+                break;
             case "status":
                 PrintStatus();
                 FinishOneShot();
@@ -9098,6 +9579,81 @@ internal sealed class CopilotService : Form
         return true;
     }
 
+    private bool TryAutoAcceptGsxAttachPushbackTug()
+    {
+        var departureFlowActive =
+            (string.Equals(
+                 _procedureRunner.Definition?.Id,
+                 "apu-start-pushback",
+                 StringComparison.OrdinalIgnoreCase)
+             || string.Equals(
+                 _procedureRunner.Definition?.Id,
+                 "engine-start-sequence",
+                 StringComparison.OrdinalIgnoreCase))
+            && IsProcedureActive(_procedureRunner.Status)
+            || _pendingGsxEngineStartProcedure != null;
+        if (!_gsxMenuOpen
+            || !_settings.EnableGsxIntegration
+            || !_settings.GsxAutomaticallyPrepareDeparture
+            || (!_gsxBoardingRequestedThisFlight
+                && !_gsxDepartureRequestedThisFlight
+                && !_gsxDepartureRequestAccepted
+                && !departureFlowActive))
+        {
+            return false;
+        }
+
+        var choice = GsxPromptPolicy.FindAttachPushbackTugConfirmation(_gsxMenu);
+        if (!choice.HasValue)
+        {
+            return false;
+        }
+
+        var label = _gsxMenu.Choices[choice.Value];
+        SubmitLiveGsxChoice(choice.Value, label, null);
+        CloseGsxChoiceDialog();
+        AppendDashboardLog("First Officer instructed GSX to attach the pushback tug.");
+        AppLog.Write("Auto-accepted the live GSX pushback-tug attachment prompt.");
+        return true;
+    }
+
+    private bool TryAutoContinueGsxPushback()
+    {
+        var departureFlowActive =
+            string.Equals(
+                _procedureRunner.Definition?.Id,
+                "apu-start-pushback",
+                StringComparison.OrdinalIgnoreCase)
+            && IsProcedureActive(_procedureRunner.Status)
+            || _pendingGsxEngineStartProcedure != null;
+        if (!_gsxMenuOpen
+            || !_settings.EnableGsxIntegration
+            || !_settings.GsxAutomaticallyPrepareDeparture
+            || !departureFlowActive
+            || _state == null
+            || !_state.OnGround
+            || !_state.ParkingBrakeSet
+            || _state.GroundSpeedKnots > 0.5)
+        {
+            return false;
+        }
+
+        var choice = GsxPromptPolicy.FindContinuePushbackAction(_gsxMenu);
+        if (!choice.HasValue)
+        {
+            return false;
+        }
+
+        var label = _gsxMenu.Choices[choice.Value];
+        SubmitLiveGsxChoice(choice.Value, label, null);
+        CloseGsxChoiceDialog();
+        AppendDashboardLog(
+            "First Officer instructed GSX to continue pushback after verifying the parking brake is set.");
+        AppLog.Write(
+            "Auto-selected the live GSX Continue Pushback action after parking-brake readback.");
+        return true;
+    }
+
     private void TryStartPendingGsxEngineFlow()
     {
         if (_pendingGsxEngineStartProcedure == null
@@ -9806,6 +10362,8 @@ internal sealed class CopilotService : Form
         _pmdgFireWarnCancellationObserved = false;
         _pmdgExtinguisherTest1ActiveObserved = false;
         _pmdgExtinguisherTest2ActiveObserved = false;
+        _pmdg777FireOverheatTestObserved = false;
+        _pmdg777FirstOfficerOxygenTestObserved = false;
 
         _fbwCommandedBattery1Auto = null;
         _fbwCommandedBattery2Auto = null;
@@ -9862,6 +10420,8 @@ internal sealed class CopilotService : Form
         _gsxDeboardingRequestedThisFlight = false;
         _gsxDepartureRequestAccepted = false;
         _gsxDepartureRequestAcceptedUtc = null;
+        _taxiClearanceReceived = false;
+        _takeoffClearanceReceived = false;
         _gsxStatusTracker.Reset();
         ClearGsxGoodEngineStartPrompt();
         _pendingGsxEngineStartProcedure = null;
@@ -16727,13 +17287,504 @@ internal sealed class CopilotService : Form
                 0,
                 0,
                 0);
+            sender.MapClientDataNameToID(
+                Pmdg777ControlProfile.ControlName,
+                ClientDataArea.Pmdg777Control);
+            sender.AddToClientDataDefinition(
+                ClientDataDefinition.Pmdg777Control,
+                0,
+                (uint)Marshal.SizeOf<Pmdg777Control>(),
+                0,
+                0);
+            sender.RegisterStruct<SIMCONNECT_RECV_CLIENT_DATA, Pmdg777Control>(
+                ClientDataDefinition.Pmdg777Control);
+            sender.RequestClientData(
+                ClientDataArea.Pmdg777Control,
+                Request.Pmdg777Control,
+                ClientDataDefinition.Pmdg777Control,
+                SIMCONNECT_CLIENT_DATA_PERIOD.VISUAL_FRAME,
+                SIMCONNECT_CLIENT_DATA_REQUEST_FLAG.CHANGED,
+                0,
+                0,
+                0);
             _pmdg777SdkInitialized = true;
-            AppLog.Write("PMDG 777X read-only SDK data connection initialized.");
+            AppLog.Write("PMDG 777X SDK data and control connections initialized.");
         }
         catch (Exception ex)
         {
             AppLog.Write($"PMDG 777X SDK initialization failed: {ex.Message}");
         }
+    }
+
+    private void SetPmdg777BatteryOn()
+    {
+        if (_simConnect == null
+            || _state?.IsPmdg777300Er != true
+            || !_pmdg777SdkInitialized
+            || !_pmdg777DataReady)
+        {
+            _procedureRunner.Fail("PMDG 777 battery command blocked: verified 777X data or the SDK control mapping is not ready.");
+            AppLog.Write("PMDG 777 battery command blocked: published 777X data or SDK control mapping not ready.");
+            return;
+        }
+
+        if (_state.Pmdg777BatteryOn)
+        {
+            AppLog.Write("PMDG 777 battery already ON; no command sent.");
+            return;
+        }
+
+        if (_pmdg777ControlState.Event != 0)
+        {
+            _procedureRunner.Fail($"PMDG 777 battery command blocked: SDK control event {_pmdg777ControlState.Event} is pending.");
+            return;
+        }
+
+        var command = new Pmdg777Control
+        {
+            Event = Pmdg777ControlProfile.BatterySwitchEvent,
+            Parameter = 1
+        };
+        _simConnect.SetClientData(
+            ClientDataArea.Pmdg777Control,
+            ClientDataDefinition.Pmdg777Control,
+            SIMCONNECT_CLIENT_DATA_SET_FLAG.DEFAULT,
+            0,
+            command);
+        _pmdg777ControlState = command;
+        AppLog.Write("PMDG 777 FO action sent: BATTERY switch ON; awaiting independent 777X data readback.");
+    }
+
+    private void SetPmdg777PrimaryExternalPowerOn()
+    {
+        if (_state?.Pmdg777PrimaryExternalPowerOn == true)
+        {
+            return;
+        }
+        if (_state?.Pmdg777PrimaryExternalPowerAvailable != true)
+        {
+            _procedureRunner.Fail("PMDG 777 primary external power is not available.");
+            return;
+        }
+
+        SendPmdg777Control(
+            Pmdg777ControlProfile.PrimaryExternalPowerSwitchEvent,
+            Pmdg777ControlProfile.MouseLeftSingle,
+            "PRIMARY EXTERNAL POWER switch PUSH");
+    }
+
+    private void SetPmdg777SecondaryExternalPowerOn()
+    {
+        if (_state?.Pmdg777SecondaryExternalPowerOn == true
+            || _state?.Pmdg777SecondaryExternalPowerAvailable != true)
+        {
+            return;
+        }
+
+        SendPmdg777Control(
+            Pmdg777ControlProfile.SecondaryExternalPowerSwitchEvent,
+            Pmdg777ControlProfile.MouseLeftSingle,
+            "SECONDARY EXTERNAL POWER switch PUSH");
+    }
+
+    private void SetPmdg777AdiruOn()
+    {
+        if (_state?.Pmdg777AdiruOn == true)
+        {
+            return;
+        }
+
+        var offDuration = _pmdg777AdiruOffSinceUtc.HasValue
+            ? DateTime.UtcNow - _pmdg777AdiruOffSinceUtc.Value
+            : TimeSpan.Zero;
+        var remaining = TimeSpan.FromSeconds(30) - offDuration;
+        if (remaining > TimeSpan.Zero)
+        {
+            _pmdg777AdiruOnTimer?.Stop();
+            _pmdg777AdiruOnTimer?.Dispose();
+            _pmdg777AdiruOnTimer = new System.Windows.Forms.Timer
+            {
+                Interval = Math.Max(100, (int)Math.Ceiling(remaining.TotalMilliseconds))
+            };
+            _pmdg777AdiruOnTimer.Tick += (_, _) =>
+            {
+                _pmdg777AdiruOnTimer?.Stop();
+                _pmdg777AdiruOnTimer?.Dispose();
+                _pmdg777AdiruOnTimer = null;
+                SendPmdg777Control(
+                    Pmdg777ControlProfile.AdiruSwitchEvent,
+                    1,
+                    "ADIRU switch ON after 30 seconds OFF");
+            };
+            _pmdg777AdiruOnTimer.Start();
+            AppLog.Write($"PMDG 777 ADIRU remains OFF for the SOP interval; ON command scheduled in {remaining.TotalSeconds:0.0} seconds.");
+            return;
+        }
+
+        SendPmdg777Control(
+            Pmdg777ControlProfile.AdiruSwitchEvent,
+            1,
+            "ADIRU switch ON after 30 seconds OFF");
+    }
+
+    private void SetPmdg777IfePassengerSeatsOn()
+    {
+        if (_state?.Pmdg777IfePassengerSeatsOn == true)
+        {
+            return;
+        }
+
+        SendPmdg777Control(
+            Pmdg777ControlProfile.IfePassengerSeatsSwitchEvent,
+            1,
+            "IFE/PASSENGER SEATS power switch ON");
+    }
+
+    private void SetPmdg777CabinUtilityOn()
+    {
+        if (_state?.Pmdg777CabinUtilityOn == true)
+        {
+            return;
+        }
+
+        SendPmdg777Control(
+            Pmdg777ControlProfile.CabinUtilitySwitchEvent,
+            1,
+            "CABIN/UTILITY power switch ON");
+    }
+
+    private void SetPmdg777EmergencyLightsArmed()
+    {
+        if (_state?.Pmdg777EmergencyLightsArmed == true)
+        {
+            return;
+        }
+
+        SendPmdg777Control(
+            Pmdg777ControlProfile.EmergencyLightsSwitchEvent,
+            1,
+            "EMERGENCY LIGHTS selector ARMED");
+    }
+
+    private void SetPmdg777EmergencyLightsGuardClosed()
+    {
+        if (_state?.Pmdg777EmergencyLightsGuardClosed == true)
+        {
+            return;
+        }
+
+        SendPmdg777Control(
+            Pmdg777ControlProfile.EmergencyLightsGuardEvent,
+            Pmdg777ControlProfile.MouseLeftSingle,
+            "EMERGENCY LIGHTS guard CLOSED");
+    }
+
+    private void SetPmdg777NavigationLightOn()
+    {
+        if (_state?.Pmdg777NavigationLightOn == true)
+        {
+            return;
+        }
+
+        SendPmdg777Control(
+            Pmdg777ControlProfile.NavigationLightSwitchEvent,
+            1,
+            "NAVIGATION light switch ON");
+    }
+
+    private void SetPmdg777SwitchOn(bool alreadySet, uint eventId, string label)
+    {
+        if (alreadySet)
+        {
+            return;
+        }
+
+        SendPmdg777Control(eventId, 1, label);
+    }
+
+    private void SetPmdg777GuardClosed(bool alreadyClosed, uint eventId, string label)
+    {
+        if (alreadyClosed)
+        {
+            return;
+        }
+
+        SendPmdg777Control(eventId, Pmdg777ControlProfile.MouseLeftSingle, label);
+    }
+
+    private void ConfigurePmdg777EngineFuelFirePreflight()
+    {
+        QueuePmdg777Controls(
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 84, 0, "APU fire handle IN"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 85, 0, "forward cargo fire ARM OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 86, 0, "aft cargo fire ARM OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 90, 1, "left EEC NORM"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 92, 1, "right EEC NORM"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 94, 1, "left START/IGNITION NORM"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 95, 1, "right START/IGNITION NORM"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 96, 1, "AUTOSTART ON"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 97, 0, "left fuel-jettison nozzle OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 99, 0, "right fuel-jettison nozzle OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 102, 0, "fuel-jettison ARM OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 103, 0, "left forward fuel pump OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 104, 0, "right forward fuel pump OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 105, 0, "left aft fuel pump OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 106, 0, "right aft fuel pump OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 107, 0, "forward crossfeed OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 108, 0, "aft crossfeed OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 109, 0, "left center fuel pump OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 110, 0, "right center fuel pump OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 101, 1, "fuel-to-remain selector IN"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 1011, 0, "fuel-to-remain selector pushed IN"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 111, 1, "wing anti-ice AUTO"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 112, 1, "left engine anti-ice AUTO"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 113, 1, "right engine anti-ice AUTO"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 651, 0, "left engine fire handle IN"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 652, 0, "right engine fire handle IN"));
+    }
+
+    private void ConfigurePmdg777ElectricalHydraulicPreflight()
+    {
+        var controls = new List<(uint EventId, uint Parameter, string Label)>
+        {
+            (Pmdg777ControlProfile.IfePassengerSeatsSwitchEvent, 1, "IFE/PASSENGER SEATS power ON"),
+            (Pmdg777ControlProfile.CabinUtilitySwitchEvent, 1, "CABIN/UTILITY power ON"),
+            (Pmdg777ControlProfile.EmergencyLightsSwitchEvent, 1, "EMERGENCY LIGHTS selector ARMED"),
+            (Pmdg777ControlProfile.NavigationLightSwitchEvent, 1, "NAVIGATION light ON"),
+            (Pmdg777ControlProfile.ThrustAsymmetryCompensationEvent, 1, "thrust-asymmetry compensation AUTO"),
+            (Pmdg777ControlProfile.PrimaryFlightComputersEvent, 1, "PRIMARY FLIGHT COMPUTERS AUTO"),
+            (Pmdg777ControlProfile.ApuGeneratorSwitchEvent, 1, "APU GENERATOR switch ON"),
+            (Pmdg777ControlProfile.EngineGeneratorOneSwitchEvent, 1, "left GENERATOR switch ON"),
+            (Pmdg777ControlProfile.EngineGeneratorTwoSwitchEvent, 1, "right GENERATOR switch ON"),
+            (Pmdg777ControlProfile.BackupGeneratorOneSwitchEvent, 1, "left BACKUP GENERATOR switch ON"),
+            (Pmdg777ControlProfile.BackupGeneratorTwoSwitchEvent, 1, "right BACKUP GENERATOR switch ON"),
+            (Pmdg777ControlProfile.LeftSideWindowHeatEvent, 1, "left side WINDOW HEAT ON"),
+            (Pmdg777ControlProfile.LeftForwardWindowHeatEvent, 1, "left forward WINDOW HEAT ON"),
+            (Pmdg777ControlProfile.RightForwardWindowHeatEvent, 1, "right forward WINDOW HEAT ON"),
+            (Pmdg777ControlProfile.RightSideWindowHeatEvent, 1, "right side WINDOW HEAT ON"),
+            (Pmdg777ControlProfile.LeftEnginePrimaryHydraulicPumpEvent, 1, "left engine PRIMARY hydraulic pump ON"),
+            (Pmdg777ControlProfile.RightEnginePrimaryHydraulicPumpEvent, 1, "right engine PRIMARY hydraulic pump ON")
+        };
+        if (_state?.Pmdg777PrimaryFlightComputersGuardClosed != true)
+        {
+            controls.Add((Pmdg777ControlProfile.PrimaryFlightComputersGuardEvent, Pmdg777ControlProfile.MouseLeftSingle, "PRIMARY FLIGHT COMPUTERS guard CLOSED"));
+        }
+        if (_state?.Pmdg777EmergencyLightsGuardClosed != true)
+        {
+            controls.Add((Pmdg777ControlProfile.EmergencyLightsGuardEvent, Pmdg777ControlProfile.MouseLeftSingle, "EMERGENCY LIGHTS guard CLOSED"));
+        }
+        if (_state?.Pmdg777PassengerOxygenGuardClosed != true)
+        {
+            controls.Add((Pmdg777ControlProfile.PassengerOxygenGuardEvent, Pmdg777ControlProfile.MouseLeftSingle, "PASSENGER OXYGEN guard CLOSED"));
+        }
+        QueuePmdg777Controls(controls.ToArray());
+    }
+
+    private void ConfigurePmdg777ExteriorLightsPreflight()
+    {
+        QueuePmdg777Controls(
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 22, 0, "left landing light OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 23, 0, "nose landing light OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 24, 0, "right landing light OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 114, 0, "beacon OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 115, 1, "navigation light ON"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 119, 0, "left runway-turnoff light OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 120, 0, "right runway-turnoff light OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 121, 0, "taxi light OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 122, 0, "strobe light OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 29, 1, "no-smoking selector AUTO"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 30, 0, "seat-belt selector OFF"));
+    }
+
+    private void DisconnectPmdg777ExternalPower()
+    {
+        var controls = new List<(uint EventId, uint Parameter, string Label)>();
+        if (_state?.Pmdg777PrimaryExternalPowerOn == true)
+        {
+            controls.Add((Pmdg777ControlProfile.PrimaryExternalPowerSwitchEvent,
+                Pmdg777ControlProfile.MouseLeftSingle,
+                "primary external power OFF"));
+        }
+        if (_state?.Pmdg777SecondaryExternalPowerOn == true)
+        {
+            controls.Add((Pmdg777ControlProfile.SecondaryExternalPowerSwitchEvent,
+                Pmdg777ControlProfile.MouseLeftSingle,
+                "secondary external power OFF"));
+        }
+
+        if (controls.Count > 0)
+        {
+            QueuePmdg777Controls(controls.ToArray());
+        }
+    }
+
+    private void ConfigurePmdg777HydraulicsBeforeStart()
+    {
+        QueuePmdg777Controls(
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 38, 1, "right electric demand pump AUTO"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 40, 1, "center 1 electric primary pump ON"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 41, 1, "center 2 electric primary pump ON"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 35, 1, "left electric demand pump AUTO"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 36, 1, "center 1 air demand pump AUTO"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 37, 1, "center 2 air demand pump AUTO"));
+    }
+
+    private void ConfigurePmdg777FuelPumpsBeforeStart()
+    {
+        var centerPosition = _state?.Pmdg777CenterFuelPumpsRequired == true ? 1u : 0u;
+        QueuePmdg777Controls(
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 103, 1, "left forward fuel pump ON"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 104, 1, "right forward fuel pump ON"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 105, 1, "left aft fuel pump ON"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 106, 1, "right aft fuel pump ON"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 109, centerPosition, $"left center fuel pump {(centerPosition == 1 ? "ON" : "OFF")}"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 110, centerPosition, $"right center fuel pump {(centerPosition == 1 ? "ON" : "OFF")}"));
+    }
+
+    private void SetPmdg777TakeoffFlaps()
+    {
+        var setting = _state?.Pmdg777FmcTakeoffFlaps ?? 0;
+        var detentEvent = setting switch
+        {
+            1 => Pmdg777ControlProfile.FlapsOneEvent,
+            5 => Pmdg777ControlProfile.FlapsFiveEvent,
+            15 => Pmdg777ControlProfile.FlapsFifteenEvent,
+            20 => Pmdg777ControlProfile.FlapsTwentyEvent,
+            25 => Pmdg777ControlProfile.FlapsTwentyFiveEvent,
+            30 => Pmdg777ControlProfile.FlapsThirtyEvent,
+            _ => uint.MaxValue
+        };
+        if (detentEvent == uint.MaxValue)
+        {
+            _procedureRunner.Fail(
+                "PMDG TAKEOFF REF does not contain a supported takeoff flap setting.");
+            FinishOneShot(3);
+            return;
+        }
+
+        QueuePmdg777Controls(
+            (detentEvent,
+                0,
+                $"flaps {setting}"));
+    }
+
+    private void ConfigurePmdg777AirPanelPreflight()
+    {
+        QueuePmdg777Controls(
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 129, 1, "left engine bleed AUTO"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 130, 1, "right engine bleed AUTO"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 131, 1, "APU bleed AUTO"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 132, 1, "left isolation valve AUTO"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 133, 1, "center isolation valve AUTO"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 134, 1, "right isolation valve AUTO"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 135, 1, "left pack AUTO"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 136, 1, "right pack AUTO"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 137, 1, "left trim air ON"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 138, 1, "right trim air ON"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 142, 1, "upper recirculation fan ON"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 143, 1, "lower recirculation fan ON"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 144, 1, "equipment cooling AUTO"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 139, 30, "flight-deck temperature AUTO midpoint"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 140, 30, "cabin temperature midpoint"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 1261, 0, "landing-altitude selector IN"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 127, 1, "forward outflow valve AUTO"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 128, 1, "aft outflow valve AUTO"));
+    }
+
+    private void QueuePmdg777Controls(params (uint EventId, uint Parameter, string Label)[] controls)
+    {
+        if (_pmdg777ControlQueue.Count > 0)
+        {
+            _procedureRunner.Fail("PMDG 777 control sequence blocked: another FO sequence is still active.");
+            return;
+        }
+
+        foreach (var control in controls)
+        {
+            _pmdg777ControlQueue.Enqueue(control);
+        }
+
+        _pmdg777ControlQueueTimer?.Stop();
+        _pmdg777ControlQueueTimer?.Dispose();
+        _pmdg777ControlQueueTimer = new System.Windows.Forms.Timer
+        {
+            Interval = Pmdg777ControlProfile.HumanControlIntervalMilliseconds
+        };
+        _pmdg777ControlQueueTimer.Tick += (_, _) => SendNextPmdg777QueuedControl();
+        _pmdg777ControlQueueTimer.Start();
+        SendNextPmdg777QueuedControl();
+    }
+
+    private void SendNextPmdg777QueuedControl()
+    {
+        if (_pmdg777ControlState.Event != 0)
+        {
+            return;
+        }
+
+        if (_pmdg777ControlQueue.Count == 0)
+        {
+            _pmdg777ControlQueueTimer?.Stop();
+            _pmdg777ControlQueueTimer?.Dispose();
+            _pmdg777ControlQueueTimer = null;
+            return;
+        }
+
+        var control = _pmdg777ControlQueue.Dequeue();
+        SendPmdg777Control(control.EventId, control.Parameter, control.Label);
+    }
+
+    private void SetPmdg777TransponderStandby()
+    {
+        if (_state?.Pmdg777TransponderStandby == true)
+        {
+            return;
+        }
+
+        SendPmdg777Control(
+            Pmdg777ControlProfile.TransponderModeSelectorEvent,
+            0,
+            "transponder mode selector STBY");
+    }
+
+    private void SetPmdg777FirstOfficerFlightDirectorOn()
+    {
+        if (_state?.Pmdg777FirstOfficerFlightDirectorOn == true)
+        {
+            return;
+        }
+
+        SendPmdg777Control(
+            Pmdg777ControlProfile.FirstOfficerFlightDirectorSwitchEvent,
+            1,
+            "FIRST OFFICER FLIGHT DIRECTOR switch ON");
+    }
+
+    private void SendPmdg777Control(uint eventId, uint parameter, string label)
+    {
+        if (_simConnect == null
+            || _state?.IsPmdg777300Er != true
+            || !_pmdg777SdkInitialized
+            || !_pmdg777DataReady)
+        {
+            _procedureRunner.Fail($"PMDG 777 {label} blocked: verified SDK data or control mapping is not ready.");
+            return;
+        }
+        if (_pmdg777ControlState.Event != 0)
+        {
+            _procedureRunner.Fail($"PMDG 777 {label} blocked: SDK control event {_pmdg777ControlState.Event} is still pending.");
+            return;
+        }
+
+        var command = new Pmdg777Control { Event = eventId, Parameter = parameter };
+        _simConnect.SetClientData(
+            ClientDataArea.Pmdg777Control,
+            ClientDataDefinition.Pmdg777Control,
+            SIMCONNECT_CLIENT_DATA_SET_FLAG.DEFAULT,
+            0,
+            command);
+        _pmdg777ControlState = command;
+        AppLog.Write($"PMDG 777 FO action sent: {label}; awaiting independent 777X data readback.");
     }
 
     private void SetA310BatteriesAuto()
@@ -17651,7 +18702,8 @@ internal sealed class CopilotService : Form
     {
         var currentStepId = _procedureRunner.CurrentStep?.Id;
         if (!IsSayIntentionsAtcStep(currentStepId)
-            || _procedureRunner.Status != ProcedureStatus.WaitingForManualAction)
+            || _procedureRunner.Status is not (ProcedureStatus.WaitingForManualAction
+                or ProcedureStatus.WaitingForVerification))
         {
             return false;
         }
@@ -17706,7 +18758,8 @@ internal sealed class CopilotService : Form
         }
 
         if (_procedureRunner.CurrentStep?.Id != pendingStepId
-            || _procedureRunner.Status != ProcedureStatus.WaitingForManualAction)
+            || _procedureRunner.Status is not (ProcedureStatus.WaitingForManualAction
+                or ProcedureStatus.WaitingForVerification))
         {
             _pendingSayIntentionsAtcStepId = null;
             _pendingSayIntentionsAtcBaselineId = 0;
@@ -17724,7 +18777,33 @@ internal sealed class CopilotService : Form
             _sayIntentionsTimer.Interval = 10000;
         }
 
-        _commands.Enqueue("procedure confirm");
+        if (_procedureRunner.CurrentStep?.Kind == ProcedureStepKind.AutomaticAction)
+        {
+            if (pendingStepId == "fo-taxi-clearance")
+            {
+                _taxiClearanceReceived = true;
+                if (_state != null)
+                {
+                    _state.TaxiClearanceReceived = true;
+                }
+            }
+            else if (pendingStepId == "fo-takeoff-clearance")
+            {
+                _takeoffClearanceReceived = true;
+                if (_state != null)
+                {
+                    _state.TakeoffClearanceReceived = true;
+                }
+            }
+            if (_state != null)
+            {
+                _procedureRunner.Update(_state);
+            }
+        }
+        else
+        {
+            _commands.Enqueue("procedure confirm");
+        }
     }
 
     private void CancelPendingSayIntentionsAtcRequest()
@@ -18721,6 +19800,23 @@ internal sealed class CopilotService : Form
     private static string ValueOrUnknown(string value) =>
         string.IsNullOrWhiteSpace(value) ? "unknown" : value;
 
+    private void BeginAutomatedSayIntentionsAtcStep()
+    {
+        var step = _procedureRunner.CurrentStep;
+        if (step == null || !IsSayIntentionsAtcStep(step.Id))
+        {
+            return;
+        }
+
+        if (_state?.SayIntentionsAtcActive != true)
+        {
+            _procedureRunner.Update(_state!);
+            return;
+        }
+
+        _ = HandleConfirmButtonAsync();
+    }
+
     private async Task HandleConfirmButtonAsync()
     {
         var step = _procedureRunner.CurrentStep;
@@ -18737,7 +19833,8 @@ internal sealed class CopilotService : Form
             || !IsSayIntentionsAtcStep(step.Id)
             || flight == null
             || !_settings.UseSayIntentionsCopilotCommunications
-            || _procedureRunner.Status != ProcedureStatus.WaitingForManualAction)
+            || _procedureRunner.Status is not (ProcedureStatus.WaitingForManualAction
+                or ProcedureStatus.WaitingForVerification))
         {
             _commands.Enqueue("procedure confirm");
             return;
@@ -20390,7 +21487,7 @@ internal sealed class CopilotService : Form
             $"APU {_state.ApuMasterSwitchOn.ToOnOff()}/{_state.ApuRpmPercent:F0}%";
         _adapterLabel!.Text = _state.IsPmdg777300Er
             ? _pmdg777DataReady
-                ? "PMDG 777X SDK connected; Flow 1 readbacks active and automatic controls disabled."
+                ? "PMDG 777X SDK connected; Flow 1 BATTERY ON action and PMDG switch readback active."
                 : "PMDG 777X SDK waiting - enable [SDK] EnableDataBroadcast=1 in 777_Options.ini and restart MSFS."
         : _state.IsPmdg737800
             ? _pmdgNg3DataReady
@@ -22055,6 +23152,12 @@ internal sealed class CopilotService : Form
         _pmdg777SdkInitialized = false;
         _pmdg777DataReady = false;
         _pmdg777State = null;
+        _pmdg777ControlReady = false;
+        _pmdg777ControlState = default;
+        _pmdg777AdiruOffSinceUtc = null;
+        _pmdg777AdiruOnTimer?.Stop();
+        _pmdg777AdiruOnTimer?.Dispose();
+        _pmdg777AdiruOnTimer = null;
         _loggedPmdg777FlowOneSignature = null;
         ResetMobiFlightRuntimeAfterDisconnect();
         _simConnect?.Dispose();
@@ -22178,6 +23281,7 @@ internal sealed class CopilotService : Form
             }
             _asobo737MaxFireTestsInProgress = false;
             _reconnectTimer?.Dispose();
+            _pmdg777AdiruOnTimer?.Dispose();
             _sayIntentionsTimer?.Stop();
             _sayIntentionsTimer?.Dispose();
             _sayIntentionsTimer = null;

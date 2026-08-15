@@ -2,6 +2,7 @@ namespace Msfs2024Ai.Copilot.Diagnostics;
 
 internal static class AppLog
 {
+    private const long MaximumLogBytes = 10 * 1024 * 1024;
     private static readonly object Sync = new();
     private static readonly string DirectoryPath =
         Path.Combine(
@@ -18,6 +19,7 @@ internal static class AppLog
             lock (Sync)
             {
                 Directory.CreateDirectory(DirectoryPath);
+                RotateIfOversized();
                 File.AppendAllText(
                     FilePath,
                     $"{DateTime.Now:yyyy-MM-dd HH:mm:ss.fff}  {message}{Environment.NewLine}");
@@ -27,5 +29,21 @@ internal static class AppLog
         {
             // Logging must never stop simulator interaction.
         }
+    }
+
+    private static void RotateIfOversized()
+    {
+        if (!File.Exists(FilePath)
+            || new FileInfo(FilePath).Length < MaximumLogBytes)
+        {
+            return;
+        }
+
+        var previousPath = Path.Combine(DirectoryPath, "copilot.previous.log");
+        if (File.Exists(previousPath))
+        {
+            File.Delete(previousPath);
+        }
+        File.Move(FilePath, previousPath);
     }
 }

@@ -41,17 +41,200 @@ internal sealed class AircraftState
     public bool Battery3On { get; set; }
     public bool Pmdg777SdkDataReady { get; set; }
     public bool Pmdg777BatteryOn { get; set; }
+    public bool Pmdg777IfePassengerSeatsOn { get; set; }
+    public bool Pmdg777CabinUtilityOn { get; set; }
+    public bool Pmdg777BusTiesAuto { get; set; }
     public bool Pmdg777HydraulicPanelSafe { get; set; }
     public bool Pmdg777WipersOff { get; set; }
     public bool Pmdg777GearLeverDown { get; set; }
     public bool Pmdg777AlternateFlapsOff { get; set; }
     public bool Pmdg777ExternalPowerAvailable { get; set; }
     public bool Pmdg777ExternalPowerOn { get; set; }
+    public bool Pmdg777PrimaryExternalPowerAvailable { get; set; }
+    public bool Pmdg777SecondaryExternalPowerAvailable { get; set; }
+    public bool Pmdg777PrimaryExternalPowerOn { get; set; }
+    public bool Pmdg777SecondaryExternalPowerOn { get; set; }
     public bool Pmdg777NavigationLightOn { get; set; }
     public bool Pmdg777LogoLightOn { get; set; }
     public bool Pmdg777GroundAirConfigurationSet { get; set; }
     public bool Pmdg777AdiruOn { get; set; }
     public bool Pmdg777EmergencyLightsArmed { get; set; }
+    public bool Pmdg777EmergencyLightsGuardClosed { get; set; }
+    public bool Pmdg777PassengerOxygenGuardClosed { get; set; }
+    public bool Pmdg777PrimaryFlightComputersGuardClosed { get; set; }
+    public bool Pmdg777ThrustAsymmetryCompensationAuto { get; set; }
+    public bool Pmdg777PrimaryFlightComputersAuto { get; set; }
+    public bool Pmdg777ApuGeneratorSwitchOn { get; set; }
+    public bool Pmdg777ApuRunning { get; set; }
+    public bool Pmdg777ApuGeneratorPowerEstablished { get; set; }
+    public bool Pmdg777ApuBleedAirAvailable { get; set; }
+    public bool Pmdg777BeforeStartChecklistComplete { get; set; }
+    public bool Pmdg777BeaconOn { get; set; }
+    public bool Pmdg777HydraulicsBeforeStart { get; set; }
+    public bool Pmdg777FuelPumpsBeforeStart { get; set; }
+    public bool Pmdg777CenterFuelPumpsRequired { get; set; }
+    public bool Pmdg777TransponderXpndr { get; set; }
+    public bool Pmdg777SecondaryEngineDisplaySelected { get; set; }
+    public bool Pmdg777EngineOneStartSelectorStart { get; set; }
+    public bool Pmdg777EngineTwoStartSelectorStart { get; set; }
+    public bool Pmdg777EngineOneStartValveOpen { get; set; }
+    public bool Pmdg777EngineTwoStartValveOpen { get; set; }
+    public bool Pmdg777EngineOneFuelControlRun { get; set; }
+    public bool Pmdg777EngineTwoFuelControlRun { get; set; }
+    public bool Pmdg777WheelChocksSet { get; set; }
+    public bool Pmdg777ApuSelectorOff { get; set; }
+    public bool Pmdg777EngineBleedsAuto { get; set; }
+    public bool Pmdg777PacksAuto { get; set; }
+    public bool Pmdg777ApuBleedOff { get; set; }
+    public bool Pmdg777TakeoffFlapsSet { get; set; }
+    public bool Pmdg777TransponderTaRa { get; set; }
+    public bool Pmdg777TaxiLightsSet { get; set; }
+    public bool Pmdg777TakeoffLightsSet { get; set; }
+    public bool Pmdg777ClimbLightsSet { get; set; }
+    public bool Pmdg777GearLeverUp { get; set; }
+    public bool Pmdg777BeforeTaxiChecklistComplete { get; set; }
+    public bool Pmdg777BeforeTakeoffChecklistComplete { get; set; }
+    public bool Pmdg777AfterTakeoffChecklistComplete { get; set; }
+    public bool TaxiClearanceReceived { get; set; }
+    public bool TakeoffClearanceReceived { get; set; }
+    public bool Pmdg777EngineGeneratorOneSwitchOn { get; set; }
+    public bool Pmdg777EngineGeneratorTwoSwitchOn { get; set; }
+    public bool Pmdg777BackupGeneratorOneSwitchOn { get; set; }
+    public bool Pmdg777BackupGeneratorTwoSwitchOn { get; set; }
+    public bool Pmdg777LeftSideWindowHeatOn { get; set; }
+    public bool Pmdg777LeftForwardWindowHeatOn { get; set; }
+    public bool Pmdg777RightForwardWindowHeatOn { get; set; }
+    public bool Pmdg777RightSideWindowHeatOn { get; set; }
+    public bool Pmdg777LeftEnginePrimaryHydraulicPumpOn { get; set; }
+    public bool Pmdg777RightEnginePrimaryHydraulicPumpOn { get; set; }
+    public bool Pmdg777FirePanelNormal { get; set; }
+    public bool Pmdg777EngineControlPanelNormal { get; set; }
+    public bool Pmdg777FuelPanelPreflight { get; set; }
+    public bool Pmdg777AntiIceAuto { get; set; }
+    public bool Pmdg777ExteriorLightsPreflight { get; set; }
+    public bool Pmdg777AirPanelPreflight { get; set; }
+    public bool Pmdg777AutobrakeRto { get; set; }
+    public bool Pmdg777TransponderAltitudeSourceNormal { get; set; }
+    public bool Pmdg777SeatBeltsOff { get; set; }
+    public bool Pmdg777SeatBeltsAuto { get; set; }
+    public bool Pmdg777NoSmokingAuto { get; set; }
+    public bool Pmdg777FuelToRemainSelectorIn { get; set; }
+    public bool Pmdg777TemperatureControlsPreflight { get; set; }
+    public bool Pmdg777FirstOfficerNdMap { get; set; }
+    public bool Pmdg777FireOverheatTestComplete { get; set; }
+    public bool Pmdg777FirstOfficerOxygenTestComplete { get; set; }
+    public bool Pmdg777ElectricalHydraulicPreflight =>
+        Pmdg777IfePassengerSeatsOn
+        && Pmdg777CabinUtilityOn
+        && Pmdg777EmergencyLightsArmed
+        && Pmdg777EmergencyLightsGuardClosed
+        && Pmdg777NavigationLightOn
+        && Pmdg777ThrustAsymmetryCompensationAuto
+        && Pmdg777PrimaryFlightComputersAuto
+        && Pmdg777PrimaryFlightComputersGuardClosed
+        && Pmdg777ApuGeneratorSwitchOn
+        && Pmdg777EngineGeneratorOneSwitchOn
+        && Pmdg777EngineGeneratorTwoSwitchOn
+        && Pmdg777BackupGeneratorOneSwitchOn
+        && Pmdg777BackupGeneratorTwoSwitchOn
+        && Pmdg777BusTiesAuto
+        && Pmdg777WipersOff
+        && Pmdg777PassengerOxygenNormal
+        && Pmdg777PassengerOxygenGuardClosed
+        && Pmdg777LeftSideWindowHeatOn
+        && Pmdg777LeftForwardWindowHeatOn
+        && Pmdg777RightForwardWindowHeatOn
+        && Pmdg777RightSideWindowHeatOn
+        && Pmdg777LeftEnginePrimaryHydraulicPumpOn
+        && Pmdg777RightEnginePrimaryHydraulicPumpOn
+        && Pmdg777HydraulicPanelSafe;
+    public bool Pmdg777FirstOfficerFlightDirectorOn { get; set; }
+    public bool Pmdg777ServiceInterphoneOff { get; set; }
+    public bool Pmdg777PassengerOxygenNormal { get; set; }
+    public bool Pmdg777FirstOfficerSourcesNormal { get; set; }
+    public bool Pmdg777FirstOfficerDisplaysReady { get; set; }
+    public bool Pmdg777SpeedbrakeDown { get; set; }
+    public bool Pmdg777FlapsUp { get; set; }
+    public bool Pmdg777FuelControlsCutoff { get; set; }
+    public bool Pmdg777TransponderStandby { get; set; }
+    public bool Pmdg777ConsoleStartingConfiguration =>
+        Pmdg777SpeedbrakeDown
+        && Pmdg777FlapsUp
+        && Pmdg777FuelControlsCutoff
+        && Pmdg777TransponderStandby;
+    public int Pmdg777McpAltitude { get; set; }
+    public bool Pmdg777FmcPerformanceInputComplete { get; set; }
+    public int Pmdg777FmcTakeoffFlaps { get; set; }
+    public int Pmdg777FmcV1 { get; set; }
+    public int Pmdg777FmcVr { get; set; }
+    public int Pmdg777FmcV2 { get; set; }
+    public int Pmdg777FmcCruiseAltitude { get; set; }
+    public float Pmdg777FmcDistanceToDestination { get; set; }
+    public string Pmdg777FmcFlightNumber { get; set; } = string.Empty;
+    public bool Pmdg777FmcRouteInitialized =>
+        Pmdg777FmcCruiseAltitude > 0
+        && Pmdg777FmcDistanceToDestination >= 0
+        && !string.IsNullOrWhiteSpace(Pmdg777FmcFlightNumber);
+    public bool Pmdg777PreflightChecklistComplete { get; set; }
+    public bool Pmdg777IrsAligned { get; set; }
+    public bool Pmdg777FlowTwoFirstOfficerVerified =>
+        Pmdg777IfePassengerSeatsOn
+        && Pmdg777CabinUtilityOn
+        && Pmdg777EmergencyLightsArmed
+        && Pmdg777EmergencyLightsGuardClosed
+        && Pmdg777NavigationLightOn
+        && Pmdg777ThrustAsymmetryCompensationAuto
+        && Pmdg777PrimaryFlightComputersAuto
+        && Pmdg777PrimaryFlightComputersGuardClosed
+        && Pmdg777ApuGeneratorSwitchOn
+        && Pmdg777EngineGeneratorOneSwitchOn
+        && Pmdg777EngineGeneratorTwoSwitchOn
+        && Pmdg777BackupGeneratorOneSwitchOn
+        && Pmdg777BackupGeneratorTwoSwitchOn
+        && Pmdg777BusTiesAuto
+        && Pmdg777WipersOff
+        && Pmdg777PassengerOxygenNormal
+        && Pmdg777PassengerOxygenGuardClosed
+        && Pmdg777LeftSideWindowHeatOn
+        && Pmdg777LeftForwardWindowHeatOn
+        && Pmdg777RightForwardWindowHeatOn
+        && Pmdg777RightSideWindowHeatOn
+        && Pmdg777LeftEnginePrimaryHydraulicPumpOn
+        && Pmdg777RightEnginePrimaryHydraulicPumpOn
+        && Pmdg777HydraulicPanelSafe
+        && Pmdg777FirePanelNormal
+        && Pmdg777EngineControlPanelNormal
+        && Pmdg777FuelPanelPreflight
+        && Pmdg777FuelToRemainSelectorIn
+        && Pmdg777AntiIceAuto
+        && Pmdg777ExteriorLightsPreflight
+        && Pmdg777SeatBeltsOff
+        && Pmdg777NoSmokingAuto
+        && Pmdg777AirPanelPreflight
+        && Pmdg777TemperatureControlsPreflight
+        && Pmdg777FireOverheatTestComplete
+        && Pmdg777FirstOfficerOxygenTestComplete
+        && Pmdg777FirstOfficerFlightDirectorOn
+        && Pmdg777FirstOfficerSourcesNormal
+        && Pmdg777FirstOfficerDisplaysReady
+        && Pmdg777AutobrakeRto
+        && Pmdg777FirstOfficerNdMap
+        && Pmdg777TransponderStandby
+        && Pmdg777TransponderAltitudeSourceNormal
+        && Pmdg777ConsoleStartingConfiguration
+        && Pmdg777IrsAligned;
+    public bool Pmdg777FlowThreeFirstOfficerVerified =>
+        RequiredDoorsClosed
+        && Pmdg777ApuRunning
+        && Pmdg777ApuGeneratorPowerEstablished
+        && Pmdg777ApuBleedAirAvailable
+        && !Pmdg777PrimaryExternalPowerOn
+        && !Pmdg777SecondaryExternalPowerOn
+        && Pmdg777SeatBeltsAuto
+        && Pmdg777HydraulicsBeforeStart
+        && Pmdg777FuelPumpsBeforeStart
+        && Pmdg777BeaconOn
+        && Pmdg777TransponderXpndr;
     public bool A310HydraulicPanelSafe { get; set; }
     public bool A310WipersAndWeatherRadarOff { get; set; }
     public bool A310ApuFireTestCompleted { get; set; }

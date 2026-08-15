@@ -133,6 +133,40 @@ public sealed class GsxPromptPolicyTests
     }
 
     [TestMethod]
+    public void AttachPushbackTugPromptSelectsOnlyExplicitYes()
+    {
+        var menu = new GsxMenuSnapshot(
+            "Attach Pushback Tug now?",
+            new[] { "No", "Yes" });
+
+        Assert.AreEqual(1, GsxPromptPolicy.FindAttachPushbackTugConfirmation(menu));
+        Assert.IsNull(GsxPromptPolicy.FindAttachPushbackTugConfirmation(
+            new GsxMenuSnapshot("Operate jetway now?", new[] { "No", "Yes" })));
+    }
+
+    [TestMethod]
+    public void ContinuePushbackIsRecognizedOnlyFromRootServicesMenu()
+    {
+        var rootMenu = new GsxMenuSnapshot(
+            "Activate Services at EBBR/Brussels National",
+            new[]
+            {
+                "Deboarding no longer available",
+                "Catering not available during departure",
+                "Fuel Truck not available during departure",
+                "Boarding no longer possible",
+                "Continue Pushback",
+                "Customize this Parking position"
+            });
+
+        Assert.AreEqual(4, GsxPromptPolicy.FindContinuePushbackAction(rootMenu));
+        Assert.IsNull(GsxPromptPolicy.FindContinuePushbackAction(
+            new GsxMenuSnapshot(
+                "Interrupt pushback?",
+                new[] { "Continue Pushback", "Abort pushback" })));
+    }
+
+    [TestMethod]
     public void MatchesRefreshedChoiceByPromptAndLabelInsteadOfOldIndex()
     {
         var refreshed = new GsxMenuSnapshot(

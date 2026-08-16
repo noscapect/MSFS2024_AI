@@ -182,13 +182,12 @@ internal sealed class ProcedureRunner
         while (_stepIndex < _definition.Steps.Count)
         {
             var step = _definition.Steps[_stepIndex];
-            var complete =
-                step.IsComplete(state)
-                || (_recovering
-                    && step.IsCompleteWhenRecovering?.Invoke(state) == true);
+            var recovered = _recovering
+                            && step.IsCompleteWhenRecovering?.Invoke(state) == true;
+            var complete = step.IsComplete(state) || recovered;
             var remainingDuration = step.MinimumDuration
                                   - (DateTime.UtcNow - _currentStepStartedUtc);
-            var dwellSatisfied = remainingDuration <= TimeSpan.Zero;
+            var dwellSatisfied = recovered || remainingDuration <= TimeSpan.Zero;
             if (step.Kind == ProcedureStepKind.AutomaticAction
                 && step.RequireCommandExecution
                 && !string.Equals(

@@ -52,11 +52,10 @@ public sealed class GsxPushbackDirectionCoordinatorTests
     }
 
     [TestMethod]
-    public void OppositeHeadingDoesNotGuess()
+    public void OppositeHeadingSelectsDeterministicNoseRightChoice()
     {
-        Assert.IsNull(GsxPushbackDirectionCoordinator.FindChoice(
-            DirectionMenu,
-            225,
-            45));
+        Assert.AreEqual(
+            0,
+            GsxPushbackDirectionCoordinator.FindChoice(DirectionMenu, 225, 45));
     }
 }

@@ -86,15 +86,29 @@ internal sealed class AircraftState
     public bool Pmdg777EngineBleedsAuto { get; set; }
     public bool Pmdg777PacksAuto { get; set; }
     public bool Pmdg777ApuBleedOff { get; set; }
+    public bool Pmdg777ApuBleedAuto { get; set; }
     public bool Pmdg777TakeoffFlapsSet { get; set; }
     public bool Pmdg777TransponderTaRa { get; set; }
     public bool Pmdg777TaxiLightsSet { get; set; }
+    public bool Pmdg777TaxiLightsCommandedThisFlow { get; set; }
     public bool Pmdg777TakeoffLightsSet { get; set; }
     public bool Pmdg777ClimbLightsSet { get; set; }
     public bool Pmdg777GearLeverUp { get; set; }
     public bool Pmdg777BeforeTaxiChecklistComplete { get; set; }
     public bool Pmdg777BeforeTakeoffChecklistComplete { get; set; }
     public bool Pmdg777AfterTakeoffChecklistComplete { get; set; }
+    public bool Pmdg777LnavArmed { get; set; }
+    public bool Pmdg777VnavArmed { get; set; }
+    public int Pmdg777FmcLandingFlaps { get; set; }
+    public int Pmdg777FmcLandingVref { get; set; }
+    public bool Pmdg777LandingFlapsSet { get; set; }
+    public bool Pmdg777SpeedbrakeArmed { get; set; }
+    public int Pmdg777AutobrakeSelector { get; set; }
+    public bool Pmdg777LandingLightsOn { get; set; }
+    public bool Pmdg777AfterLandingLightsSet { get; set; }
+    public bool Pmdg777FuelPumpsOff { get; set; }
+    public bool Pmdg777HydraulicsShutdown { get; set; }
+    public int Pmdg777FlapsLever { get; set; }
     public bool TaxiClearanceReceived { get; set; }
     public bool TakeoffClearanceReceived { get; set; }
     public bool Pmdg777EngineGeneratorOneSwitchOn { get; set; }

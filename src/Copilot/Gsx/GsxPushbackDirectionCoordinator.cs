@@ -74,12 +74,12 @@ internal static class GsxPushbackDirectionCoordinator
             return null;
         }
 
-        if (magnitude > 170)
-        {
-            return null;
-        }
-
-        var requiredNoseDirection = turn > 0 ? "nose right" : "nose left";
+        // A clearance opposite the parked heading is a valid pushback request.
+        // At the exact 180-degree tie, choose the first (nose-right) direction
+        // deterministically instead of leaving GSX unanswered.
+        var requiredNoseDirection = turn > 0 || magnitude >= 179.5
+            ? "nose right"
+            : "nose left";
         for (var index = 0; index < menu.Choices.Count; index++)
         {
             if (menu.Choices[index].IndexOf(

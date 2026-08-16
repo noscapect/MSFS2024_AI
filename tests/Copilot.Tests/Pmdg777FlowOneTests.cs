@@ -90,10 +90,10 @@ public sealed class Pmdg777FlowOneTests
         var approach = Pmdg777ProcedureLibrary.ApproachAndLanding;
         Assert.AreEqual(
             CrewRole.FirstOfficer,
-            approach.Steps.Single(step => step.Id == "gear-down").AssignedRole);
+            approach.Steps.Single(step => step.Id == "fo-gear-down").AssignedRole);
         Assert.AreEqual(
             CrewRole.FirstOfficer,
-            approach.Steps.Single(step => step.Id == "flaps-schedule").AssignedRole);
+            approach.Steps.Single(step => step.Id == "fo-flaps-one").AssignedRole);
     }
 
     [TestMethod]
@@ -108,7 +108,9 @@ public sealed class Pmdg777FlowOneTests
             new[]
             {
                 "battery-on",
+                "primary-external-power-available",
                 "primary-external-power-on",
+                "secondary-external-power-available",
                 "secondary-external-power-on",
                 "bus-ties-auto",
                 "hydraulic-starting-state",
@@ -125,7 +127,7 @@ public sealed class Pmdg777FlowOneTests
         Assert.AreEqual("pmdg777 battery on", battery.Command);
         Assert.IsTrue(flow.Steps.All(step => step.AssignedRole == CrewRole.FirstOfficer));
         CollectionAssert.AreEqual(
-            new[] { 3d, 5d, 5d, 3d, 4d, 3d, 3d, 3d, 5d },
+            new[] { 3d, 0d, 5d, 0d, 5d, 3d, 4d, 3d, 3d, 3d, 5d },
             flow.Steps.Select(step => step.MinimumDuration.TotalSeconds).ToArray());
         Assert.IsNotNull(checklist);
         Assert.AreEqual(flow.Id, checklist!.ProcedureId);
@@ -145,6 +147,25 @@ public sealed class Pmdg777FlowOneTests
         var step = Pmdg777ProcedureLibrary.PowerUpAndPreliminaryPreflight.Steps[0];
 
         Assert.IsFalse(step.IsComplete(new AircraftState { Title = "777-300ER" }));
+    }
+
+    [TestMethod]
+    public void FlowOneWaitsForBothExternalPowerSourcesBeforeIssuingCommands()
+    {
+        var steps = Pmdg777ProcedureLibrary.PowerUpAndPreliminaryPreflight.Steps
+            .ToDictionary(step => step.Id);
+        var state = new AircraftState { Pmdg777BatteryOn = true };
+
+        Assert.AreEqual(ProcedureStepKind.Observe, steps["primary-external-power-available"].Kind);
+        Assert.IsFalse(steps["primary-external-power-available"].IsComplete(state));
+        state.Pmdg777PrimaryExternalPowerAvailable = true;
+        Assert.IsTrue(steps["primary-external-power-available"].IsComplete(state));
+
+        Assert.AreEqual(ProcedureStepKind.Observe, steps["secondary-external-power-available"].Kind);
+        Assert.IsFalse(steps["secondary-external-power-available"].IsComplete(state));
+        Assert.IsFalse(steps["secondary-external-power-on"].IsComplete(state));
+        state.Pmdg777SecondaryExternalPowerAvailable = true;
+        Assert.IsTrue(steps["secondary-external-power-available"].IsComplete(state));
     }
 
     private static AircraftState ReadyState() =>

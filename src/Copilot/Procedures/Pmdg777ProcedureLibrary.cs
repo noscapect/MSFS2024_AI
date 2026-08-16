@@ -1,4 +1,5 @@
 using Msfs2024Ai.Copilot.Domain;
+using Msfs2024Ai.Copilot.AircraftAdapters.Pmdg777;
 
 namespace Msfs2024Ai.Copilot.Procedures;
 
@@ -76,7 +77,8 @@ internal static class Pmdg777ProcedureLibrary
         string label,
         Func<AircraftState, bool> complete,
         string command,
-        TimeSpan? minimumDuration = null) =>
+        TimeSpan? minimumDuration = null,
+        Func<AircraftState, bool>? recoveryComplete = null) =>
         new(
             id,
             label,
@@ -84,7 +86,17 @@ internal static class Pmdg777ProcedureLibrary
             complete,
             CrewRole.FirstOfficer,
             command,
+            isCompleteWhenRecovering: recoveryComplete,
             minimumDuration: minimumDuration);
+
+    private static bool ApproachGateReached(
+        AircraftState state,
+        double distanceNm,
+        bool altitudeFallback) =>
+        state.ApproachDistanceToTouchdownNm.HasValue
+        && state.ApproachDistanceToTouchdownNm.Value > 0
+            ? state.ApproachDistanceToTouchdownNm.Value <= distanceNm
+            : altitudeFallback;
 
     public static ProcedureDefinition PowerUpAndPreliminaryPreflight { get; } =
         new(
@@ -98,17 +110,24 @@ internal static class Pmdg777ProcedureLibrary
                     state => state.Pmdg777SdkDataReady && state.Pmdg777BatteryOn,
                     "pmdg777 battery on",
                     TimeSpan.FromSeconds(3)),
+                Observe(
+                    "primary-external-power-available",
+                    "Waiting for PRIMARY EXTERNAL POWER AVAIL after the GPU is connected",
+                    state => state.Pmdg777PrimaryExternalPowerAvailable),
                 Automatic(
                     "primary-external-power-on",
                     "First Officer: PRIMARY EXTERNAL POWER switch PUSH; ON light illuminated",
                     state => state.Pmdg777PrimaryExternalPowerOn,
                     "pmdg777 primary external power on",
                     TimeSpan.FromSeconds(5)),
+                Observe(
+                    "secondary-external-power-available",
+                    "Waiting for SECONDARY EXTERNAL POWER AVAIL after the GPU is connected",
+                    state => state.Pmdg777SecondaryExternalPowerAvailable),
                 Automatic(
                     "secondary-external-power-on",
                     "First Officer: SECONDARY EXTERNAL POWER switch PUSH when available; ON light illuminated",
-                    state => !state.Pmdg777SecondaryExternalPowerAvailable
-                             || state.Pmdg777SecondaryExternalPowerOn,
+                    state => state.Pmdg777SecondaryExternalPowerOn,
                     "pmdg777 secondary external power on",
                     TimeSpan.FromSeconds(5)),
                 Observe(
@@ -182,7 +201,6 @@ internal static class Pmdg777ProcedureLibrary
             new[]
             {
                 Observe("parked", "Aircraft stationary at the gate", state => state.OnGround && state.GroundSpeedKnots <= 0.5),
-                Observe("doors-cargo", "First Officer monitors boarding and verifies all required passenger and cargo doors closed", state => state.RequiredDoorsClosed),
                 Manual("fuel-load", "Fuel quantity and load verified", "Captain: compare actual fuel and loading with the operational flight plan, then press Confirm now.", CrewRole.Captain),
                 Automatic("apu-start", "First Officer starts the APU and verifies it running", state => state.Pmdg777ApuRunning, "pmdg777 apu start", TimeSpan.FromSeconds(8)),
                 Automatic("apu-power-air", "First Officer establishes APU electrical and pneumatic supply", state => state.Pmdg777ApuGeneratorPowerEstablished && state.Pmdg777ApuBleedAirAvailable, "pmdg777 apu power air", TimeSpan.FromSeconds(6)),
@@ -190,6 +208,7 @@ internal static class Pmdg777ProcedureLibrary
                 Manual("before-start-procedure", "Captain Before Start setup complete", "Captain: complete CDU, MCP, trim and flight-control setup, then press Confirm now.", CrewRole.Captain),
                 Automatic("fo-seatbelts-auto", "First Officer: seat-belt selector AUTO for Before Start", state => state.Pmdg777SeatBeltsAuto, "pmdg777 seatbelts auto", TimeSpan.FromSeconds(3)),
                 Manual("captain-pushback-clearance", "Pushback and start clearance received", "Captain: press Confirm to instruct the SayIntentions First Officer to request pushback and engine-start clearance; the flow advances only after the matching clearance is received.", CrewRole.Captain),
+                Observe("doors-cargo", "First Officer monitors GSX departure preparation and verifies all required passenger and cargo doors closed", state => state.RequiredDoorsClosed),
                 Automatic("fo-hydraulics-before-start", "First Officer pressurizes the hydraulic systems in the Before Start configuration", state => state.Pmdg777HydraulicsBeforeStart, "pmdg777 hydraulics before start", TimeSpan.FromSeconds(10)),
                 Automatic("fo-fuel-pumps-before-start", "First Officer sets main and required center fuel pumps ON", state => state.Pmdg777FuelPumpsBeforeStart, "pmdg777 fuel pumps before start", TimeSpan.FromSeconds(10)),
                 Manual("beacon-on", "Beacon light ON", "Captain: switch the beacon ON before pushback or engine start.", CrewRole.Captain, state => state.Pmdg777BeaconOn),
@@ -227,14 +246,14 @@ internal static class Pmdg777ProcedureLibrary
             new[]
             {
                 Observe("engines-running", "Both engines running", state => state.Engine1Running && state.Engine2Running),
-                Automatic("fo-after-start-air-apu", "First Officer establishes engine bleed/pack configuration and selects APU OFF", state => state.Pmdg777EngineBleedsAuto && state.Pmdg777PacksAuto && state.Pmdg777ApuBleedOff && state.Pmdg777ApuSelectorOff, "pmdg777 after start air apu", TimeSpan.FromSeconds(6)),
+                Automatic("fo-after-start-air-apu", "First Officer establishes engine bleed/pack configuration, leaves APU bleed AUTO and selects APU OFF", state => state.Pmdg777EngineBleedsAuto && state.Pmdg777PacksAuto && state.Pmdg777ApuBleedAuto && state.Pmdg777ApuSelectorOff, "pmdg777 after start air apu", TimeSpan.FromSeconds(6)),
                 Observe("fo-hydraulics", "First Officer verifies the departure hydraulic configuration", state => state.Pmdg777HydraulicsBeforeStart, TimeSpan.FromSeconds(3)),
                 Automatic("flaps", "First Officer sets the FMC takeoff flap position", state => state.Pmdg777TakeoffFlapsSet, "pmdg777 takeoff flaps", TimeSpan.FromSeconds(5)),
                 Automatic("fo-autobrake-rto", "First Officer verifies AUTOBRAKE RTO", state => state.Pmdg777AutobrakeRto, "pmdg777 autobrake rto", TimeSpan.FromSeconds(3)),
                 Manual("captain-flight-controls", "Flight controls checked", "Captain: complete the full flight-control check. Continue through the full travel of each control; this step records the physical crew check.", CrewRole.Captain),
                 Manual("captain-recall-trim", "Recall and takeoff trim checked", "Captain: check EICAS recall and verify stabilizer trim is set for takeoff with aileron and rudder trim neutral.", CrewRole.Captain),
                 Observe("ground-equipment-clear", "Ground equipment clear", state => !state.Pmdg777WheelChocksSet && state.RequiredDoorsClosed),
-                Automatic("taxi-lights", "First Officer sets taxi and runway-turnoff lights", state => state.Pmdg777TaxiLightsSet, "pmdg777 taxi lights", TimeSpan.FromSeconds(3)),
+                Automatic("taxi-lights", "First Officer sets taxi and runway-turnoff lights", state => state.Pmdg777TaxiLightsCommandedThisFlow && state.Pmdg777TaxiLightsSet, "pmdg777 taxi lights", TimeSpan.FromSeconds(3)),
                 Automatic("fo-taxi-clearance", "SayIntentions First Officer obtains taxi clearance", state => !state.SayIntentionsAtcActive || state.TaxiClearanceReceived, "sayintentions taxi clearance"),
                 Manual("brake-check", "Brakes and steering checked", "Captain: check brakes immediately after movement and verify steering during taxi, then press Confirm now.", CrewRole.Captain)
             });
@@ -245,14 +264,16 @@ internal static class Pmdg777ProcedureLibrary
             "6. 777 Before Takeoff",
             new[]
             {
-                Observe("holding-short", "Aircraft stopped at the runway holding point", state => state.BeforeTakeoffHoldEligible),
-                Manual("captain-takeoff-briefing", "Takeoff briefing reviewed", "Captain: review runway, performance, initial routing and reject/engine-failure plan.", CrewRole.Captain),
-                Manual("captain-cabin-ready", "Cabin ready received", "Captain: verify the cabin-ready indication or report has been received.", CrewRole.Captain),
-                Observe("takeoff-flaps", "First Officer verifies flaps set for takeoff", state => state.Pmdg777TakeoffFlapsSet, TimeSpan.FromSeconds(3)),
-                Automatic("fo-transponder-tara", "First Officer sets transponder TA/RA", state => state.Pmdg777TransponderTaRa, "pmdg777 transponder tara", TimeSpan.FromSeconds(3)),
-                Automatic("fo-takeoff-clearance", "SayIntentions First Officer obtains takeoff clearance", state => !state.SayIntentionsAtcActive || state.TakeoffClearanceReceived, "sayintentions takeoff clearance"),
-                Automatic("fo-takeoff-lights", "First Officer sets exterior lights for runway entry", state => state.Pmdg777TakeoffLightsSet, "pmdg777 takeoff lights", TimeSpan.FromSeconds(4)),
-                Observe("before-takeoff-checklist", "Virtual First Officer verifies the BEFORE TAKEOFF configuration", state => state.Pmdg777TakeoffFlapsSet && state.Pmdg777TransponderTaRa && state.Pmdg777TakeoffLightsSet, TimeSpan.FromSeconds(4))
+                Observe("holding-short", "Aircraft stopped at the runway holding point", state => state.BeforeTakeoffHoldEligible, recoveryComplete: state => !state.OnGround),
+                Manual("captain-takeoff-briefing", "Takeoff briefing reviewed", "Captain: review runway, performance, initial routing and reject/engine-failure plan.", CrewRole.Captain, recoveryComplete: state => !state.OnGround),
+                Manual("captain-cabin-ready", "Cabin ready received", "Captain: verify the cabin-ready indication or report has been received.", CrewRole.Captain, recoveryComplete: state => !state.OnGround),
+                Observe("takeoff-flaps", "First Officer verifies flaps set for takeoff", state => state.Pmdg777TakeoffFlapsSet, TimeSpan.FromSeconds(3), recoveryComplete: state => !state.OnGround),
+                Automatic("fo-transponder-tara", "First Officer sets transponder TA/RA", state => state.Pmdg777TransponderTaRa, "pmdg777 transponder tara", TimeSpan.FromSeconds(3), state => !state.OnGround),
+                Automatic("fo-lnav-arm", "First Officer arms LNAV", state => state.Pmdg777LnavArmed, "pmdg777 lnav arm", TimeSpan.FromSeconds(3), state => !state.OnGround),
+                Automatic("fo-vnav-arm", "First Officer arms VNAV", state => state.Pmdg777VnavArmed, "pmdg777 vnav arm", TimeSpan.FromSeconds(3), state => !state.OnGround),
+                Automatic("fo-takeoff-clearance", "SayIntentions First Officer obtains takeoff clearance", state => !state.SayIntentionsAtcActive || state.TakeoffClearanceReceived, "sayintentions takeoff clearance", recoveryComplete: state => !state.OnGround),
+                Automatic("fo-takeoff-lights", "First Officer sets exterior lights for runway entry", state => state.Pmdg777TakeoffLightsSet, "pmdg777 takeoff lights", TimeSpan.FromSeconds(4), state => !state.OnGround),
+                Observe("before-takeoff-checklist", "PMDG BEFORE TAKEOFF electronic checklist complete", state => state.Pmdg777BeforeTakeoffChecklistComplete && state.Pmdg777TakeoffFlapsSet && state.Pmdg777TransponderTaRa && state.Pmdg777LnavArmed && state.Pmdg777VnavArmed && state.Pmdg777TakeoffLightsSet, TimeSpan.FromSeconds(4), recoveryComplete: state => !state.OnGround)
             });
 
     public static ProcedureDefinition TakeoffAndClimb { get; } =
@@ -278,7 +299,7 @@ internal static class Pmdg777ProcedureLibrary
     public static ProcedureDefinition Cruise { get; } =
         new(
             "cruise",
-            "8. 777 Climb & Cruise",
+            "8. 777 Cruise",
             new[]
             {
                 Observe("cruise-established", "Cruise altitude captured and vertical speed stabilized", state => state.CruiseEstablished, TimeSpan.FromSeconds(10)),
@@ -306,17 +327,34 @@ internal static class Pmdg777ProcedureLibrary
             "10. 777 Approach & Landing",
             new[]
             {
-                Observe("airborne", "Aircraft airborne", state => !state.OnGround),
-                Manual("approach-procedure", "Approach procedure established", "Crew: verify lateral/vertical path, altimeters, approach mode and navigation source, then press Confirm now."),
-                Manual("approach-checklist", "Approach checklist complete", "Crew: complete the electronic APPROACH checklist, then press Confirm now."),
-                Manual("flaps-schedule", "Flaps extended on speed schedule", "First Officer: on the pilot flying's command, extend flaps on the FMC speed schedule and verify each position, then press Confirm now."),
-                Manual("gear-down", "Landing gear DOWN", "First Officer: on the pilot flying's command, select landing gear DOWN and verify three green indications, then press Confirm now."),
-                Manual("speedbrake-autobrake", "Speedbrake armed and autobrake set", "First Officer: verify speedbrake ARMED and the planned autobrake selection, then press Confirm now."),
-                Manual("landing-flaps", "Landing flaps and VREF set", "Crew: establish final landing flaps and approach speed, then press Confirm now."),
-                Manual("landing-checklist", "Landing checklist complete", "Crew: complete the electronic LANDING checklist, then press Confirm now."),
-                Manual("stable-approach", "Stable approach criteria met", "Crew: verify landing configuration, speed, path, thrust and checklist completion by the stabilization gate, then press Confirm now."),
-                Manual("landing-roll", "Landing and rollout complete", "Crew: monitor spoilers, reverse, autobrake/deceleration and manual braking through runway exit, then press Confirm now."),
-                Observe("touchdown", "Aircraft on the ground", state => state.OnGround)
+                Observe("descent-established", "Descent established", state => !state.OnGround && (state.VerticalSpeedFeetPerMinute <= -300 || state.IndicatedAltitudeFeet <= 10000)),
+                Observe("below-ten-thousand", "10,000 feet passed", state => !state.OnGround && state.IndicatedAltitudeFeet <= 10000),
+                Observe("landing-data-set", "FMC landing flaps and VREF available", state => state.Pmdg777FmcLandingFlaps is 20 or 25 or 30 && state.Pmdg777FmcLandingVref > 0, TimeSpan.FromSeconds(3)),
+                Automatic("fo-approach-lights", "First Officer switches landing lights ON", state => state.Pmdg777LandingLightsOn, "pmdg777 approach lights", TimeSpan.FromSeconds(4)),
+                Automatic("fo-autobrake-landing", "First Officer sets AUTOBRAKE 2", state => state.Pmdg777AutobrakeSelector == 4, "pmdg777 autobrake landing", TimeSpan.FromSeconds(3)),
+                Observe("flaps-one-gate", "Flaps 1 point reached", state => ApproachGateReached(state, state.ApproachFlaps1DistanceNm, state.IndicatedAltitudeFeet <= state.ApproachFlaps1AltitudeFeet)),
+                Observe("flaps-one-speed", "Safe speed for flaps 1", state => state.IndicatedAirspeedKnots <= Pmdg777ControlProfile.ApproachFlapsOneCommandSpeedKnots),
+                Automatic("fo-flaps-one", "First Officer selects flaps 1", state => state.Pmdg777FlapsLever >= 1, "pmdg777 flaps one", TimeSpan.FromSeconds(4)),
+                Observe("flaps-five-gate", "Flaps 5 point reached", state => ApproachGateReached(state, state.ApproachFlaps2DistanceNm, state.AltitudeAboveGroundFeet <= state.ApproachFlaps2AltitudeAglFeet)),
+                Observe("flaps-five-speed", "Safe speed for flaps 5", state => state.IndicatedAirspeedKnots <= Pmdg777ControlProfile.ApproachFlapsFiveCommandSpeedKnots),
+                Automatic("fo-flaps-five", "First Officer selects flaps 5", state => state.Pmdg777FlapsLever >= 2, "pmdg777 flaps five", TimeSpan.FromSeconds(4)),
+                Observe("gear-gate", "Gear-down point reached", state => ApproachGateReached(state, state.ApproachGearDistanceNm, state.AltitudeAboveGroundFeet <= state.ApproachGearAltitudeAglFeet)),
+                Observe("gear-speed", "Safe speed for landing gear", state => state.IndicatedAirspeedKnots <= state.ApproachGearSpeedKnots),
+                Automatic("fo-gear-down", "First Officer selects landing gear DOWN", state => state.Pmdg777GearLeverDown, "pmdg777 gear down", TimeSpan.FromSeconds(4)),
+                Automatic("fo-speedbrake-arm", "First Officer arms the speedbrake", state => state.Pmdg777SpeedbrakeArmed, "pmdg777 speedbrake arm", TimeSpan.FromSeconds(3)),
+                Observe("flaps-fifteen-speed", "Safe speed for flaps 15", state => state.IndicatedAirspeedKnots <= Pmdg777ControlProfile.ApproachFlapsFifteenCommandSpeedKnots),
+                Automatic("fo-flaps-fifteen", "First Officer selects flaps 15", state => state.Pmdg777FlapsLever >= 3, "pmdg777 flaps fifteen", TimeSpan.FromSeconds(4)),
+                Observe("flaps-twenty-speed", "Safe speed for flaps 20", state => state.IndicatedAirspeedKnots <= Pmdg777ControlProfile.ApproachFlapsTwentyCommandSpeedKnots),
+                Automatic("fo-flaps-twenty", "First Officer selects flaps 20", state => state.Pmdg777FlapsLever >= 4, "pmdg777 flaps twenty", TimeSpan.FromSeconds(4)),
+                Observe("landing-config-gate", "Landing-configuration point reached", state => ApproachGateReached(state, state.ApproachLandingConfigDistanceNm, state.AltitudeAboveGroundFeet <= state.ApproachLandingConfigAltitudeAglFeet)),
+                Observe("landing-flaps-speed", "Safe speed for the FMC landing flap setting", state => Pmdg777ControlProfile.LandingFlapsCommandSpeedKnots(state.Pmdg777FmcLandingFlaps) > 0 && state.IndicatedAirspeedKnots <= Pmdg777ControlProfile.LandingFlapsCommandSpeedKnots(state.Pmdg777FmcLandingFlaps)),
+                Automatic("fo-landing-flaps", "First Officer selects the FMC landing flap setting", state => state.Pmdg777LandingFlapsSet, "pmdg777 landing flaps", TimeSpan.FromSeconds(5)),
+                Observe("landing-checklist", "Virtual First Officer verifies landing configuration", state => state.Pmdg777GearLeverDown && state.Pmdg777LandingFlapsSet && state.Pmdg777SpeedbrakeArmed && state.Pmdg777AutobrakeSelector == 4, TimeSpan.FromSeconds(4)),
+                Observe("stable-approach", "Stable approach by 1,000 feet AGL", state => state.RadioHeightFeet > 0 && state.RadioHeightFeet <= 1000 && state.Pmdg777GearLeverDown && state.Pmdg777LandingFlapsSet && state.Pmdg777SpeedbrakeArmed && state.IndicatedAirspeedKnots <= state.Pmdg777FmcLandingVref + 15),
+                Observe("approaching-minimums", "Approaching minimums", state => state.DecisionHeightFeet > 0 && state.RadioHeightFeet <= state.DecisionHeightFeet + 100),
+                Observe("minimums", "Minimums", state => state.DecisionHeightFeet > 0 && state.RadioHeightFeet <= state.DecisionHeightFeet),
+                Observe("touchdown", "Touchdown", state => state.OnGround && state.GroundSpeedKnots > 30),
+                Observe("landing-roll", "Spoilers, reverse and deceleration monitored", state => state.OnGround && (state.ReverseThrustEngaged || state.GroundSpeedKnots <= 80))
             });
 
     public static ProcedureDefinition AfterLandingAndTaxi { get; } =
@@ -326,13 +364,17 @@ internal static class Pmdg777ProcedureLibrary
             new[]
             {
                 Observe("on-ground", "Aircraft on the ground", state => state.OnGround),
-                Manual("runway-vacated", "Runway vacated", "Captain: clear the runway and comply with taxi clearance, then press Confirm now.", CrewRole.Captain),
-                Manual("landing-lights-strobes", "Landing lights and strobes set for taxi", "First Officer: set landing lights OFF and position/strobe lights for taxi, then press Confirm now."),
-                Manual("flaps-speedbrake", "Flaps UP and speedbrake DOWN", "First Officer: retract flaps, lower the speedbrake and verify indications, then press Confirm now."),
-                Manual("weather-radar-transponder", "Weather radar and transponder set after landing", "First Officer: set weather radar and transponder/TCAS for taxi, then press Confirm now."),
-                Manual("apu-start", "APU started as required", "First Officer: start the APU early enough for gate electrical and pneumatic supply, then press Confirm now."),
-                Manual("after-landing-procedure", "After Landing procedure complete", "Crew: complete the after-landing flow and verify no abnormal EICAS messages, then press Confirm now."),
-                Manual("gate-approach", "Gate approach and marshaller guidance verified", "Captain: identify the assigned stand and follow docking guidance at walking pace, then press Confirm now.", CrewRole.Captain)
+                Observe("reverse-stowed", "Reverse thrust stowed below 70 knots", state => state.OnGround && state.GroundSpeedKnots <= 70 && !state.ReverseThrustEngaged),
+                Observe("taxi-speed", "After-landing taxi speed reached", state => state.OnGround && state.GroundSpeedKnots <= 30),
+                Automatic("fo-autobrake-off", "First Officer sets AUTOBRAKE OFF", state => state.Pmdg777AutobrakeSelector == 1, "pmdg777 autobrake off", TimeSpan.FromSeconds(3)),
+                Automatic("fo-after-landing-lights", "First Officer sets exterior lights for taxi", state => state.Pmdg777AfterLandingLightsSet, "pmdg777 after landing lights", TimeSpan.FromSeconds(5)),
+                Automatic("fo-speedbrake-down", "First Officer lowers the speedbrake", state => state.Pmdg777SpeedbrakeDown, "pmdg777 speedbrake down", TimeSpan.FromSeconds(3)),
+                Automatic("fo-flaps-up", "First Officer retracts flaps", state => state.Pmdg777FlapsUp, "pmdg777 flaps up", TimeSpan.FromSeconds(5)),
+                Automatic("fo-transponder-standby", "First Officer sets transponder STBY", state => state.Pmdg777TransponderStandby, "pmdg777 transponder standby", TimeSpan.FromSeconds(3)),
+                Automatic("fo-apu-start", "First Officer starts the APU", state => state.Pmdg777ApuRunning, "pmdg777 apu start", TimeSpan.FromSeconds(5)),
+                Observe("apu-running", "APU running", state => state.Pmdg777ApuRunning),
+                Automatic("fo-apu-power-air", "First Officer establishes APU electrical and pneumatic supply", state => state.Pmdg777ApuGeneratorPowerEstablished && state.Pmdg777ApuBleedAirAvailable, "pmdg777 apu power air", TimeSpan.FromSeconds(5)),
+                Observe("after-landing-procedure", "After Landing configuration verified", state => state.Pmdg777AfterLandingLightsSet && state.Pmdg777SpeedbrakeDown && state.Pmdg777FlapsUp && state.Pmdg777TransponderStandby && state.Pmdg777ApuGeneratorPowerEstablished, TimeSpan.FromSeconds(4))
             });
 
     public static ProcedureDefinition ParkingAndShutdown { get; } =
@@ -342,15 +384,14 @@ internal static class Pmdg777ProcedureLibrary
             new[]
             {
                 Observe("parked", "Aircraft stationary at the gate", state => state.OnGround && state.GroundSpeedKnots <= 0.5),
-                Manual("parking-brake", "Parking brake and chocks coordinated", "Captain: set the parking brake until chocks are confirmed, then press Confirm now.", CrewRole.Captain),
-                Manual("gate-power", "APU or external power established", "First Officer: verify a stable electrical source before engine shutdown, then press Confirm now."),
-                Manual("fuel-controls-cutoff", "Fuel control switches CUTOFF", "Captain: move both fuel control switches to CUTOFF and verify shutdown, then press Confirm now.", CrewRole.Captain),
+                Observe("parking-brake", "Captain sets the parking brake", state => state.ParkingBrakeSet, role: CrewRole.Captain),
+                Automatic("gate-power", "First Officer verifies APU electrical and pneumatic supply", state => state.Pmdg777ApuGeneratorPowerEstablished && state.Pmdg777ApuBleedAirAvailable, "pmdg777 apu power air", TimeSpan.FromSeconds(4)),
+                Observe("fuel-controls-cutoff", "Captain moves both fuel control switches to CUTOFF", state => state.Pmdg777FuelControlsCutoff, role: CrewRole.Captain),
                 Observe("engines-off", "Both engines shut down", state => state.EnginesOff),
-                Manual("beacon-off", "Beacon OFF", "First Officer: switch the beacon OFF when engines have stopped, then press Confirm now."),
-                Manual("hydraulic-fuel", "Hydraulic and fuel panels secured", "First Officer: set pumps for shutdown and verify the shutdown configuration, then press Confirm now."),
-                Manual("doors-ground", "Doors and ground services coordinated", "Crew: release doors and connect required ground services only when safe, then press Confirm now."),
-                Manual("shutdown-checklist", "Shutdown checklist complete", "Crew: complete the electronic SHUTDOWN checklist, then press Confirm now."),
-                Manual("secure-procedure", "Secure procedure complete", "Crew: for final termination, complete the SECURE procedure and checklist; otherwise leave the aircraft in turnaround state, then press Confirm now."),
-                Manual("maintenance-handover", "Maintenance handover complete as required", "Captain: record defects and hand over relevant aircraft status, then press Confirm now.", CrewRole.Captain)
+                Automatic("fo-beacon-off", "First Officer switches the beacon OFF", state => !state.Pmdg777BeaconOn, "pmdg777 beacon off", TimeSpan.FromSeconds(3)),
+                Automatic("fo-shutdown-pumps", "First Officer secures hydraulic and fuel pumps", state => state.Pmdg777FuelPumpsOff && state.Pmdg777HydraulicsShutdown, "pmdg777 shutdown pumps", TimeSpan.FromSeconds(8)),
+                Observe("doors-ground", "Aircraft safe for doors and ground services", state => state.EnginesOff && !state.Pmdg777BeaconOn, TimeSpan.FromSeconds(3)),
+                Observe("shutdown-checklist", "Shutdown configuration verified", state => state.EnginesOff && !state.Pmdg777BeaconOn && state.Pmdg777FuelPumpsOff && state.Pmdg777HydraulicsShutdown && state.Pmdg777ApuGeneratorPowerEstablished, TimeSpan.FromSeconds(5)),
+                Manual("secure-decision", "Choose final secure or turnaround state", "Captain: press Confirm now only for final secure; cancel to retain the normal APU-powered turnaround state.", CrewRole.Captain)
             });
 }

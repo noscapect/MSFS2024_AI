@@ -46,6 +46,8 @@ internal static class Pmdg777ControlProfile
     public const uint RightEnginePrimaryHydraulicPumpEvent = ThirdPartyEventIdMinimum + 42;
     public const uint NavigationLightSwitchEvent = ThirdPartyEventIdMinimum + 115;
     public const uint FirstOfficerFlightDirectorSwitchEvent = ThirdPartyEventIdMinimum + 230;
+    public const uint LnavSwitchEvent = ThirdPartyEventIdMinimum + 211;
+    public const uint VnavSwitchEvent = ThirdPartyEventIdMinimum + 212;
     public const uint TransponderModeSelectorEvent = ThirdPartyEventIdMinimum + 749;
     public const uint EngineDisplaySwitchEvent = ThirdPartyEventIdMinimum + 234;
     public const uint EngineOneFuelControlEvent = ThirdPartyEventIdMinimum + 520;
@@ -57,12 +59,33 @@ internal static class Pmdg777ControlProfile
     public const uint FlapsTwentyEvent = ThirdPartyEventIdMinimum + 5075;
     public const uint FlapsTwentyFiveEvent = ThirdPartyEventIdMinimum + 5076;
     public const uint FlapsThirtyEvent = ThirdPartyEventIdMinimum + 5077;
+    public const int ApproachFlapsOneCommandSpeedKnots = 260;
+    public const int ApproachFlapsFiveCommandSpeedKnots = 240;
+    public const int ApproachFlapsFifteenCommandSpeedKnots = 225;
+    public const int ApproachFlapsTwentyCommandSpeedKnots = 215;
     public const uint GearLeverEvent = ThirdPartyEventIdMinimum + 295;
+    public const uint AutobrakeSelectorEvent = ThirdPartyEventIdMinimum + 292;
+    public const uint SpeedbrakeDownEvent = ThirdPartyEventIdMinimum + 4981;
+    public const uint SpeedbrakeArmEvent = ThirdPartyEventIdMinimum + 4982;
+    public const uint BeaconSwitchEvent = ThirdPartyEventIdMinimum + 114;
     public const int HumanControlIntervalMilliseconds = 900;
     public const uint MouseLeftSingle = 0x20000000;
+    public const uint FlapsPresetParameter = MouseLeftSingle;
     public const string PackageName = "pmdg-aircraft-77w";
     public const string OptionsFileName = "777_Options.ini";
     public const string DataBroadcastSetting = "[SDK] EnableDataBroadcast=1";
+
+    public static bool ApproachFlapCommandWouldRetract(int currentLever, int targetLever) =>
+        currentLever > targetLever;
+
+    public static int LandingFlapsCommandSpeedKnots(int landingFlaps) =>
+        landingFlaps switch
+        {
+            20 => 215,
+            25 => 195,
+            30 => 175,
+            _ => 0
+        };
 
     public static IReadOnlyList<AircraftCapability> Capabilities { get; } =
         new[]

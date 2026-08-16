@@ -34,6 +34,8 @@ internal sealed class Pmdg777SdkData
     public bool AlternateFlapsOff { get; private set; }
     public bool ParkingBrakeSet { get; private set; }
     public bool FirstOfficerFlightDirectorOn { get; private set; }
+    public bool LnavArmed { get; private set; }
+    public bool VnavArmed { get; private set; }
     public bool ServiceInterphoneOff { get; private set; }
     public bool PassengerOxygenNormal { get; private set; }
     public bool FirstOfficerSourcesNormal { get; private set; }
@@ -44,6 +46,9 @@ internal sealed class Pmdg777SdkData
     public bool TransponderStandby { get; private set; }
     public ushort McpAltitude { get; private set; }
     public byte FmcTakeoffFlaps { get; private set; }
+    public byte FmcLandingFlaps { get; private set; }
+    public byte FmcLandingVref { get; private set; }
+    public bool LandingFlapsSet { get; private set; }
     public byte FmcV1 { get; private set; }
     public byte FmcVr { get; private set; }
     public byte FmcV2 { get; private set; }
@@ -105,6 +110,7 @@ internal sealed class Pmdg777SdkData
     public bool EngineBleedsAuto { get; private set; }
     public bool PacksAuto { get; private set; }
     public bool ApuBleedOff { get; private set; }
+    public bool ApuBleedAuto { get; private set; }
     public byte FlapsLever { get; private set; }
     public bool TakeoffFlapsSet { get; private set; }
     public bool TransponderTaRa { get; private set; }
@@ -115,6 +121,12 @@ internal sealed class Pmdg777SdkData
     public bool BeforeTaxiChecklistComplete { get; private set; }
     public bool BeforeTakeoffChecklistComplete { get; private set; }
     public bool AfterTakeoffChecklistComplete { get; private set; }
+    public bool SpeedbrakeArmed { get; private set; }
+    public byte AutobrakeSelector { get; private set; }
+    public bool LandingLightsOn { get; private set; }
+    public bool AfterLandingLightsSet { get; private set; }
+    public bool FuelPumpsOff { get; private set; }
+    public bool HydraulicsShutdown { get; private set; }
 
     public static bool TryParse(byte[]? data, out Pmdg777SdkData state)
     {
@@ -223,6 +235,7 @@ internal sealed class Pmdg777SdkData
                                                ? BoolAt(152) && BoolAt(153)
                                                : !BoolAt(152) && !BoolAt(153));
         state.AutobrakeRto = data[222] == 0;
+        state.AutobrakeSelector = data[222];
         state.TransponderAltitudeSourceNormal = !BoolAt(448);
         state.SeatBeltsOff = data[99] == 0;
         state.SeatBeltsAuto = data[99] == 1;
@@ -256,22 +269,36 @@ internal sealed class Pmdg777SdkData
         state.PacksAuto = BoolAt(173) && BoolAt(174);
         state.EngineBleedsAuto = BoolAt(192) && BoolAt(193);
         state.ApuBleedOff = !BoolAt(194);
+        state.ApuBleedAuto = BoolAt(194);
         state.FlapsLever = data[421];
+        state.SpeedbrakeArmed = data[420] == 25;
         state.TransponderTaRa = data[449] == 4;
-        state.TaxiLightsSet = BoolAt(117) && BoolAt(118) && BoolAt(119);
+        state.TaxiLightsSet = BoolAt(116) && BoolAt(117) && BoolAt(118);
         state.TakeoffLightsSet = BoolAt(109)
                                  && BoolAt(110)
                                  && BoolAt(111)
+                                 && BoolAt(116)
                                  && BoolAt(117)
-                                 && BoolAt(118)
-                                 && BoolAt(120);
+                                 && BoolAt(119);
         state.ClimbLightsSet = !BoolAt(109)
                                && !BoolAt(110)
                                && !BoolAt(111)
                                && !BoolAt(114)
+                               && !BoolAt(116)
                                && !BoolAt(117)
-                               && !BoolAt(118)
-                               && !BoolAt(119);
+                               && !BoolAt(118);
+        state.LandingLightsOn = BoolAt(109) && BoolAt(110) && BoolAt(111);
+        state.AfterLandingLightsSet = !BoolAt(109)
+                                      && !BoolAt(110)
+                                      && !BoolAt(111)
+                                      && BoolAt(116)
+                                      && BoolAt(117)
+                                      && BoolAt(118)
+                                      && !BoolAt(119);
+        state.FuelPumpsOff = Enumerable.Range(148, 6).All(offset => !BoolAt(offset));
+        state.HydraulicsShutdown = BoolAt(82)
+                                   && BoolAt(83)
+                                   && Enumerable.Range(84, 6).All(offset => data[offset] == 0);
         state.GearLeverUp = state.GearLeverRaw == 0;
         state.BeforeTaxiChecklistComplete = BoolAt(590);
         state.BeforeTakeoffChecklistComplete = BoolAt(591);
@@ -286,6 +313,8 @@ internal sealed class Pmdg777SdkData
         state.TransponderXpndr = data[449] == 2;
         state.McpAltitude = (ushort)(data[316] | data[317] << 8);
         state.FirstOfficerFlightDirectorOn = BoolAt(326);
+        state.LnavArmed = BoolAt(359);
+        state.VnavArmed = BoolAt(360);
         state.FirstOfficerDisplaysReady = data[538] == 4
                                            && data[540] == 3
                                            && data[541] == 2;
@@ -296,6 +325,9 @@ internal sealed class Pmdg777SdkData
         state.FmcV1 = data[547];
         state.FmcVr = data[548];
         state.FmcV2 = data[549];
+        state.FmcLandingFlaps = data[556];
+        state.FmcLandingVref = data[557];
+        state.LandingFlapsSet = FlapsLeverMatchesSetting(state.FlapsLever, state.FmcLandingFlaps);
         state.FmcCruiseAltitude = (ushort)(data[558] | data[559] << 8);
         state.FmcPerformanceInputComplete = BoolAt(566);
         state.FmcDistanceToDestination = BitConverter.ToSingle(data, 572);

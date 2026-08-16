@@ -33,8 +33,13 @@ public sealed class Pmdg777ControlProfileTests
         Assert.AreEqual(69688U, Pmdg777ControlProfile.PrimaryFlightComputersGuardEvent);
         Assert.AreEqual(69747U, Pmdg777ControlProfile.NavigationLightSwitchEvent);
         Assert.AreEqual(69862U, Pmdg777ControlProfile.FirstOfficerFlightDirectorSwitchEvent);
+        Assert.AreEqual(69843U, Pmdg777ControlProfile.LnavSwitchEvent);
+        Assert.AreEqual(69844U, Pmdg777ControlProfile.VnavSwitchEvent);
         Assert.AreEqual(70381U, Pmdg777ControlProfile.TransponderModeSelectorEvent);
         Assert.AreEqual(0x20000000U, Pmdg777ControlProfile.MouseLeftSingle);
+        Assert.AreEqual(260, Pmdg777ControlProfile.ApproachFlapsOneCommandSpeedKnots);
+        Assert.AreEqual(240, Pmdg777ControlProfile.ApproachFlapsFiveCommandSpeedKnots);
+        Assert.AreEqual(175, Pmdg777ControlProfile.LandingFlapsCommandSpeedKnots(30));
     }
 
     [TestMethod]
@@ -183,6 +188,8 @@ public sealed class Pmdg777ControlProfileTests
         data[316] = 0x10;
         data[317] = 0x27;
         data[326] = 1;
+        data[359] = 1;
+        data[360] = 1;
         data[420] = 0;
         data[421] = 0;
         data[422] = 0;
@@ -261,6 +268,8 @@ public sealed class Pmdg777ControlProfileTests
         Assert.IsTrue(state.FirstOfficerNdMap);
         Assert.AreEqual((ushort)10000, state.McpAltitude);
         Assert.IsTrue(state.FirstOfficerFlightDirectorOn);
+        Assert.IsTrue(state.LnavArmed);
+        Assert.IsTrue(state.VnavArmed);
         Assert.AreEqual((ushort)44464, state.FmcCruiseAltitude);
         Assert.AreEqual(2200f, state.FmcDistanceToDestination);
         Assert.AreEqual("PMDG777", state.FmcFlightNumber);
@@ -269,6 +278,8 @@ public sealed class Pmdg777ControlProfileTests
         Assert.IsTrue(state.ApuRunning);
         Assert.IsTrue(state.ApuGeneratorPowerEstablished);
         Assert.IsTrue(state.ApuBleedAirAvailable);
+        Assert.IsTrue(state.ApuBleedAuto);
+        Assert.IsFalse(state.ApuBleedOff);
         Assert.IsTrue(state.BeforeStartChecklistComplete);
     }
 
@@ -282,6 +293,33 @@ public sealed class Pmdg777ControlProfileTests
         Assert.IsTrue(Pmdg777SdkData.TryParse(data, out var state));
         Assert.IsTrue(state.SeatBeltsAuto);
         Assert.IsFalse(state.SeatBeltsOff);
+    }
+
+    [TestMethod]
+    public void SdkParserMapsArrivalAndShutdownReadbacks()
+    {
+        var data = new byte[Pmdg777ControlProfile.DataSize];
+        data[542] = 6;
+        data[222] = 4;
+        data[420] = 25;
+        data[421] = 5;
+        data[556] = 25;
+        data[557] = 142;
+        data[109] = 1;
+        data[110] = 1;
+        data[111] = 1;
+        data[82] = 1;
+        data[83] = 1;
+
+        Assert.IsTrue(Pmdg777SdkData.TryParse(data, out var state));
+        Assert.AreEqual((byte)4, state.AutobrakeSelector);
+        Assert.IsTrue(state.SpeedbrakeArmed);
+        Assert.AreEqual((byte)25, state.FmcLandingFlaps);
+        Assert.AreEqual((byte)142, state.FmcLandingVref);
+        Assert.IsTrue(state.LandingFlapsSet);
+        Assert.IsTrue(state.LandingLightsOn);
+        Assert.IsTrue(state.FuelPumpsOff);
+        Assert.IsTrue(state.HydraulicsShutdown);
     }
 
     [TestMethod]
@@ -326,9 +364,9 @@ public sealed class Pmdg777ControlProfileTests
         data[421] = 2;
         data[546] = 5;
         data[449] = 4;
+        data[116] = 1;
         data[117] = 1;
         data[118] = 1;
-        data[119] = 1;
         data[590] = 1;
         data[591] = 1;
         data[592] = 1;
@@ -341,6 +379,8 @@ public sealed class Pmdg777ControlProfileTests
         Assert.IsTrue(state.TakeoffFlapsSet);
         Assert.IsTrue(state.TransponderTaRa);
         Assert.IsTrue(state.TaxiLightsSet);
+        Assert.IsFalse(state.TakeoffLightsSet);
+        Assert.IsFalse(state.ClimbLightsSet);
         Assert.IsTrue(state.GearLeverUp);
         Assert.IsTrue(state.BeforeTaxiChecklistComplete);
         Assert.IsTrue(state.BeforeTakeoffChecklistComplete);

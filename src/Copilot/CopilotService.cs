@@ -122,6 +122,7 @@ internal sealed class CopilotService : Form
     private DateTime? _pendingSayIntentionsAtcStartedUtc;
     private bool _taxiClearanceReceived;
     private bool _takeoffClearanceReceived;
+    private bool _pmdg777TaxiLightsCommandedThisFlow;
     private readonly FlightTelemetryStore _flightTelemetryStore;
     private readonly AircraftIdentityResolver _aircraftIdentityResolver = new();
     private System.Windows.Forms.Timer? _replayTimer;
@@ -133,6 +134,7 @@ internal sealed class CopilotService : Form
     private readonly HashSet<string> _calloutsSpokenAtCommand =
         new(StringComparer.OrdinalIgnoreCase);
     private bool _forwardTaxiObservedThisFlight;
+    private bool _taxiToRunwayArmed;
     private bool _pendingAutomaticBeforeTakeoffFlow;
     private bool _pendingAutomaticTakeoffFlow;
     private SimConnect? _simConnect;
@@ -6017,15 +6019,29 @@ internal sealed class CopilotService : Form
             Pmdg777EngineBleedsAuto = isPmdg777 && pmdg777?.EngineBleedsAuto == true,
             Pmdg777PacksAuto = isPmdg777 && pmdg777?.PacksAuto == true,
             Pmdg777ApuBleedOff = isPmdg777 && pmdg777?.ApuBleedOff == true,
+            Pmdg777ApuBleedAuto = isPmdg777 && pmdg777?.ApuBleedAuto == true,
             Pmdg777TakeoffFlapsSet = isPmdg777 && pmdg777?.TakeoffFlapsSet == true,
             Pmdg777TransponderTaRa = isPmdg777 && pmdg777?.TransponderTaRa == true,
             Pmdg777TaxiLightsSet = isPmdg777 && pmdg777?.TaxiLightsSet == true,
+            Pmdg777TaxiLightsCommandedThisFlow = _pmdg777TaxiLightsCommandedThisFlow,
             Pmdg777TakeoffLightsSet = isPmdg777 && pmdg777?.TakeoffLightsSet == true,
             Pmdg777ClimbLightsSet = isPmdg777 && pmdg777?.ClimbLightsSet == true,
             Pmdg777GearLeverUp = isPmdg777 && pmdg777?.GearLeverUp == true,
             Pmdg777BeforeTaxiChecklistComplete = isPmdg777 && pmdg777?.BeforeTaxiChecklistComplete == true,
             Pmdg777BeforeTakeoffChecklistComplete = isPmdg777 && pmdg777?.BeforeTakeoffChecklistComplete == true,
             Pmdg777AfterTakeoffChecklistComplete = isPmdg777 && pmdg777?.AfterTakeoffChecklistComplete == true,
+            Pmdg777LnavArmed = isPmdg777 && pmdg777?.LnavArmed == true,
+            Pmdg777VnavArmed = isPmdg777 && pmdg777?.VnavArmed == true,
+            Pmdg777FmcLandingFlaps = isPmdg777 ? pmdg777?.FmcLandingFlaps ?? 0 : 0,
+            Pmdg777FmcLandingVref = isPmdg777 ? pmdg777?.FmcLandingVref ?? 0 : 0,
+            Pmdg777LandingFlapsSet = isPmdg777 && pmdg777?.LandingFlapsSet == true,
+            Pmdg777SpeedbrakeArmed = isPmdg777 && pmdg777?.SpeedbrakeArmed == true,
+            Pmdg777AutobrakeSelector = isPmdg777 ? pmdg777?.AutobrakeSelector ?? 0 : 0,
+            Pmdg777LandingLightsOn = isPmdg777 && pmdg777?.LandingLightsOn == true,
+            Pmdg777AfterLandingLightsSet = isPmdg777 && pmdg777?.AfterLandingLightsSet == true,
+            Pmdg777FuelPumpsOff = isPmdg777 && pmdg777?.FuelPumpsOff == true,
+            Pmdg777HydraulicsShutdown = isPmdg777 && pmdg777?.HydraulicsShutdown == true,
+            Pmdg777FlapsLever = isPmdg777 ? pmdg777?.FlapsLever ?? 0 : 0,
             TaxiClearanceReceived = _taxiClearanceReceived,
             TakeoffClearanceReceived = _takeoffClearanceReceived,
             Pmdg777EngineGeneratorOneSwitchOn = isPmdg777 && pmdg777?.EngineGeneratorOneSwitchOn == true,
@@ -6915,13 +6931,15 @@ internal sealed class CopilotService : Form
             PmdgExtinguisherTest1Completed = _pmdgExtinguisherTest1Completed,
             PmdgExtinguisherTest2Completed = _pmdgExtinguisherTest2Completed
         };
-        if (_state.ForwardTaxiDetected && _state.GroundSpeedKnots >= 3)
+        if (_taxiToRunwayArmed
+            && _state.ForwardTaxiDetected
+            && _state.GroundSpeedKnots >= 3)
         {
             _forwardTaxiObservedThisFlight = true;
         }
         _state.BeforeTakeoffHoldEligible =
-            (_forwardTaxiObservedThisFlight
-             || _completedProcedureIds.Contains("after-start-taxi"))
+            _taxiToRunwayArmed
+            && _forwardTaxiObservedThisFlight
             && _state.OnGround
             && _state.Engine1Running
             && _state.Engine2Running
@@ -7597,6 +7615,7 @@ internal sealed class CopilotService : Form
         _state.Pmdg777EngineBleedsAuto = sdk.EngineBleedsAuto;
         _state.Pmdg777PacksAuto = sdk.PacksAuto;
         _state.Pmdg777ApuBleedOff = sdk.ApuBleedOff;
+        _state.Pmdg777ApuBleedAuto = sdk.ApuBleedAuto;
         _state.Pmdg777TakeoffFlapsSet = sdk.TakeoffFlapsSet;
         _state.Pmdg777TransponderTaRa = sdk.TransponderTaRa;
         _state.Pmdg777TaxiLightsSet = sdk.TaxiLightsSet;
@@ -7606,6 +7625,18 @@ internal sealed class CopilotService : Form
         _state.Pmdg777BeforeTaxiChecklistComplete = sdk.BeforeTaxiChecklistComplete;
         _state.Pmdg777BeforeTakeoffChecklistComplete = sdk.BeforeTakeoffChecklistComplete;
         _state.Pmdg777AfterTakeoffChecklistComplete = sdk.AfterTakeoffChecklistComplete;
+        _state.Pmdg777LnavArmed = sdk.LnavArmed;
+        _state.Pmdg777VnavArmed = sdk.VnavArmed;
+        _state.Pmdg777FmcLandingFlaps = sdk.FmcLandingFlaps;
+        _state.Pmdg777FmcLandingVref = sdk.FmcLandingVref;
+        _state.Pmdg777LandingFlapsSet = sdk.LandingFlapsSet;
+        _state.Pmdg777SpeedbrakeArmed = sdk.SpeedbrakeArmed;
+        _state.Pmdg777AutobrakeSelector = sdk.AutobrakeSelector;
+        _state.Pmdg777LandingLightsOn = sdk.LandingLightsOn;
+        _state.Pmdg777AfterLandingLightsSet = sdk.AfterLandingLightsSet;
+        _state.Pmdg777FuelPumpsOff = sdk.FuelPumpsOff;
+        _state.Pmdg777HydraulicsShutdown = sdk.HydraulicsShutdown;
+        _state.Pmdg777FlapsLever = sdk.FlapsLever;
         _state.Engine1StarterActive = sdk.EngineOneStartValveOpen;
         _state.Engine2StarterActive = sdk.EngineTwoStartValveOpen;
         _state.ApuAvailable = sdk.ApuRunning;
@@ -7684,7 +7715,8 @@ internal sealed class CopilotService : Form
             + $"FLOW2_PANEL={sdk.ThrustAsymmetryCompensationAuto.ToOnOff()}/{sdk.PrimaryFlightComputersAuto.ToOnOff()}/{sdk.FirePanelNormal.ToOnOff()}/{sdk.EngineControlPanelNormal.ToOnOff()}/{sdk.FuelPanelPreflight.ToOnOff()}/{sdk.AntiIceAuto.ToOnOff()}/{sdk.ExteriorLightsPreflight.ToOnOff()}/{sdk.AirPanelPreflight.ToOnOff()}/{sdk.AutobrakeRto.ToOnOff()}/{sdk.TransponderAltitudeSourceNormal.ToOnOff()} "
             + $"FLOW2_DETAIL=SEAT_OFF_{sdk.SeatBeltsOff.ToOnOff()}/SEAT_AUTO_{sdk.SeatBeltsAuto.ToOnOff()}/NOSMOKE_AUTO_{sdk.NoSmokingAuto.ToOnOff()}/FUELSEL_{sdk.FuelToRemainSelectorIn.ToOnOff()}/TEMP_{sdk.TemperatureControlsPreflight.ToOnOff()}/FO_ND_MAP_{sdk.FirstOfficerNdMap.ToOnOff()}/FIRETEST_{_pmdg777FireOverheatTestObserved.ToOnOff()}/OXYTEST_{_pmdg777FirstOfficerOxygenTestObserved.ToOnOff()} "
             + $"FMC={sdk.FmcFlightNumber}/{sdk.FmcCruiseAltitude}/{sdk.FmcDistanceToDestination:0.0}/{sdk.FmcPerformanceInputComplete.ToOnOff()} "
-            + $"MCP_ALT={sdk.McpAltitude} TO={sdk.FmcTakeoffFlaps}/{sdk.FmcV1}/{sdk.FmcVr}/{sdk.FmcV2} ECL_PREFLIGHT={sdk.PreflightChecklistComplete.ToOnOff()}";
+            + $"MCP_ALT={sdk.McpAltitude} TO={sdk.FmcTakeoffFlaps}/{sdk.FmcV1}/{sdk.FmcVr}/{sdk.FmcV2} "
+            + $"FLAPS={sdk.FlapsLever}/{sdk.TakeoffFlapsSet.ToOnOff()} ECL_PREFLIGHT={sdk.PreflightChecklistComplete.ToOnOff()}";
         if (string.Equals(
                 signature,
                 _loggedPmdg777FlowOneSignature,
@@ -8192,7 +8224,7 @@ internal sealed class CopilotService : Form
                     (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 130, 1, "right engine bleed AUTO"),
                     (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 135, 1, "left pack AUTO"),
                     (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 136, 1, "right pack AUTO"),
-                    (Pmdg777ControlProfile.ApuBleedSwitchEvent, 0, "APU bleed OFF"),
+                    (Pmdg777ControlProfile.ApuBleedSwitchEvent, 1, "APU bleed AUTO"),
                     (Pmdg777ControlProfile.ApuSelectorEvent, 0, "APU selector OFF"));
                 break;
             case "pmdg777 takeoff flaps":
@@ -8203,9 +8235,20 @@ internal sealed class CopilotService : Form
                     (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 119, 1, "left runway-turnoff light ON"),
                     (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 120, 1, "right runway-turnoff light ON"),
                     (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 121, 1, "taxi light ON"));
+                _pmdg777TaxiLightsCommandedThisFlow = true;
+                if (_state != null)
+                {
+                    _state.Pmdg777TaxiLightsCommandedThisFlow = true;
+                }
                 break;
             case "pmdg777 transponder tara":
                 QueuePmdg777Controls((Pmdg777ControlProfile.TransponderModeSelectorEvent, 4, "transponder TA/RA"));
+                break;
+            case "pmdg777 lnav arm":
+                QueuePmdg777Controls((Pmdg777ControlProfile.LnavSwitchEvent, Pmdg777ControlProfile.MouseLeftSingle, "LNAV arm"));
+                break;
+            case "pmdg777 vnav arm":
+                QueuePmdg777Controls((Pmdg777ControlProfile.VnavSwitchEvent, Pmdg777ControlProfile.MouseLeftSingle, "VNAV arm"));
                 break;
             case "pmdg777 takeoff lights":
                 QueuePmdg777Controls(
@@ -8216,11 +8259,63 @@ internal sealed class CopilotService : Form
                     (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 120, 1, "right runway-turnoff light ON"),
                     (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 122, 1, "strobe light ON"));
                 break;
+            case "pmdg777 approach lights":
+                QueuePmdg777Controls(
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 22, 1, "left landing light ON"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 23, 1, "nose landing light ON"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 24, 1, "right landing light ON"));
+                break;
+            case "pmdg777 autobrake landing":
+                QueuePmdg777Controls((Pmdg777ControlProfile.AutobrakeSelectorEvent, 4, "AUTOBRAKE 2"));
+                break;
+            case "pmdg777 autobrake off":
+                QueuePmdg777Controls((Pmdg777ControlProfile.AutobrakeSelectorEvent, 1, "AUTOBRAKE OFF"));
+                break;
+            case "pmdg777 flaps one":
+                SetPmdg777ApproachFlaps(1, Pmdg777ControlProfile.FlapsOneEvent, "flaps 1");
+                break;
+            case "pmdg777 flaps five":
+                SetPmdg777ApproachFlaps(2, Pmdg777ControlProfile.FlapsFiveEvent, "flaps 5");
+                break;
+            case "pmdg777 flaps fifteen":
+                SetPmdg777ApproachFlaps(3, Pmdg777ControlProfile.FlapsFifteenEvent, "flaps 15");
+                break;
+            case "pmdg777 flaps twenty":
+                SetPmdg777ApproachFlaps(4, Pmdg777ControlProfile.FlapsTwentyEvent, "flaps 20");
+                break;
+            case "pmdg777 landing flaps":
+                SetPmdg777LandingFlaps();
+                break;
+            case "pmdg777 gear down":
+                QueuePmdg777Controls((Pmdg777ControlProfile.GearLeverEvent, 1, "landing gear DOWN"));
+                break;
+            case "pmdg777 speedbrake arm":
+                QueuePmdg777Controls((Pmdg777ControlProfile.SpeedbrakeArmEvent, Pmdg777ControlProfile.MouseLeftSingle, "speedbrake ARMED"));
+                break;
+            case "pmdg777 speedbrake down":
+                QueuePmdg777Controls((Pmdg777ControlProfile.SpeedbrakeDownEvent, Pmdg777ControlProfile.MouseLeftSingle, "speedbrake DOWN"));
+                break;
+            case "pmdg777 after landing lights":
+                QueuePmdg777Controls(
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 22, 0, "left landing light OFF"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 23, 0, "nose landing light OFF"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 24, 0, "right landing light OFF"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 119, 1, "left runway-turnoff light ON"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 120, 1, "right runway-turnoff light ON"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 121, 1, "taxi light ON"),
+                    (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 122, 0, "strobe light OFF"));
+                break;
+            case "pmdg777 beacon off":
+                QueuePmdg777Controls((Pmdg777ControlProfile.BeaconSwitchEvent, 0, "beacon OFF"));
+                break;
+            case "pmdg777 shutdown pumps":
+                ConfigurePmdg777ShutdownPumps();
+                break;
             case "pmdg777 gear up":
                 QueuePmdg777Controls((Pmdg777ControlProfile.GearLeverEvent, 0, "landing gear UP"));
                 break;
             case "pmdg777 flaps up":
-                QueuePmdg777Controls((Pmdg777ControlProfile.FlapsUpEvent, 0, "flaps UP"));
+                QueuePmdg777Controls((Pmdg777ControlProfile.FlapsUpEvent, Pmdg777ControlProfile.FlapsPresetParameter, "flaps UP"));
                 break;
             case "pmdg777 climb lights":
                 QueuePmdg777Controls(
@@ -10336,6 +10431,15 @@ internal sealed class CopilotService : Form
             return;
         }
 
+        if (string.Equals(definition.Id, "after-start-taxi", StringComparison.OrdinalIgnoreCase))
+        {
+            _pmdg777TaxiLightsCommandedThisFlow = false;
+            if (_state != null)
+            {
+                _state.Pmdg777TaxiLightsCommandedThisFlow = false;
+            }
+        }
+
         StartProcedure(definition);
     }
 
@@ -10412,6 +10516,7 @@ internal sealed class CopilotService : Form
         }
         _completedProcedureIds.Clear();
         _forwardTaxiObservedThisFlight = false;
+        _taxiToRunwayArmed = false;
         _pendingAutomaticBeforeTakeoffFlow = false;
         _pendingAutomaticTakeoffFlow = false;
         _gsxBoardingRequestedThisFlight = false;
@@ -10422,6 +10527,7 @@ internal sealed class CopilotService : Form
         _gsxDepartureRequestAcceptedUtc = null;
         _taxiClearanceReceived = false;
         _takeoffClearanceReceived = false;
+        _pmdg777TaxiLightsCommandedThisFlow = false;
         _gsxStatusTracker.Reset();
         ClearGsxGoodEngineStartPrompt();
         _pendingGsxEngineStartProcedure = null;
@@ -11229,6 +11335,18 @@ internal sealed class CopilotService : Form
     private void OnProcedureStepCompleted(ProcedureStep step)
     {
         TryRequestGsxDeboardingAtGate();
+
+        if (string.Equals(
+                step.Id,
+                "fo-taxi-clearance",
+                StringComparison.OrdinalIgnoreCase))
+        {
+            // Only movement after taxi clearance is valid evidence that the
+            // aircraft taxied toward the runway. Discard pushback and any gate
+            // repositioning observed earlier in the flight.
+            _taxiToRunwayArmed = true;
+            _forwardTaxiObservedThisFlight = false;
+        }
 
         if (_gsxDepartureRequestedThisFlight
             || !_settings.GsxAutomaticallyPrepareDeparture
@@ -17363,7 +17481,7 @@ internal sealed class CopilotService : Form
         }
         if (_state?.Pmdg777PrimaryExternalPowerAvailable != true)
         {
-            _procedureRunner.Fail("PMDG 777 primary external power is not available.");
+            AppLog.Write("PMDG 777 primary external power command deferred: waiting for AVAIL.");
             return;
         }
 
@@ -17664,8 +17782,86 @@ internal sealed class CopilotService : Form
 
         QueuePmdg777Controls(
             (detentEvent,
-                0,
+                Pmdg777ControlProfile.FlapsPresetParameter,
                 $"flaps {setting}"));
+    }
+
+    private void SetPmdg777LandingFlaps()
+    {
+        var setting = _state?.Pmdg777FmcLandingFlaps ?? 0;
+        var detentEvent = setting switch
+        {
+            20 => Pmdg777ControlProfile.FlapsTwentyEvent,
+            25 => Pmdg777ControlProfile.FlapsTwentyFiveEvent,
+            30 => Pmdg777ControlProfile.FlapsThirtyEvent,
+            _ => uint.MaxValue
+        };
+        var targetLever = setting switch
+        {
+            20 => 4,
+            25 => 5,
+            30 => 6,
+            _ => -1
+        };
+        if (detentEvent == uint.MaxValue)
+        {
+            _procedureRunner.Fail(
+                "PMDG APPROACH REF does not contain a supported landing flap setting.");
+            FinishOneShot(3);
+            return;
+        }
+
+        if (Pmdg777ControlProfile.ApproachFlapCommandWouldRetract(
+                _state?.Pmdg777FlapsLever ?? 0,
+                targetLever))
+        {
+            AppLog.Write(
+                $"PMDG 777 landing flaps {setting} command inhibited: current flap lever is already beyond the requested detent.");
+            return;
+        }
+
+        QueuePmdg777Controls(
+            (detentEvent,
+                Pmdg777ControlProfile.FlapsPresetParameter,
+                $"landing flaps {setting}"));
+    }
+
+    private void SetPmdg777ApproachFlaps(
+        int targetLever,
+        uint detentEvent,
+        string label)
+    {
+        var currentLever = _state?.Pmdg777FlapsLever ?? 0;
+        if (Pmdg777ControlProfile.ApproachFlapCommandWouldRetract(
+                currentLever,
+                targetLever))
+        {
+            AppLog.Write(
+                $"PMDG 777 {label} command inhibited: current flap lever {currentLever} is already beyond target {targetLever}.");
+            return;
+        }
+
+        QueuePmdg777Controls(
+            (detentEvent,
+                Pmdg777ControlProfile.FlapsPresetParameter,
+                label));
+    }
+
+    private void ConfigurePmdg777ShutdownPumps()
+    {
+        QueuePmdg777Controls(
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 103, 0, "left forward fuel pump OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 104, 0, "right forward fuel pump OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 105, 0, "left aft fuel pump OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 106, 0, "right aft fuel pump OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 109, 0, "left center fuel pump OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 110, 0, "right center fuel pump OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 40, 0, "center 1 electric primary pump OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 41, 0, "center 2 electric primary pump OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 35, 0, "left electric demand pump OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 38, 0, "right electric demand pump OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 36, 0, "center 1 air demand pump OFF"),
+            (Pmdg777ControlProfile.ThirdPartyEventIdMinimum + 37, 0, "center 2 air demand pump OFF"));
     }
 
     private void ConfigurePmdg777AirPanelPreflight()
@@ -22385,12 +22581,28 @@ internal sealed class CopilotService : Form
             return;
         }
 
+        var procedures = ProcedureCatalog.ForAircraft(_state);
+        var refreshRequired = _flowList.Items.Count != procedures.Count;
+        for (var index = 0; !refreshRequired && index < procedures.Count; index++)
+        {
+            var procedure = procedures[index];
+            refreshRequired = !(_flowList.Items[index] is ProcedureListItem existing)
+                || !string.Equals(existing.Definition.Id, procedure.Id, StringComparison.OrdinalIgnoreCase)
+                || existing.Completed != _completedProcedureIds.Contains(procedure.Id)
+                || existing.Recommended != (procedure.Id == recommendedId)
+                || existing.Active != (procedure.Id == activeId);
+        }
+        if (!refreshRequired)
+        {
+            return;
+        }
+
         var selectedIndex = _flowList.SelectedIndex;
         var topIndex = _flowList.Items.Count > 0 ? _flowList.TopIndex : 0;
         _flowList.BeginUpdate();
-        for (var index = 0; index < ProcedureCatalog.ForAircraft(_state).Count; index++)
+        for (var index = 0; index < procedures.Count; index++)
         {
-            var procedure = ProcedureCatalog.ForAircraft(_state)[index];
+            var procedure = procedures[index];
             var item = new ProcedureListItem(
                 procedure,
                 _completedProcedureIds.Contains(procedure.Id),
@@ -22405,7 +22617,7 @@ internal sealed class CopilotService : Form
                 _flowList.Items.Add(item);
             }
         }
-        while (_flowList.Items.Count > ProcedureCatalog.ForAircraft(_state).Count)
+        while (_flowList.Items.Count > procedures.Count)
         {
             _flowList.Items.RemoveAt(_flowList.Items.Count - 1);
         }

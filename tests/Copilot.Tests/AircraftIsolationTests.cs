@@ -247,6 +247,28 @@ public sealed class AircraftIsolationTests
     }
 
     [TestMethod]
+    public void CompletedFinalFlowIsTerminalEvenWhenAnEarlierFlowWasMissed()
+    {
+        var state = new AircraftState
+        {
+            Title = "PMDG 777-300ER",
+            OnGround = true
+        };
+
+        var recommendation = FlowRecommendationEngine.Recommend(
+            state,
+            new[]
+            {
+                "after-start-taxi",
+                "parking-shutdown"
+            });
+
+        Assert.AreEqual("parking-shutdown", recommendation.Procedure?.Id);
+        Assert.IsFalse(recommendation.Overdue);
+        StringAssert.Contains(recommendation.Reason, "All flows");
+    }
+
+    [TestMethod]
     public void EveryAircraftRequestsIfrClearanceAfterFlightComputerProgramming()
     {
         var profiles = new[]

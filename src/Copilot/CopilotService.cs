@@ -8287,10 +8287,10 @@ internal sealed class CopilotService : Form
                 SetPmdg777LandingFlaps();
                 break;
             case "pmdg777 gear down":
-                QueuePmdg777Controls((Pmdg777ControlProfile.GearLeverEvent, 1, "landing gear DOWN"));
+                SetPmdg777Gear(down: true);
                 break;
             case "pmdg777 speedbrake arm":
-                QueuePmdg777Controls((Pmdg777ControlProfile.SpeedbrakeArmEvent, Pmdg777ControlProfile.MouseLeftSingle, "speedbrake ARMED"));
+                SetPmdg777SpeedbrakeArmed();
                 break;
             case "pmdg777 speedbrake down":
                 QueuePmdg777Controls((Pmdg777ControlProfile.SpeedbrakeDownEvent, Pmdg777ControlProfile.MouseLeftSingle, "speedbrake DOWN"));
@@ -8312,7 +8312,7 @@ internal sealed class CopilotService : Form
                 ConfigurePmdg777ShutdownPumps();
                 break;
             case "pmdg777 gear up":
-                QueuePmdg777Controls((Pmdg777ControlProfile.GearLeverEvent, 0, "landing gear UP"));
+                SetPmdg777Gear(down: false);
                 break;
             case "pmdg777 flaps up":
                 QueuePmdg777Controls((Pmdg777ControlProfile.FlapsUpEvent, Pmdg777ControlProfile.FlapsPresetParameter, "flaps UP"));
@@ -9268,6 +9268,7 @@ internal sealed class CopilotService : Form
                 definition.Id,
                 "before-takeoff",
                 StringComparison.OrdinalIgnoreCase)
+            && state.OnGround
             && !state.BeforeTakeoffHoldEligible)
         {
             reason =
@@ -9287,13 +9288,13 @@ internal sealed class CopilotService : Form
                 state,
                 _completedProcedureIds).Procedure;
         return state != null
-               && !state.BeforeTakeoffHoldEligible
-               && _completedProcedureIds.Contains("after-start-taxi")
-               && string.Equals(
-                   nextFlow?.Id,
-                   "before-takeoff",
-                   StringComparison.OrdinalIgnoreCase)
-               && !_completedProcedureIds.Contains("before-takeoff");
+               && FlightProgressTransitionPolicy.ShouldShowTaxiToHoldingPoint(
+                   state,
+                   IsProcedureActive(_procedureRunner.Status),
+                   _completedProcedureIds.Contains("after-start-taxi"),
+                   _completedProcedureIds.Contains("before-takeoff"),
+                   _completedProcedureIds.Contains("parking-shutdown"),
+                   nextFlow?.Id);
     }
 
     private const string TaxiToHoldingPointGuidance =
@@ -17845,6 +17846,71 @@ internal sealed class CopilotService : Form
             (detentEvent,
                 Pmdg777ControlProfile.FlapsPresetParameter,
                 label));
+    }
+
+    private void SetPmdg777Gear(bool down)
+    {
+        if (_simConnect == null
+            || _state?.IsPmdg777300Er != true
+            || !_pmdg777DataReady)
+        {
+            _procedureRunner.Fail(
+                $"PMDG 777 landing gear {(down ? "DOWN" : "UP")} blocked: verified 777X data is not ready.");
+            return;
+        }
+
+        if (down ? _state.Pmdg777GearLeverDown : _state.Pmdg777GearLeverUp)
+        {
+            return;
+        }
+
+        var action = down
+            ? Pmdg777ControlProfile.RotorBrakeWheelDownAction
+            : Pmdg777ControlProfile.RotorBrakeWheelUpAction;
+        SendPmdgRotorBrakeSwitch(
+            Pmdg777ControlProfile.GearLeverRotorBrakeSwitchId,
+            action);
+        SchedulePmdgRotorBrakeSwitch(
+            Pmdg777ControlProfile.GearLeverRotorBrakeSwitchId,
+            action,
+            500);
+        SchedulePmdgRotorBrakeSwitch(
+            Pmdg777ControlProfile.GearLeverRotorBrakeSwitchId,
+            action,
+            1000);
+        AppLog.Write(
+            $"PMDG 777 FO action sent through exact gear-lever ROTOR_BRAKE path: landing gear {(down ? "DOWN" : "UP")}; awaiting independent 777X data readback.");
+    }
+
+    private void SetPmdg777SpeedbrakeArmed()
+    {
+        if (_simConnect == null
+            || _state?.IsPmdg777300Er != true
+            || !_pmdg777DataReady)
+        {
+            _procedureRunner.Fail(
+                "PMDG 777 speedbrake ARMED blocked: verified 777X data is not ready.");
+            return;
+        }
+
+        if (_state.Pmdg777SpeedbrakeArmed)
+        {
+            return;
+        }
+
+        SendPmdgRotorBrakeSwitch(
+            Pmdg777ControlProfile.SpeedbrakeArmRotorBrakeSwitchId,
+            Pmdg777ControlProfile.RotorBrakeLeftSingleAction);
+        SchedulePmdgRotorBrakeSwitch(
+            Pmdg777ControlProfile.SpeedbrakeArmRotorBrakeSwitchId,
+            Pmdg777ControlProfile.RotorBrakeLeftSingleAction,
+            500);
+        SchedulePmdgRotorBrakeSwitch(
+            Pmdg777ControlProfile.SpeedbrakeArmRotorBrakeSwitchId,
+            Pmdg777ControlProfile.RotorBrakeLeftSingleAction,
+            1000);
+        AppLog.Write(
+            "PMDG 777 FO action sent through exact speedbrake-ARM ROTOR_BRAKE path; awaiting independent 777X data readback.");
     }
 
     private void ConfigurePmdg777ShutdownPumps()

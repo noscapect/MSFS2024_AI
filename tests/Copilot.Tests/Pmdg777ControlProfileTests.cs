@@ -37,6 +37,15 @@ public sealed class Pmdg777ControlProfileTests
         Assert.AreEqual(69844U, Pmdg777ControlProfile.VnavSwitchEvent);
         Assert.AreEqual(70381U, Pmdg777ControlProfile.TransponderModeSelectorEvent);
         Assert.AreEqual(0x20000000U, Pmdg777ControlProfile.MouseLeftSingle);
+        Assert.AreEqual(29508U, Pmdg777ControlProfile.RotorBrakePayload(
+            Pmdg777ControlProfile.GearLeverRotorBrakeSwitchId,
+            Pmdg777ControlProfile.RotorBrakeWheelDownAction));
+        Assert.AreEqual(29507U, Pmdg777ControlProfile.RotorBrakePayload(
+            Pmdg777ControlProfile.GearLeverRotorBrakeSwitchId,
+            Pmdg777ControlProfile.RotorBrakeWheelUpAction));
+        Assert.AreEqual(498201U, Pmdg777ControlProfile.RotorBrakePayload(
+            Pmdg777ControlProfile.SpeedbrakeArmRotorBrakeSwitchId,
+            Pmdg777ControlProfile.RotorBrakeLeftSingleAction));
         Assert.AreEqual(260, Pmdg777ControlProfile.ApproachFlapsOneCommandSpeedKnots);
         Assert.AreEqual(240, Pmdg777ControlProfile.ApproachFlapsFiveCommandSpeedKnots);
         Assert.AreEqual(175, Pmdg777ControlProfile.LandingFlapsCommandSpeedKnots(30));

@@ -67,6 +67,11 @@ internal static class Pmdg777ControlProfile
     public const uint AutobrakeSelectorEvent = ThirdPartyEventIdMinimum + 292;
     public const uint SpeedbrakeDownEvent = ThirdPartyEventIdMinimum + 4981;
     public const uint SpeedbrakeArmEvent = ThirdPartyEventIdMinimum + 4982;
+    public const uint GearLeverRotorBrakeSwitchId = 295;
+    public const uint SpeedbrakeArmRotorBrakeSwitchId = 4982;
+    public const uint RotorBrakeLeftSingleAction = 1;
+    public const uint RotorBrakeWheelUpAction = 7;
+    public const uint RotorBrakeWheelDownAction = 8;
     public const uint BeaconSwitchEvent = ThirdPartyEventIdMinimum + 114;
     public const int HumanControlIntervalMilliseconds = 900;
     public const uint MouseLeftSingle = 0x20000000;
@@ -74,6 +79,9 @@ internal static class Pmdg777ControlProfile
     public const string PackageName = "pmdg-aircraft-77w";
     public const string OptionsFileName = "777_Options.ini";
     public const string DataBroadcastSetting = "[SDK] EnableDataBroadcast=1";
+
+    public static uint RotorBrakePayload(uint switchId, uint actionCode) =>
+        switchId * 100u + actionCode;
 
     public static bool ApproachFlapCommandWouldRetract(int currentLever, int targetLever) =>
         currentLever > targetLever;

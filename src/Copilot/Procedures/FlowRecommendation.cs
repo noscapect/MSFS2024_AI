@@ -32,6 +32,15 @@ internal static class FlowRecommendationEngine
                 "No supported flow catalog is available for this aircraft yet.");
         }
 
+        var finalProcedure = procedures[procedures.Count - 1];
+        if (completedProcedureIds.Contains(finalProcedure.Id))
+        {
+            return new FlowRecommendation(
+                finalProcedure,
+                overdue: false,
+                "All flows for this flight are complete.");
+        }
+
         var recommendedId = phase switch
         {
             OperationalPhase.ColdAndDark => "power-up-initial-setup",

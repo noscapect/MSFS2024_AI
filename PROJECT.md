@@ -4,9 +4,12 @@ This file is the primary technical handoff for continuing development. The
 current public release is **v0.9.7** from August 9, 2026. It contains the
 dashboard and optional MSFS 2024 EFB companion, expanded optional GSX
 coordination, the implementation-complete iniBuilds A310-300 profile, and the
-Asobo 737 MAX profile under an explicit experimental warning. The flows implemented in the
-application are authoritative; supporting documents must follow the application
-when they differ.
+Asobo 737 MAX profile under an explicit experimental warning. Since that
+release, `main` has added the dedicated PMDG 777-300ER twelve-flow automation
+and checklist implementation plus arrival, taxi-in, shutdown, and turnaround
+state fixes. The 777 remains a development integration pending ordered live
+validation. The flows implemented in the application are authoritative;
+supporting documents must follow the application when they differ.
 
 The iniBuilds A310-300 procedure and checklist framework is included in v0.9.7.
 Its current twelve-flow implementation is complete; native MSFS 2024 controls
@@ -14,7 +17,7 @@ and readbacks remain subject to routine field validation and maintenance.
 
 Suggested opening prompt for a new development chat:
 
-> Continue the project described in `C:\CODE\MSFS2024_AI\PROJECT.md`. Read
+> Continue the project described in `PROJECT.md`. Read
 > `README.md`, `docs/ARCHITECTURE.md`, `docs/checklist.md`, and the relevant
 > aircraft support document before changing code. Preserve every completed
 > aircraft profile behind its aircraft-specific implementation and regression
@@ -38,9 +41,10 @@ been implemented or explicitly removed from the claimed scope.
 The project is multi-aircraft and remains beta software. It is assistance
 software, not an autopilot, and the pilot must always be able to take over.
 
-## Current release
+## Current release and main branch
 
 - Public version: **0.9.7**
+- Current `main`: post-v0.9.7 development, including PMDG 777-300ER automation
 - Repository: <https://github.com/noscapect/MSFS2024_AI>
 - Latest release: <https://github.com/noscapect/MSFS2024_AI/releases/tag/v0.9.7>
 - Main project: `src/Copilot/Copilot.csproj`
@@ -51,17 +55,24 @@ software, not an autopilot, and the pilot must always be able to take over.
 - EFB source/package project: `src/EfbCompanion`
 - EFB protocol: versioned JSON over the MSFS 2024 CommBus API
 
-Build and test:
+Development builds require the MSFS 2024 SDK. `src/Copilot/Copilot.csproj`
+currently resolves the managed and native SimConnect libraries from
+`C:\MSFS 2024 SDK\SimConnect SDK\lib`. End users do not need the SDK because
+release packages include those libraries.
+
+Restore, build, and test:
 
 ```powershell
+dotnet restore .\tests\Copilot.Tests\Copilot.Tests.csproj
 dotnet build .\src\Copilot\Copilot.csproj -c Release --no-restore
 dotnet test .\tests\Copilot.Tests\Copilot.Tests.csproj -c Release --no-restore
 ```
 
-The v0.9.7 release passes 344 automated tests. The Asobo 737 MAX profile is
-packaged only as experimental support and must complete its remaining safety
-instrumentation and gate-to-gate live validation before that warning can be
-removed.
+The v0.9.7 release passes 344 automated tests. The suite on `main` has expanded
+with PMDG 777 control, procedure, aircraft-isolation, and terminal-flow
+coverage. The Asobo 737 MAX profile is packaged only as experimental support
+and must complete its remaining safety instrumentation and gate-to-gate live
+validation before that warning can be removed.
 
 ## MSFS 2024 EFB companion
 
@@ -88,6 +99,7 @@ Build and installation details are in `docs/EFB_COMPANION.md`.
 | iniBuilds A321LR | Gate-to-gate live validated | SimConnect and MobiFlight WASM |
 | FlyByWire A32NX for MSFS 2024 | Gate-to-gate live validated | SimConnect and MobiFlight WASM |
 | PMDG 737-800 | Gate-to-gate live validated | SimConnect and PMDG SDK data broadcast |
+| PMDG 777-300ER | Twelve-flow automation implemented on `main`; ordered live validation remains | SimConnect and isolated PMDG 777X SDK data broadcast |
 | iniBuilds A330-300 (GE) | Gate-to-gate implemented and live tested; continue field validation | SimConnect and MobiFlight WASM |
 | iniBuilds A310-300 | Current twelve-flow gate-to-gate scope implemented; field validation and maintenance continue | SimConnect plus A310-native command/readback telemetry |
 | Asobo 737 MAX 8 | Development beta; Flows 1–6 iteratively live tested, Flow 7 not cleared | SimConnect Input Events, SimVars, and MobiFlight WASM |
@@ -106,6 +118,13 @@ are documented in `docs/ASOBO_737_MAX_SUPPORT_STATUS.md`. It currently lacks
 verified FMC takeoff-flap, stabilizer-trim, elevator-position, pilot
 control-input, STS, and MCAS telemetry. The generic takeoff-configuration
 completion callout must not be treated as proof that those items are correct.
+
+The PMDG 777-300ER is also isolated from the PMDG 737. It has its own 777X SDK
+subscription, parser, commands, procedure and checklist libraries, SimBrief
+`B77W` contract, and regression tests. Its complete twelve-flow implementation
+is present on `main`, but implementation completeness is not a substitute for
+ordered live validation. Keep the development classification until the
+remaining simulator validation is recorded.
 
 ## Gate-to-gate flow
 
@@ -328,9 +347,10 @@ Important layers and files:
 - `src/Copilot/Procedures/A330ProcedureLibrary.cs` - iniBuilds A330
 - `src/Copilot/Procedures/A310ProcedureLibrary.cs` - iniBuilds A310-300
 - `src/Copilot/Procedures/B737ProcedureLibrary.cs` - PMDG 737-800
+- `src/Copilot/Procedures/Pmdg777ProcedureLibrary.cs` - PMDG 777-300ER
 - `src/Copilot/Procedures/Asobo737MaxProcedureLibrary.cs` - Asobo 737 MAX 8
 - `src/Copilot/AircraftAdapters/Pmdg777/Pmdg777ControlProfile.cs` - PMDG
-  777-300ER SDK identity and isolation boundary; operational support pending
+  777-300ER SDK identity, command, and isolation boundary
 - `src/Copilot/AircraftAdapters/Asobo737Max/Asobo737MaxControlProfile.cs` -
   live-derived MAX selector values and normalization
 - Matching aircraft-specific libraries under `src/Copilot/Checklists`
@@ -382,6 +402,10 @@ the Release build and the UI does not identify Debug versus Release.
 
 ## Current development
 
+- Live-validate the PMDG 777-300ER flows in order. The twelve-flow automation
+  is implemented, but the aircraft remains a development integration until its
+  commands, readbacks, timing, recovery, and terminal states are validated in
+  the simulator and recorded in the supporting documents.
 - The first dashboard redesign and MSFS 2024 EFB companion are implemented;
   current work focuses on their live validation and refinement.
 - Fix verified bugs and regressions without weakening aircraft-specific
@@ -409,6 +433,8 @@ autoland-assist experiment are not current product features.
 - `docs/LIVE_TESTS.md` - aircraft and flow validation evidence
 - `docs/ASOBO_737_MAX_SUPPORT_STATUS.md` - MAX implementation, limitations,
   incident findings, and release gates
+- `docs/PMDG_777_300ER_SUPPORT_PLAN.md` - 777 implementation and live-validation
+  status
 - `docs/ARCHITECTURE.md` - contributor architecture and isolation rules
 - `docs/NATIVE_CONTROL_STRATEGY.md` - cockpit command/readback standard
 - `docs/SIMBRIEF_INTEGRATION_PLAN.md` - SimBrief design and status

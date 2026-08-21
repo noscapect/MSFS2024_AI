@@ -150,6 +150,7 @@ internal sealed class CopilotService : Form
     private FireTestSystem? _pendingFlyByWireFireTest;
     private PendingFuelPumpSequence? _pendingFuelPumpSequence;
     private System.Windows.Forms.Timer? _fuelPumpSequenceTimer;
+    private System.Windows.Forms.Timer? _commandTimer;
     private System.Windows.Forms.Timer? _a330InputEventPollingTimer;
     private readonly Dictionary<System.Windows.Forms.Timer, GenerationBoundCockpitAction>
         _nativePulseTimers = new();
@@ -1660,7 +1661,8 @@ internal sealed class CopilotService : Form
 
     private void OnOpen(SimConnect sender, SIMCONNECT_RECV_OPEN data)
     {
-        InvalidateAircraftAutomation("new SimConnect session", clearAircraftState: true);
+        InvalidateAircraftAutomation(
+            AutomationInvalidationReason.NewSimConnectSession);
         ResetMobiFlightRuntimeAfterDisconnect();
         Console.WriteLine(
             $"Connected - SimConnect {data.dwSimConnectVersionMajor}.{data.dwSimConnectVersionMinor}, " +
@@ -1860,9 +1862,12 @@ internal sealed class CopilotService : Form
             2,
             0);
 
-        var commandTimer = new System.Windows.Forms.Timer { Interval = 100 };
-        commandTimer.Tick += (_, _) => DrainCommands();
-        commandTimer.Start();
+        if (_commandTimer == null)
+        {
+            _commandTimer = new System.Windows.Forms.Timer { Interval = 100 };
+            _commandTimer.Tick += (_, _) => DrainCommands();
+        }
+        _commandTimer.Start();
 
         _a330InputEventPollingTimer?.Stop();
         _a330InputEventPollingTimer?.Dispose();
@@ -5785,8 +5790,8 @@ internal sealed class CopilotService : Form
         {
             var previousAircraft = $"{_state.Title} ({_state.Variant})";
             InvalidateAircraftAutomation(
-                $"aircraft changed from {previousAircraft} to {raw.Title} ({aircraftVariant})",
-                clearAircraftState: true);
+                AutomationInvalidationReason.AircraftChanged,
+                $"from {previousAircraft} to {raw.Title} ({aircraftVariant})");
             ResetMobiFlightRuntimeAfterDisconnect();
         }
         var isIniBuildsA310 = aircraftVariant == AircraftVariant.IniBuildsA310;
@@ -9368,10 +9373,14 @@ internal sealed class CopilotService : Form
     }
 
     private void InvalidateAircraftAutomation(
-        string reason,
-        bool clearAircraftState)
+        AutomationInvalidationReason reason,
+        string? detail = null)
     {
+        var policy = AutomationInvalidationPolicy.For(reason);
         var generation = _automationRuntime.Advance();
+
+        // Live connection, cockpit-command, and aircraft SDK state never
+        // survives a generation boundary.
         CancelDelayedCockpitActions();
         _pendingProcedure = null;
         _pendingBeaconProcedure = null;
@@ -9381,12 +9390,8 @@ internal sealed class CopilotService : Form
         _pendingFireTest = null;
         _pendingFlyByWireFireTest = null;
         _asobo737MaxFireTestsInProgress = false;
-        _pendingAutomaticBeforeTakeoffFlow = false;
-        _pendingAutomaticTakeoffFlow = false;
-        _taxiToRunwayArmed = false;
         _pendingFuelPumpSequence = null;
         StopFuelPumpSequenceTimer();
-        _pendingGsxEngineStartProcedure = null;
         _pendingGsxAction = null;
         _pendingGsxActionDeadlineUtc = null;
         _pmdg777TaxiLightsCommandedThisFlow = false;
@@ -9405,23 +9410,34 @@ internal sealed class CopilotService : Form
         _pmdg777AdiruOnTimer?.Stop();
         _pmdg777AdiruOnTimer?.Dispose();
         _pmdg777AdiruOnTimer = null;
-        _procedureRunner.Cancel();
+
+        // Logical procedure/flow state survives connection replacement, but
+        // is discarded when a different aircraft makes it incompatible.
+        policy.ApplyToLogicalFlowIntent(() =>
+        {
+            _pendingAutomaticBeforeTakeoffFlow = false;
+            _pendingAutomaticTakeoffFlow = false;
+            _taxiToRunwayArmed = false;
+            _pendingGsxEngineStartProcedure = null;
+        });
+        policy.ApplyToProcedure(_procedureRunner);
         ClearCommandedAircraftState();
         while (_commands.TryDequeue(out _))
         {
         }
-        if (clearAircraftState)
-        {
-            _replayTimer?.Stop();
-            _replayTimer?.Dispose();
-            _replayTimer = null;
-            _replayStates = Array.Empty<AircraftState>();
-            _replayIndex = 0;
-            _replayActive = false;
-            _state = null;
-        }
+        _replayTimer?.Stop();
+        _replayTimer?.Dispose();
+        _replayTimer = null;
+        _replayStates = Array.Empty<AircraftState>();
+        _replayIndex = 0;
+        _replayActive = false;
+        _state = null;
+
+        // Completed flows, ProcedureSession, SimBrief data, and settings are
+        // persistent flight/application state and are intentionally untouched.
         AppLog.Write(
-            $"Aircraft automation generation advanced to {generation}: {reason}.");
+            $"Aircraft automation generation advanced to {generation}: {reason}"
+            + (string.IsNullOrWhiteSpace(detail) ? "." : $" {detail}."));
     }
 
     private bool IsTaxiToHoldingPointTransition(AircraftState? state)
@@ -23550,9 +23566,9 @@ internal sealed class CopilotService : Form
     {
         Console.WriteLine("MSFS closed the SimConnect session.");
         AppLog.Write("MSFS closed the SimConnect session.");
+        _commandTimer?.Stop();
         InvalidateAircraftAutomation(
-            "SimConnect session disconnected",
-            clearAircraftState: true);
+            AutomationInvalidationReason.SimConnectDisconnected);
         _gsxOwnsRemoteControl = false;
         _gsxRemoteControlActive = false;
         _pendingGsxAction = null;
@@ -23691,6 +23707,9 @@ internal sealed class CopilotService : Form
             }
             _asobo737MaxFireTestsInProgress = false;
             _reconnectTimer?.Dispose();
+            _commandTimer?.Stop();
+            _commandTimer?.Dispose();
+            _commandTimer = null;
             _pmdg777AdiruOnTimer?.Dispose();
             _sayIntentionsTimer?.Stop();
             _sayIntentionsTimer?.Dispose();

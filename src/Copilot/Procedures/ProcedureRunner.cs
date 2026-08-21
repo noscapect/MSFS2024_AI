@@ -159,6 +159,25 @@ internal sealed class ProcedureRunner
         Changed?.Invoke();
     }
 
+    public void InvalidatePendingAutomationAttempt()
+    {
+        if (_definition == null)
+        {
+            return;
+        }
+
+        _lastAutomaticStepId = null;
+        _nextAutomaticActionUtc = DateTime.MinValue;
+        _currentStepStartedUtc = DateTime.UtcNow;
+        _recovering = true;
+        if (CurrentStep?.Kind == ProcedureStepKind.AutomaticAction
+            && Status == ProcedureStatus.WaitingForVerification)
+        {
+            Status = ProcedureStatus.Running;
+            Message = "Waiting for fresh simulator telemetry before retrying the current action.";
+        }
+    }
+
     public void Fail(string message)
     {
         if (_definition == null

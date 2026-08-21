@@ -6,6 +6,7 @@ using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA321;
 using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA330;
 using Msfs2024Ai.Copilot.AircraftAdapters.IniBuildsA310;
 using Msfs2024Ai.Copilot.AircraftAdapters.Pmdg777;
+using Msfs2024Ai.Copilot.Automation;
 using Msfs2024Ai.Copilot.AircraftIdentity;
 using Msfs2024Ai.Copilot.Checklists;
 using Msfs2024Ai.Copilot.Companion;
@@ -65,7 +66,8 @@ internal sealed class CopilotService : Form
     private readonly bool _showUi;
     private readonly CopilotSettings _settings;
     private readonly ProcedureSession _procedureSession;
-    private readonly ConcurrentQueue<string> _commands = new();
+    private readonly AutomationRuntimeGeneration _automationRuntime = new();
+    private readonly ConcurrentQueue<QueuedCockpitCommand> _commands = new();
     private readonly ProcedureRunner _procedureRunner;
     private VoiceCalloutQueue? _voiceCalloutQueue;
     private readonly SayIntentionsClient _sayIntentionsClient = new();
@@ -149,7 +151,8 @@ internal sealed class CopilotService : Form
     private PendingFuelPumpSequence? _pendingFuelPumpSequence;
     private System.Windows.Forms.Timer? _fuelPumpSequenceTimer;
     private System.Windows.Forms.Timer? _a330InputEventPollingTimer;
-    private readonly List<System.Windows.Forms.Timer> _nativePulseTimers = new();
+    private readonly Dictionary<System.Windows.Forms.Timer, GenerationBoundCockpitAction>
+        _nativePulseTimers = new();
     private bool _mobiFlightReady;
     private bool _mobiFlightRuntimeReady;
     private DateTime? _mobiFlightRuntimeInitializedUtc;
@@ -161,6 +164,7 @@ internal sealed class CopilotService : Form
     private Pmdg777Control _pmdg777ControlState;
     private readonly Queue<(uint EventId, uint Parameter, string Label)> _pmdg777ControlQueue = new();
     private System.Windows.Forms.Timer? _pmdg777ControlQueueTimer;
+    private GenerationBoundCockpitAction? _pmdg777ControlQueueAction;
     private bool _pmdg777FireOverheatTestObserved;
     private bool _pmdg777FirstOfficerOxygenTestObserved;
     private bool _pmdg777ControlReady;
@@ -1549,7 +1553,7 @@ internal sealed class CopilotService : Form
                     AppendDashboardLog($"Replay action: {command}");
                     return;
                 }
-                _commands.Enqueue(command);
+                QueueCommand(command);
             },
             () => _settings.AutomationPolicy);
         _procedureRunner.Changed += OnProcedureChanged;
@@ -1656,6 +1660,8 @@ internal sealed class CopilotService : Form
 
     private void OnOpen(SimConnect sender, SIMCONNECT_RECV_OPEN data)
     {
+        InvalidateAircraftAutomation("new SimConnect session", clearAircraftState: true);
+        ResetMobiFlightRuntimeAfterDisconnect();
         Console.WriteLine(
             $"Connected - SimConnect {data.dwSimConnectVersionMajor}.{data.dwSimConnectVersionMinor}, " +
             $"simulator {data.dwApplicationVersionMajor}.{data.dwApplicationVersionMinor}.");
@@ -2842,16 +2848,11 @@ internal sealed class CopilotService : Form
         }
         UpdateGsxStatus(true);
 
-        var timer = new System.Windows.Forms.Timer { Interval = 500 };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            SetGsxValue(Definition.GsxMenuOpen, 1);
-            _nativePulseTimers.Remove(timer);
-            timer.Dispose();
-        };
-        _nativePulseTimers.Add(timer);
-        timer.Start();
+        ScheduleCockpitAction(
+            500,
+            () => SetGsxValue(Definition.GsxMenuOpen, 1),
+            "GSX menu request",
+            _state?.Variant);
         AppendDashboardLog(
             action switch
             {
@@ -5778,6 +5779,16 @@ internal sealed class CopilotService : Form
         var aircraftVariant = AircraftVariantResolver.Resolve(
             raw.Title,
             EnableExperimentalFlyByWireA380X);
+        if (_state != null
+            && (_state.Variant != aircraftVariant
+                || !string.Equals(_state.Title, raw.Title, StringComparison.Ordinal)))
+        {
+            var previousAircraft = $"{_state.Title} ({_state.Variant})";
+            InvalidateAircraftAutomation(
+                $"aircraft changed from {previousAircraft} to {raw.Title} ({aircraftVariant})",
+                clearAircraftState: true);
+            ResetMobiFlightRuntimeAfterDisconnect();
+        }
         var isIniBuildsA310 = aircraftVariant == AircraftVariant.IniBuildsA310;
         var isIniBuildsA330 = aircraftVariant == AircraftVariant.IniBuildsA330;
         var isIniBuildsAirbusFamily =
@@ -8002,7 +8013,7 @@ internal sealed class CopilotService : Form
                     return;
                 }
 
-                _commands.Enqueue(line);
+                QueueCommand(line);
             }
         })
         {
@@ -8015,9 +8026,22 @@ internal sealed class CopilotService : Form
     private void DrainCommands()
     {
         TryExecuteOneShotCommand();
-        while (_commands.TryDequeue(out var command))
+        while (_commands.TryDequeue(out var queuedCommand))
         {
-            ExecuteCommand(command);
+            if (_disposingOrDisposed || _simConnect == null)
+            {
+                AppLog.Write(
+                    $"Discarded cockpit command because simulator automation is unavailable: {queuedCommand.Command}.");
+                continue;
+            }
+            if (!_automationRuntime.IsCurrent(queuedCommand.Generation))
+            {
+                AppLog.Write(
+                    $"Discarded stale cockpit command from generation {queuedCommand.Generation}; current generation is {_automationRuntime.Current}.");
+                continue;
+            }
+
+            ExecuteCommand(queuedCommand.Command);
             if (_oneShotCommand == null && !IsDisposed)
             {
                 Console.Write("> ");
@@ -9280,6 +9304,126 @@ internal sealed class CopilotService : Form
         return true;
     }
 
+    private void QueueCommand(string command) =>
+        _commands.Enqueue(_automationRuntime.CreateCommand(command));
+
+    private System.Windows.Forms.Timer ScheduleCockpitAction(
+        int delayMs,
+        Action action,
+        string label,
+        AircraftVariant? expectedVariant = null)
+    {
+        var guardedAction = _automationRuntime.CaptureDelayedAction();
+        var timer = new System.Windows.Forms.Timer { Interval = delayMs };
+        timer.Tick += (_, _) =>
+        {
+            timer.Stop();
+            _nativePulseTimers.Remove(timer);
+            timer.Dispose();
+            var available = !_disposingOrDisposed
+                            && _simConnect != null
+                            && _state != null
+                            && (!expectedVariant.HasValue
+                                || _state.Variant == expectedVariant.Value);
+            if (!guardedAction.TryExecute(available, action))
+            {
+                AppLog.Write(
+                    $"Discarded stale delayed cockpit action '{label}' from generation {guardedAction.Generation}; current generation is {_automationRuntime.Current}.");
+            }
+            FinishOneShot();
+        };
+        _nativePulseTimers.Add(timer, guardedAction);
+        timer.Start();
+        return timer;
+    }
+
+    private GenerationBoundCockpitAction TrackCockpitTimer(
+        System.Windows.Forms.Timer timer)
+    {
+        var guardedAction = _automationRuntime.CaptureDelayedAction();
+        _nativePulseTimers.Add(timer, guardedAction);
+        return guardedAction;
+    }
+
+    private void CompleteCockpitTimer(System.Windows.Forms.Timer timer)
+    {
+        timer.Stop();
+        if (_nativePulseTimers.TryGetValue(timer, out var guardedAction))
+        {
+            _nativePulseTimers.Remove(timer);
+            guardedAction.Dispose();
+        }
+        timer.Dispose();
+    }
+
+    private void CancelDelayedCockpitActions()
+    {
+        foreach (var pair in _nativePulseTimers.ToArray())
+        {
+            pair.Key.Stop();
+            pair.Key.Dispose();
+            pair.Value.Dispose();
+        }
+        _nativePulseTimers.Clear();
+    }
+
+    private void InvalidateAircraftAutomation(
+        string reason,
+        bool clearAircraftState)
+    {
+        var generation = _automationRuntime.Advance();
+        CancelDelayedCockpitActions();
+        _pendingProcedure = null;
+        _pendingBeaconProcedure = null;
+        _pendingNavLogoSelectorProcedure = null;
+        _pendingBatteryProcedure = null;
+        _pendingNativeAction = null;
+        _pendingFireTest = null;
+        _pendingFlyByWireFireTest = null;
+        _asobo737MaxFireTestsInProgress = false;
+        _pendingAutomaticBeforeTakeoffFlow = false;
+        _pendingAutomaticTakeoffFlow = false;
+        _taxiToRunwayArmed = false;
+        _pendingFuelPumpSequence = null;
+        StopFuelPumpSequenceTimer();
+        _pendingGsxEngineStartProcedure = null;
+        _pendingGsxAction = null;
+        _pendingGsxActionDeadlineUtc = null;
+        _pmdg777TaxiLightsCommandedThisFlow = false;
+        _pmdg777ControlQueue.Clear();
+        _pmdg777ControlQueueTimer?.Stop();
+        _pmdg777ControlQueueTimer?.Dispose();
+        _pmdg777ControlQueueTimer = null;
+        _pmdg777ControlQueueAction = null;
+        _pmdg777ControlState = default;
+        _pmdgNg3DataReady = false;
+        _pmdgNg3State = null;
+        _pmdg777SdkInitialized = false;
+        _pmdg777DataReady = false;
+        _pmdg777State = null;
+        _pmdg777ControlReady = false;
+        _pmdg777AdiruOnTimer?.Stop();
+        _pmdg777AdiruOnTimer?.Dispose();
+        _pmdg777AdiruOnTimer = null;
+        _procedureRunner.Cancel();
+        ClearCommandedAircraftState();
+        while (_commands.TryDequeue(out _))
+        {
+        }
+        if (clearAircraftState)
+        {
+            _replayTimer?.Stop();
+            _replayTimer?.Dispose();
+            _replayTimer = null;
+            _replayStates = Array.Empty<AircraftState>();
+            _replayIndex = 0;
+            _replayActive = false;
+            _state = null;
+        }
+        AppLog.Write(
+            $"Aircraft automation generation advanced to {generation}: {reason}.");
+    }
+
     private bool IsTaxiToHoldingPointTransition(AircraftState? state)
     {
         var nextFlow = state == null
@@ -9595,7 +9739,7 @@ internal sealed class CopilotService : Form
         _pendingAutomaticBeforeTakeoffFlow = false;
         AppendDashboardLog(
             "Runway holding point detected after taxi; starting Flow 6.");
-        _commands.Enqueue($"procedure start {definition.Id}");
+        QueueCommand($"procedure start {definition.Id}");
     }
 
     private void TryStartPendingTakeoffFlow()
@@ -9617,7 +9761,7 @@ internal sealed class CopilotService : Form
         _pendingAutomaticTakeoffFlow = false;
         AppendDashboardLog(
             "Completed Before Takeoff flow restored; arming Flow 7 before the takeoff roll.");
-        _commands.Enqueue($"procedure start {definition.Id}");
+        QueueCommand($"procedure start {definition.Id}");
     }
 
     private static bool IsPushbackUnderway(AircraftState state) =>
@@ -10123,16 +10267,11 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        var timer = new System.Windows.Forms.Timer { Interval = delayMs };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            TransmitGearEvent(eventId);
-            _nativePulseTimers.Remove(timer);
-            timer.Dispose();
-        };
-        _nativePulseTimers.Add(timer);
-        timer.Start();
+        ScheduleCockpitAction(
+            delayMs,
+            () => TransmitGearEvent(eventId),
+            $"PMDG gear fallback {eventId}",
+            AircraftVariant.Pmdg737800);
     }
 
     private void TransmitGearEvent(CopilotEvent eventId)
@@ -10256,30 +10395,20 @@ internal sealed class CopilotService : Form
 
     private void SchedulePmdgRotorBrakeSwitch(uint switchId, uint actionCode, int delayMs)
     {
-        var timer = new System.Windows.Forms.Timer { Interval = delayMs };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            SendPmdgRotorBrakeSwitch(switchId, actionCode);
-            _nativePulseTimers.Remove(timer);
-            timer.Dispose();
-        };
-        _nativePulseTimers.Add(timer);
-        timer.Start();
+        ScheduleCockpitAction(
+            delayMs,
+            () => SendPmdgRotorBrakeSwitch(switchId, actionCode),
+            $"PMDG rotor-brake switch {switchId}",
+            AircraftVariant.Pmdg737800);
     }
 
     private void SchedulePmdgNg3Control(uint sdkEventOffset, uint parameter, int delayMs)
     {
-        var timer = new System.Windows.Forms.Timer { Interval = delayMs };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            SendPmdgNg3Control(sdkEventOffset, parameter);
-            _nativePulseTimers.Remove(timer);
-            timer.Dispose();
-        };
-        _nativePulseTimers.Add(timer);
-        timer.Start();
+        ScheduleCockpitAction(
+            delayMs,
+            () => SendPmdgNg3Control(sdkEventOffset, parameter),
+            $"PMDG NG3 control {sdkEventOffset}",
+            AircraftVariant.Pmdg737800);
     }
 
     private void SetPmdgThreePositionSwitch(uint eventOffset, byte? currentPosition, int targetPosition)
@@ -10624,22 +10753,23 @@ internal sealed class CopilotService : Form
         });
 
         System.Windows.Forms.Timer? timer = null;
+        GenerationBoundCockpitAction? guardedAction = null;
         DateTime stepDeadlineUtc = DateTime.MinValue;
         bool stepStarted = false;
         bool stepSent = false;
         (ulong? Hash, double Position, string? CalculatorCode, string Label, int HoldMs, bool Repeat) currentStep = default;
         void ContinueSequence()
         {
-            if (_simConnect == null)
+            if (guardedAction?.IsCurrent != true
+                || _simConnect == null
+                || _state?.IsAsobo737Max8 != true)
             {
                 _asobo737MaxFireTestsInProgress = false;
-                timer?.Stop();
                 if (timer != null)
                 {
-                    _nativePulseTimers.Remove(timer);
-                    timer.Dispose();
+                    CompleteCockpitTimer(timer);
                 }
-                AppendDashboardLog("737 MAX fire tests stopped: simulator connection lost.");
+                AppendDashboardLog("737 MAX fire tests stopped: aircraft automation is no longer current.");
                 FinishOneShot(4);
                 return;
             }
@@ -10659,11 +10789,9 @@ internal sealed class CopilotService : Form
                     }
 
                     _asobo737MaxFireTestsInProgress = false;
-                    timer?.Stop();
                     if (timer != null)
                     {
-                        _nativePulseTimers.Remove(timer);
-                        timer.Dispose();
+                        CompleteCockpitTimer(timer);
                     }
                     AppendDashboardLog("737 MAX fire tests completed.");
                     FinishOneShot();
@@ -10700,11 +10828,9 @@ internal sealed class CopilotService : Form
             catch (Exception ex) when (ex is COMException or InvalidOperationException)
             {
                 _asobo737MaxFireTestsInProgress = false;
-                timer?.Stop();
                 if (timer != null)
                 {
-                    _nativePulseTimers.Remove(timer);
-                    timer.Dispose();
+                    CompleteCockpitTimer(timer);
                 }
                 AppendDashboardLog($"737 MAX fire tests failed: {ex.Message}");
                 FinishOneShot(4);
@@ -10731,7 +10857,7 @@ internal sealed class CopilotService : Form
             timer.Stop();
             ContinueSequence();
         };
-        _nativePulseTimers.Add(timer);
+        guardedAction = TrackCockpitTimer(timer);
         ContinueSequence();
     }
 
@@ -11328,7 +11454,7 @@ internal sealed class CopilotService : Form
             {
                 AppendDashboardLog(
                     $"{completedDefinition!.Name} complete; {nextFlow.Name} will start automatically.");
-                _commands.Enqueue($"procedure start {nextFlow.Id}");
+                QueueCommand($"procedure start {nextFlow.Id}");
             }
         }
     }
@@ -12326,24 +12452,21 @@ internal sealed class CopilotService : Form
 
     private void ScheduleInputEvent(ulong inputEventHash, double value, int delayMs)
     {
-        var timer = new System.Windows.Forms.Timer { Interval = delayMs };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            try
+        ScheduleCockpitAction(
+            delayMs,
+            () =>
             {
-                _simConnect?.SetInputEvent(inputEventHash, value);
-            }
-            catch (Exception ex) when (ex is COMException or InvalidOperationException)
-            {
-                AppLog.Write($"Scheduled InputEvent {inputEventHash}={value:0.###} failed: {ex.Message}");
-            }
-
-            _nativePulseTimers.Remove(timer);
-            timer.Dispose();
-        };
-        _nativePulseTimers.Add(timer);
-        timer.Start();
+                try
+                {
+                    _simConnect!.SetInputEvent(inputEventHash, value);
+                }
+                catch (Exception ex) when (ex is COMException or InvalidOperationException)
+                {
+                    AppLog.Write($"Scheduled InputEvent {inputEventHash}={value:0.###} failed: {ex.Message}");
+                }
+            },
+            $"InputEvent {inputEventHash}={value:0.###}",
+            _state?.Variant);
     }
 
     private void ScheduleSystemEvent(
@@ -12353,28 +12476,22 @@ internal sealed class CopilotService : Form
         int delayMs,
         string label)
     {
-        var timer = new System.Windows.Forms.Timer { Interval = delayMs };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            try
+        ScheduleCockpitAction(
+            delayMs,
+            () =>
             {
-                if (_simConnect != null)
+                try
                 {
                     TransmitSystemEvent(eventId, data0, data1);
                     AppLog.Write($"{label} system event sent.");
                 }
-            }
-            catch (Exception ex) when (ex is COMException or InvalidOperationException)
-            {
-                AppLog.Write($"Scheduled {label} system event failed: {ex.Message}");
-            }
-
-            _nativePulseTimers.Remove(timer);
-            timer.Dispose();
-        };
-        _nativePulseTimers.Add(timer);
-        timer.Start();
+                catch (Exception ex) when (ex is COMException or InvalidOperationException)
+                {
+                    AppLog.Write($"Scheduled {label} system event failed: {ex.Message}");
+                }
+            },
+            $"{label} system event",
+            _state?.Variant);
     }
 
     private void SetAsobo737MaxDualInputEvent(
@@ -12928,7 +13045,8 @@ internal sealed class CopilotService : Form
                     $"(L:{pressStates[index]}) ! (>L:{pressStates[index]})"));
         }
 
-        _pendingFuelPumpSequence = new PendingFuelPumpSequence(toggles, desiredOn);
+        _pendingFuelPumpSequence = new PendingFuelPumpSequence(
+            toggles, desiredOn, _automationRuntime.Current, _state!.Variant);
         _fuelPumpSequenceTimer?.Dispose();
         _fuelPumpSequenceTimer = new System.Windows.Forms.Timer { Interval = 1000 };
         _fuelPumpSequenceTimer.Tick += (_, _) => ExecuteNextFuelPumpToggle();
@@ -12982,7 +13100,8 @@ internal sealed class CopilotService : Form
                     desiredOn ? 0.0 : 1.0));
         }
 
-        _pendingFuelPumpSequence = new PendingFuelPumpSequence(toggles, desiredOn);
+        _pendingFuelPumpSequence = new PendingFuelPumpSequence(
+            toggles, desiredOn, _automationRuntime.Current, _state!.Variant);
         _fuelPumpSequenceTimer?.Dispose();
         _fuelPumpSequenceTimer = new System.Windows.Forms.Timer { Interval = 1000 };
         _fuelPumpSequenceTimer.Tick += (_, _) => ExecuteNextFuelPumpToggle();
@@ -13037,7 +13156,8 @@ internal sealed class CopilotService : Form
                     A320FuelPumpProfile.BuildToggleCommand(index)));
         }
 
-        _pendingFuelPumpSequence = new PendingFuelPumpSequence(toggles, desiredOn);
+        _pendingFuelPumpSequence = new PendingFuelPumpSequence(
+            toggles, desiredOn, _automationRuntime.Current, _state!.Variant);
         _fuelPumpSequenceTimer?.Dispose();
         _fuelPumpSequenceTimer = new System.Windows.Forms.Timer { Interval = 1000 };
         _fuelPumpSequenceTimer.Tick += (_, _) => ExecuteNextFuelPumpToggle();
@@ -13103,7 +13223,8 @@ internal sealed class CopilotService : Form
             toggles.Enqueue(new FuelPumpToggle(index + 1, A330FuelPumpInputEventHashes[index]));
         }
 
-        _pendingFuelPumpSequence = new PendingFuelPumpSequence(toggles, desiredOn);
+        _pendingFuelPumpSequence = new PendingFuelPumpSequence(
+            toggles, desiredOn, _automationRuntime.Current, _state!.Variant);
         _fuelPumpSequenceTimer?.Dispose();
         _fuelPumpSequenceTimer = new System.Windows.Forms.Timer { Interval = 1000 };
         _fuelPumpSequenceTimer.Tick += (_, _) => ExecuteNextFuelPumpToggle();
@@ -13154,7 +13275,8 @@ internal sealed class CopilotService : Form
             toggles.Enqueue(new FuelPumpToggle(index + 1, commands[index]));
         }
 
-        _pendingFuelPumpSequence = new PendingFuelPumpSequence(toggles, desiredOn);
+        _pendingFuelPumpSequence = new PendingFuelPumpSequence(
+            toggles, desiredOn, _automationRuntime.Current, _state!.Variant);
         _fuelPumpSequenceTimer?.Dispose();
         _fuelPumpSequenceTimer = new System.Windows.Forms.Timer { Interval = 1000 };
         _fuelPumpSequenceTimer.Tick += (_, _) => ExecuteNextFuelPumpToggle();
@@ -13166,6 +13288,19 @@ internal sealed class CopilotService : Form
         if (_pendingFuelPumpSequence == null)
         {
             StopFuelPumpSequenceTimer();
+            return;
+        }
+        if (_disposingOrDisposed
+            || _simConnect == null
+            || _state == null
+            || !_automationRuntime.IsCurrent(_pendingFuelPumpSequence.Generation)
+            || _state.Variant != _pendingFuelPumpSequence.ExpectedVariant)
+        {
+            AppLog.Write(
+                $"Discarded stale fuel-pump sequence from generation {_pendingFuelPumpSequence.Generation}; current generation is {_automationRuntime.Current}.");
+            _pendingFuelPumpSequence = null;
+            StopFuelPumpSequenceTimer();
+            FinishOneShot(4);
             return;
         }
 
@@ -13357,16 +13492,11 @@ internal sealed class CopilotService : Form
     private void SendInputEventPulse(ulong inputEventHash)
     {
         _simConnect!.SetInputEvent(inputEventHash, 1.0);
-        var releaseTimer = new System.Windows.Forms.Timer { Interval = 500 };
-        releaseTimer.Tick += (_, _) =>
-        {
-            releaseTimer.Stop();
-            _simConnect?.SetInputEvent(inputEventHash, 0.0);
-            _nativePulseTimers.Remove(releaseTimer);
-            releaseTimer.Dispose();
-        };
-        _nativePulseTimers.Add(releaseTimer);
-        releaseTimer.Start();
+        ScheduleCockpitAction(
+            500,
+            () => _simConnect!.SetInputEvent(inputEventHash, 0.0),
+            $"InputEvent pulse release {inputEventHash}",
+            _state?.Variant);
     }
 
     private void SetAdirsSelector(int selector, int position)
@@ -13773,32 +13903,30 @@ internal sealed class CopilotService : Form
         SetFireTestPressed(system, inputEventHash, true);
         AppendDashboardLog($"{name} button held for A330 fire test.");
 
-        var releaseTimer = new System.Windows.Forms.Timer { Interval = 5000 };
-        releaseTimer.Tick += (_, _) =>
-        {
-            releaseTimer.Stop();
-            SetFireTestPressed(system, inputEventHash, false);
-            switch (system)
+        ScheduleCockpitAction(
+            5000,
+            () =>
             {
-                case FireTestSystem.Apu: _apuFireTestCompleted = true; break;
-                case FireTestSystem.Engine1: _engine1FireTestCompleted = true; break;
-                case FireTestSystem.Engine2: _engine2FireTestCompleted = true; break;
-            }
+                SetFireTestPressed(system, inputEventHash, false);
+                switch (system)
+                {
+                    case FireTestSystem.Apu: _apuFireTestCompleted = true; break;
+                    case FireTestSystem.Engine1: _engine1FireTestCompleted = true; break;
+                    case FireTestSystem.Engine2: _engine2FireTestCompleted = true; break;
+                }
 
-            if (_state != null)
-            {
-                _state.ApuFireTestCompleted = _apuFireTestCompleted;
-                _state.Engine1FireTestCompleted = _engine1FireTestCompleted;
-                _state.Engine2FireTestCompleted = _engine2FireTestCompleted;
-            }
+                if (_state != null)
+                {
+                    _state.ApuFireTestCompleted = _apuFireTestCompleted;
+                    _state.Engine1FireTestCompleted = _engine1FireTestCompleted;
+                    _state.Engine2FireTestCompleted = _engine2FireTestCompleted;
+                }
 
-            _nativePulseTimers.Remove(releaseTimer);
-            releaseTimer.Dispose();
-            AppendDashboardLog($"{name} completed and released safely.");
-            FinishOneShot();
-        };
-        _nativePulseTimers.Add(releaseTimer);
-        releaseTimer.Start();
+                AppendDashboardLog($"{name} completed and released safely.");
+                FinishOneShot();
+            },
+            $"A330 {name} release",
+            AircraftVariant.IniBuildsA330);
     }
 
     private void StartFlyByWireFireTest(FireTestSystem system)
@@ -13822,33 +13950,32 @@ internal sealed class CopilotService : Form
         SetFlyByWireFireTestPressed(system, true);
         AppendDashboardLog($"{name} button held for FBW fire test.");
 
-        var releaseTimer = new System.Windows.Forms.Timer { Interval = 5000 };
-        releaseTimer.Tick += (_, _) =>
-        {
-            releaseTimer.Stop();
-            SetFlyByWireFireTestPressed(system, false);
-            switch (system)
+        var expectedVariant = _state.Variant;
+        ScheduleCockpitAction(
+            5000,
+            () =>
             {
-                case FireTestSystem.Apu: _apuFireTestCompleted = true; break;
-                case FireTestSystem.Engine1: _engine1FireTestCompleted = true; break;
-                case FireTestSystem.Engine2: _engine2FireTestCompleted = true; break;
-            }
+                SetFlyByWireFireTestPressed(system, false);
+                switch (system)
+                {
+                    case FireTestSystem.Apu: _apuFireTestCompleted = true; break;
+                    case FireTestSystem.Engine1: _engine1FireTestCompleted = true; break;
+                    case FireTestSystem.Engine2: _engine2FireTestCompleted = true; break;
+                }
 
-            if (_state != null)
-            {
-                _state.ApuFireTestCompleted = _apuFireTestCompleted;
-                _state.Engine1FireTestCompleted = _engine1FireTestCompleted;
-                _state.Engine2FireTestCompleted = _engine2FireTestCompleted;
-            }
+                if (_state != null)
+                {
+                    _state.ApuFireTestCompleted = _apuFireTestCompleted;
+                    _state.Engine1FireTestCompleted = _engine1FireTestCompleted;
+                    _state.Engine2FireTestCompleted = _engine2FireTestCompleted;
+                }
 
-            _pendingFlyByWireFireTest = null;
-            _nativePulseTimers.Remove(releaseTimer);
-            releaseTimer.Dispose();
-            AppendDashboardLog($"{name} completed and released safely.");
-            FinishOneShot();
-        };
-        _nativePulseTimers.Add(releaseTimer);
-        releaseTimer.Start();
+                _pendingFlyByWireFireTest = null;
+                AppendDashboardLog($"{name} completed and released safely.");
+                FinishOneShot();
+            },
+            $"FBW {name} release",
+            expectedVariant);
     }
 
     private void VerifyPendingFireTest()
@@ -15486,12 +15613,11 @@ internal sealed class CopilotService : Form
         {
             Interval = A330ControlProfile.FlapStepIntervalMilliseconds
         };
+        var guardedAction = TrackCockpitTimer(timer);
 
         void CompleteSequence()
         {
-            timer.Stop();
-            _nativePulseTimers.Remove(timer);
-            timer.Dispose();
+            CompleteCockpitTimer(timer);
             BeginNativeAction(
                 "Flaps CLEAN",
                 state => state.FlapsAtDetent(0),
@@ -15501,6 +15627,13 @@ internal sealed class CopilotService : Form
 
         void SendNextStep()
         {
+            if (!guardedAction.IsCurrent
+                || _simConnect == null
+                || _state?.IsIniBuildsA330 != true)
+            {
+                CompleteCockpitTimer(timer);
+                return;
+            }
             SendMobiFlightCommand(A330ControlProfile.FlapsRetractOneDetentCommand);
             SendMobiFlightCommand("MF.DummyCmd");
             remainingSteps--;
@@ -15511,7 +15644,6 @@ internal sealed class CopilotService : Form
         }
 
         timer.Tick += (_, _) => SendNextStep();
-        _nativePulseTimers.Add(timer);
         SendNextStep();
         if (remainingSteps > 0)
         {
@@ -15587,17 +15719,15 @@ internal sealed class CopilotService : Form
     {
         SendMobiFlightCommand($"MF.SimVars.Set.1 (>L:{commandLVar})");
         SendMobiFlightCommand("MF.DummyCmd");
-        var releaseTimer = new System.Windows.Forms.Timer { Interval = 500 };
-        releaseTimer.Tick += (_, _) =>
-        {
-            releaseTimer.Stop();
-            SendMobiFlightCommand($"MF.SimVars.Set.0 (>L:{commandLVar})");
-            SendMobiFlightCommand("MF.DummyCmd");
-            _nativePulseTimers.Remove(releaseTimer);
-            releaseTimer.Dispose();
-        };
-        _nativePulseTimers.Add(releaseTimer);
-        releaseTimer.Start();
+        ScheduleCockpitAction(
+            500,
+            () =>
+            {
+                SendMobiFlightCommand($"MF.SimVars.Set.0 (>L:{commandLVar})");
+                SendMobiFlightCommand("MF.DummyCmd");
+            },
+            $"native pulse release {commandLVar}",
+            _state?.Variant);
     }
 
     private bool ValidateNativeInputAction(
@@ -15701,7 +15831,6 @@ internal sealed class CopilotService : Form
             FinishOneShot(3);
             return;
         }
-
         if (_state.ExternalPowerOn == desiredOn)
         {
             Console.WriteLine($"External power is already {(desiredOn ? "ON" : "OFF")}.");
@@ -16756,7 +16885,7 @@ internal sealed class CopilotService : Form
 
             if (_flowList.SelectedItem is ProcedureListItem item)
             {
-                _commands.Enqueue($"procedure start {item.Definition.Id}");
+                QueueCommand($"procedure start {item.Definition.Id}");
             }
         };
         startPanel.Controls.Add(_startSelectedFlowButton, 0, 0);
@@ -16878,7 +17007,7 @@ internal sealed class CopilotService : Form
                 MessageBoxDefaultButton.Button2);
             if (result == DialogResult.Yes)
             {
-                _commands.Enqueue("procedure reset");
+                QueueCommand("procedure reset");
             }
         };
         procedureButtons.Controls.Add(resetProgressButton);
@@ -17519,23 +17648,22 @@ internal sealed class CopilotService : Form
         var remaining = TimeSpan.FromSeconds(30) - offDuration;
         if (remaining > TimeSpan.Zero)
         {
-            _pmdg777AdiruOnTimer?.Stop();
-            _pmdg777AdiruOnTimer?.Dispose();
-            _pmdg777AdiruOnTimer = new System.Windows.Forms.Timer
+            if (_pmdg777AdiruOnTimer != null)
             {
-                Interval = Math.Max(100, (int)Math.Ceiling(remaining.TotalMilliseconds))
-            };
-            _pmdg777AdiruOnTimer.Tick += (_, _) =>
-            {
-                _pmdg777AdiruOnTimer?.Stop();
-                _pmdg777AdiruOnTimer?.Dispose();
-                _pmdg777AdiruOnTimer = null;
-                SendPmdg777Control(
-                    Pmdg777ControlProfile.AdiruSwitchEvent,
-                    1,
-                    "ADIRU switch ON after 30 seconds OFF");
-            };
-            _pmdg777AdiruOnTimer.Start();
+                CompleteCockpitTimer(_pmdg777AdiruOnTimer);
+            }
+            _pmdg777AdiruOnTimer = ScheduleCockpitAction(
+                Math.Max(100, (int)Math.Ceiling(remaining.TotalMilliseconds)),
+                () =>
+                {
+                    _pmdg777AdiruOnTimer = null;
+                    SendPmdg777Control(
+                        Pmdg777ControlProfile.AdiruSwitchEvent,
+                        1,
+                        "ADIRU switch ON after 30 seconds OFF");
+                },
+                "PMDG 777 ADIRU ON",
+                AircraftVariant.Pmdg777300Er);
             AppLog.Write($"PMDG 777 ADIRU remains OFF for the SOP interval; ON command scheduled in {remaining.TotalSeconds:0.0} seconds.");
             return;
         }
@@ -17966,19 +18094,36 @@ internal sealed class CopilotService : Form
             _pmdg777ControlQueue.Enqueue(control);
         }
 
-        _pmdg777ControlQueueTimer?.Stop();
-        _pmdg777ControlQueueTimer?.Dispose();
+        if (_pmdg777ControlQueueTimer != null)
+        {
+            CompleteCockpitTimer(_pmdg777ControlQueueTimer);
+        }
         _pmdg777ControlQueueTimer = new System.Windows.Forms.Timer
         {
             Interval = Pmdg777ControlProfile.HumanControlIntervalMilliseconds
         };
         _pmdg777ControlQueueTimer.Tick += (_, _) => SendNextPmdg777QueuedControl();
+        _pmdg777ControlQueueAction = TrackCockpitTimer(_pmdg777ControlQueueTimer);
         _pmdg777ControlQueueTimer.Start();
         SendNextPmdg777QueuedControl();
     }
 
     private void SendNextPmdg777QueuedControl()
     {
+        if (_pmdg777ControlQueueAction?.IsCurrent != true
+            || _simConnect == null
+            || _state?.Variant != AircraftVariant.Pmdg777300Er)
+        {
+            _pmdg777ControlQueue.Clear();
+            if (_pmdg777ControlQueueTimer != null)
+            {
+                CompleteCockpitTimer(_pmdg777ControlQueueTimer);
+                _pmdg777ControlQueueTimer = null;
+            }
+            _pmdg777ControlQueueAction = null;
+            FinishOneShot(4);
+            return;
+        }
         if (_pmdg777ControlState.Event != 0)
         {
             return;
@@ -17986,9 +18131,13 @@ internal sealed class CopilotService : Form
 
         if (_pmdg777ControlQueue.Count == 0)
         {
-            _pmdg777ControlQueueTimer?.Stop();
-            _pmdg777ControlQueueTimer?.Dispose();
+            if (_pmdg777ControlQueueTimer != null)
+            {
+                CompleteCockpitTimer(_pmdg777ControlQueueTimer);
+            }
             _pmdg777ControlQueueTimer = null;
+            _pmdg777ControlQueueAction = null;
+            FinishOneShot();
             return;
         }
 
@@ -18084,19 +18233,11 @@ internal sealed class CopilotService : Form
 
     private void ScheduleA310BatteryAutoCommand(int batteryNumber, int delayMs)
     {
-        var timer = new System.Windows.Forms.Timer { Interval = delayMs };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            if (_state?.IsIniBuildsA310 == true)
-            {
-                SendA310BatteryAutoCommand(batteryNumber);
-            }
-            _nativePulseTimers.Remove(timer);
-            timer.Dispose();
-        };
-        _nativePulseTimers.Add(timer);
-        timer.Start();
+        ScheduleCockpitAction(
+            delayMs,
+            () => SendA310BatteryAutoCommand(batteryNumber),
+            $"A310 battery {batteryNumber} AUTO",
+            AircraftVariant.IniBuildsA310);
     }
 
     private void SetA310WipersAndWeatherRadarOff()
@@ -18701,21 +18842,16 @@ internal sealed class CopilotService : Form
 
     private void ScheduleA310CalculatorCode(string calculatorCode, string label, int delayMs)
     {
-        var timer = new System.Windows.Forms.Timer { Interval = delayMs };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            if (_state?.IsIniBuildsA310 == true)
+        ScheduleCockpitAction(
+            delayMs,
+            () =>
             {
                 SendMobiFlightCommand($"MF.SimVars.Set.{calculatorCode}");
                 SendMobiFlightCommand("MF.DummyCmd");
                 AppLog.Write($"A310 {label} command sent.");
-            }
-            _nativePulseTimers.Remove(timer);
-            timer.Dispose();
-        };
-        _nativePulseTimers.Add(timer);
-        timer.Start();
+            },
+            $"A310 {label}",
+            AircraftVariant.IniBuildsA310);
     }
 
     private void SendA310ControlValue(string stateName, int value, string label)
@@ -18732,19 +18868,11 @@ internal sealed class CopilotService : Form
         string label,
         int delayMs)
     {
-        var timer = new System.Windows.Forms.Timer { Interval = delayMs };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            if (_state?.IsIniBuildsA310 == true)
-            {
-                SendA310ControlValue(stateName, value, label);
-            }
-            _nativePulseTimers.Remove(timer);
-            timer.Dispose();
-        };
-        _nativePulseTimers.Add(timer);
-        timer.Start();
+        ScheduleCockpitAction(
+            delayMs,
+            () => SendA310ControlValue(stateName, value, label),
+            $"A310 {label}",
+            AircraftVariant.IniBuildsA310);
     }
 
     private void CaptureSayIntentionsArrivalStand(
@@ -19064,7 +19192,7 @@ internal sealed class CopilotService : Form
         }
         else
         {
-            _commands.Enqueue("procedure confirm");
+            QueueCommand("procedure confirm");
         }
     }
 
@@ -20098,7 +20226,7 @@ internal sealed class CopilotService : Form
             || _procedureRunner.Status is not (ProcedureStatus.WaitingForManualAction
                 or ProcedureStatus.WaitingForVerification))
         {
-            _commands.Enqueue("procedure confirm");
+            QueueCommand("procedure confirm");
             return;
         }
 
@@ -21060,7 +21188,7 @@ internal sealed class CopilotService : Form
         if (dialog.ShowDialog(this) == DialogResult.OK
             && list.SelectedItem is ProcedureListItem item)
         {
-            _commands.Enqueue($"debug jump {item.Definition.Id}");
+            QueueCommand($"debug jump {item.Definition.Id}");
         }
     }
 
@@ -21622,7 +21750,7 @@ internal sealed class CopilotService : Form
             AutoSize = true,
             Margin = new Padding(4)
         };
-        button.Click += (_, _) => _commands.Enqueue(command);
+        button.Click += (_, _) => QueueCommand(command);
         return button;
     }
 
@@ -21671,7 +21799,7 @@ internal sealed class CopilotService : Form
         button.FlatAppearance.MouseOverBackColor = mouseOverColor;
         if (bindCommand)
         {
-            button.Click += (_, _) => _commands.Enqueue(command);
+            button.Click += (_, _) => QueueCommand(command);
         }
         return button;
     }
@@ -22811,7 +22939,7 @@ internal sealed class CopilotService : Form
                     return;
                 }
 
-                _commands.Enqueue($"procedure start {recommendation.Id}");
+                QueueCommand($"procedure start {recommendation.Id}");
                 SendEfbCommandResult(
                     command.RequestId,
                     true,
@@ -22874,7 +23002,7 @@ internal sealed class CopilotService : Form
                     return;
                 }
 
-                _commands.Enqueue($"procedure start {definition.Id}");
+                QueueCommand($"procedure start {definition.Id}");
                 SendEfbCommandResult(
                     command.RequestId,
                     true,
@@ -22991,7 +23119,7 @@ internal sealed class CopilotService : Form
                         "The current flow cannot be paused.");
                     return;
                 }
-                _commands.Enqueue("procedure pause");
+                QueueCommand("procedure pause");
                 SendEfbCommandResult(command.RequestId, true, "Pausing flow.");
                 break;
             case "resume":
@@ -23003,7 +23131,7 @@ internal sealed class CopilotService : Form
                         "The current flow is not paused or failed.");
                     return;
                 }
-                _commands.Enqueue("procedure resume");
+                QueueCommand("procedure resume");
                 SendEfbCommandResult(command.RequestId, true, "Resuming flow.");
                 break;
             case "cancel":
@@ -23015,7 +23143,7 @@ internal sealed class CopilotService : Form
                         "No flow is active.");
                     return;
                 }
-                _commands.Enqueue("procedure cancel");
+                QueueCommand("procedure cancel");
                 SendEfbCommandResult(command.RequestId, true, "Cancelling flow.");
                 break;
         }
@@ -23385,7 +23513,8 @@ internal sealed class CopilotService : Form
             || _pendingFireTest != null
             || _pendingFlyByWireFireTest.HasValue
             || _asobo737MaxFireTestsInProgress
-            || _pendingFuelPumpSequence != null)
+            || _pendingFuelPumpSequence != null
+            || _automationRuntime.HasPendingActions)
         {
             return;
         }
@@ -23421,6 +23550,9 @@ internal sealed class CopilotService : Form
     {
         Console.WriteLine("MSFS closed the SimConnect session.");
         AppLog.Write("MSFS closed the SimConnect session.");
+        InvalidateAircraftAutomation(
+            "SimConnect session disconnected",
+            clearAircraftState: true);
         _gsxOwnsRemoteControl = false;
         _gsxRemoteControlActive = false;
         _pendingGsxAction = null;
@@ -23589,11 +23721,7 @@ internal sealed class CopilotService : Form
             }
             _sayIntentionsCancellation.Cancel();
             ReleaseGsxRemoteControl();
-            foreach (var pulseTimer in _nativePulseTimers.ToArray())
-            {
-                pulseTimer.Dispose();
-            }
-            _nativePulseTimers.Clear();
+            CancelDelayedCockpitActions();
             StopReplay();
             _aircraftIdentityLookupCancellation?.Cancel();
             _aircraftIdentityLookupCancellation?.Dispose();
@@ -23753,14 +23881,20 @@ internal sealed class CopilotService : Form
     {
         public PendingFuelPumpSequence(
             Queue<FuelPumpToggle> toggles,
-            bool desiredOn)
+            bool desiredOn,
+            long generation,
+            AircraftVariant expectedVariant)
         {
             Toggles = toggles;
             DesiredOn = desiredOn;
+            Generation = generation;
+            ExpectedVariant = expectedVariant;
         }
 
         public Queue<FuelPumpToggle> Toggles { get; }
         public bool DesiredOn { get; }
+        public long Generation { get; }
+        public AircraftVariant ExpectedVariant { get; }
     }
 
     private sealed class FuelPumpToggle

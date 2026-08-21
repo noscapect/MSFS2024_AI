@@ -17,16 +17,13 @@ verification throughout gate-to-gate operation.
   simulator updates, preventing false flap completion during climb and taxi-in.
 - Added the A32NX seat-belt-sign action above 10,000 feet and retained the
   approach/descent sign transition.
-- Added secure companion protocol, pairing, and Android companion foundations;
-  these remain development features and are not required by the desktop app.
-- Expanded regression coverage to 344 automated desktop tests.
+- Expanded regression coverage to 437 automated desktop tests.
 
 ## Compatibility
 
-The desktop app works without the EFB companion and without GSX Pro,
-SayIntentions, SimBrief, or the development Android companion. Every
-integration remains optional and normal flows continue with any combination
-of them enabled or unavailable.
+The desktop app works without the EFB companion, GSX Pro, SayIntentions, or
+SimBrief. Every integration remains optional and normal flows continue with
+any combination of them enabled or unavailable.
 
 The iniBuilds A310-300 implementation is complete for its current scope. The
 Asobo 737 MAX 8 profile remains experimental. This is beta assistance

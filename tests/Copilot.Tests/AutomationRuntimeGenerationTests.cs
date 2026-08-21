@@ -10,9 +10,13 @@ public sealed class AutomationRuntimeGenerationTests
     public void CurrentGenerationCommandIsAccepted()
     {
         var runtime = new AutomationRuntimeGeneration(10);
+        var earliestCreatedUtc = DateTime.UtcNow;
         var command = runtime.CreateCommand("battery-1 on");
+        var latestCreatedUtc = DateTime.UtcNow;
 
         Assert.AreEqual(10L, command.Generation);
+        Assert.IsTrue(command.CreatedUtc >= earliestCreatedUtc);
+        Assert.IsTrue(command.CreatedUtc <= latestCreatedUtc);
         Assert.IsTrue(runtime.IsCurrent(command.Generation));
     }
 

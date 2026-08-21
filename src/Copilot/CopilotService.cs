@@ -9,7 +9,6 @@ using Msfs2024Ai.Copilot.AircraftAdapters.Pmdg777;
 using Msfs2024Ai.Copilot.Automation;
 using Msfs2024Ai.Copilot.AircraftIdentity;
 using Msfs2024Ai.Copilot.Checklists;
-using Msfs2024Ai.Copilot.Companion;
 using Msfs2024Ai.Copilot.Controls;
 using Msfs2024Ai.Copilot.Diagnostics;
 using Msfs2024Ai.Copilot.Domain;
@@ -22,12 +21,9 @@ using Msfs2024Ai.Copilot.SayIntentions;
 using Msfs2024Ai.Copilot.SimBrief;
 using Msfs2024Ai.Copilot.Telemetry;
 using Msfs2024Ai.Copilot.Voice;
-using QRCoder;
-using System.Collections.Concurrent;
 using System.Collections.Generic;
 using System.Net;
 using System.Net.Http;
-using System.Net.Sockets;
 using System.Reflection;
 using System.Runtime.InteropServices;
 using System.Threading;
@@ -55,19 +51,13 @@ internal sealed class CopilotService : Form
     private const string MobiFlightRuntimeClientName = "MSFS2024_AI_Copilot_v27";
     private readonly Dictionary<EfbCommBusEvent, List<string>> _efbCommBusChunks =
         new();
-    private readonly CompanionBridge _companionBridge = new();
-    private readonly HashSet<string> _companionRequestIds =
-        new(StringComparer.Ordinal);
-    private RelayCompanionClient? _relayCompanionClient;
-    private LocalCompanionServer? _localCompanionServer;
     private DateTime _lastEfbStateRequestResponseUtc = DateTime.MinValue;
     private DateTime _lastEfbStatePublishedUtc = DateTime.MinValue;
     private readonly string? _oneShotCommand;
     private readonly bool _showUi;
     private readonly CopilotSettings _settings;
     private readonly ProcedureSession _procedureSession;
-    private readonly AutomationRuntimeGeneration _automationRuntime = new();
-    private readonly ConcurrentQueue<QueuedCockpitCommand> _commands = new();
+    private readonly CockpitAutomationScheduler _automation;
     private readonly ProcedureRunner _procedureRunner;
     private VoiceCalloutQueue? _voiceCalloutQueue;
     private readonly SayIntentionsClient _sayIntentionsClient = new();
@@ -152,8 +142,6 @@ internal sealed class CopilotService : Form
     private System.Windows.Forms.Timer? _fuelPumpSequenceTimer;
     private System.Windows.Forms.Timer? _commandTimer;
     private System.Windows.Forms.Timer? _a330InputEventPollingTimer;
-    private readonly Dictionary<System.Windows.Forms.Timer, GenerationBoundCockpitAction>
-        _nativePulseTimers = new();
     private bool _mobiFlightReady;
     private bool _mobiFlightRuntimeReady;
     private DateTime? _mobiFlightRuntimeInitializedUtc;
@@ -1535,6 +1523,13 @@ internal sealed class CopilotService : Form
         _settings = SettingsStore.Load();
         _flightTelemetryStore = new FlightTelemetryStore();
         _procedureSession = ProcedureSessionStore.Load();
+        _automation = new CockpitAutomationScheduler(
+            runtimeAvailable: () => !_disposingOrDisposed
+                                    && _simConnect != null
+                                    && _state != null,
+            currentVariant: () => _state?.Variant,
+            log: AppLog.Write,
+            delayedActionCompleted: () => FinishOneShot());
         _simBriefFlightPlan = _procedureSession.ActiveFlightPlan;
         if (SimBriefOperationalContext.ApplyTakeoffSettings(
                 _procedureSession.ActiveFlightPlan,
@@ -1554,13 +1549,12 @@ internal sealed class CopilotService : Form
                     AppendDashboardLog($"Replay action: {command}");
                     return;
                 }
-                QueueCommand(command);
+                _automation.Enqueue(command);
             },
             () => _settings.AutomationPolicy);
         _procedureRunner.Changed += OnProcedureChanged;
         _procedureRunner.StepCompleted += SpeakProcedureCallout;
         _procedureRunner.StepCompleted += OnProcedureStepCompleted;
-        _companionBridge.CommandReceived += DispatchCompanionCommand;
         try
         {
             _voiceCalloutQueue = new VoiceCalloutQueue();
@@ -1591,7 +1585,6 @@ internal sealed class CopilotService : Form
 
     public void Connect()
     {
-        StartDevelopmentCompanionRelay();
         if (_simConnect != null)
         {
             return;
@@ -2518,87 +2511,6 @@ internal sealed class CopilotService : Form
                 : "GSX menu cancellation transmitted.");
     }
 
-    private void StartDevelopmentCompanionRelay()
-    {
-        if (_relayCompanionClient != null)
-        {
-            return;
-        }
-        RelayCompanionOptions? options;
-        if (!RelayCompanionOptions.TryFromEnvironment(
-                out options,
-                out var error))
-        {
-            if (!string.IsNullOrWhiteSpace(error))
-            {
-                AppLog.Write("Android companion relay configuration rejected: " + error);
-                return;
-            }
-            if (!CompanionPairingStore.TryLoad(out var pairing)
-                || pairing == null
-                || !RelayCompanionOptions.TryFromPairing(
-                    pairing,
-                    out options,
-                    out error))
-            {
-                if (!string.IsNullOrWhiteSpace(error))
-                {
-                    AppLog.Write("Saved Android companion pairing rejected: " + error);
-                }
-                return;
-            }
-        }
-
-        _ = Handle;
-        _relayCompanionClient = new RelayCompanionClient(
-            options!,
-            _companionBridge);
-        try
-        {
-            _localCompanionServer = new LocalCompanionServer(
-                options!,
-                _companionBridge);
-        }
-        catch (SocketException exception)
-        {
-            AppLog.Write(
-                "Android companion LAN listener unavailable: "
-                + exception.Message);
-        }
-        AppLog.Write(
-            "Android companion transports enabled. Remote controls remain pairing-gated.");
-    }
-
-    private void RestartCompanionRelay()
-    {
-        _relayCompanionClient?.Dispose();
-        _relayCompanionClient = null;
-        _localCompanionServer?.Dispose();
-        _localCompanionServer = null;
-        StartDevelopmentCompanionRelay();
-    }
-
-    private void DispatchCompanionCommand(string efbPayload)
-    {
-        if (IsDisposed || Disposing || !IsHandleCreated)
-        {
-            return;
-        }
-        if (InvokeRequired)
-        {
-            BeginInvoke(new Action(() => DispatchCompanionCommand(efbPayload)));
-            return;
-        }
-        if (EfbCompanionProtocol.TryParseCommand(
-                efbPayload,
-                out var command,
-                out _))
-        {
-            _companionRequestIds.Add(command.RequestId);
-        }
-        HandleEfbCommand(efbPayload);
-    }
-
     private void RequestGsxMenuChoice(
         int choice,
         string label,
@@ -2853,7 +2765,7 @@ internal sealed class CopilotService : Form
         }
         UpdateGsxStatus(true);
 
-        ScheduleCockpitAction(
+        _automation.Schedule(
             500,
             () => SetGsxValue(Definition.GsxMenuOpen, 1),
             "GSX menu request",
@@ -8018,7 +7930,7 @@ internal sealed class CopilotService : Form
                     return;
                 }
 
-                QueueCommand(line);
+                _automation.Enqueue(line);
             }
         })
         {
@@ -8031,27 +7943,14 @@ internal sealed class CopilotService : Form
     private void DrainCommands()
     {
         TryExecuteOneShotCommand();
-        while (_commands.TryDequeue(out var queuedCommand))
+        _automation.Drain(command =>
         {
-            if (_disposingOrDisposed || _simConnect == null)
-            {
-                AppLog.Write(
-                    $"Discarded cockpit command because simulator automation is unavailable: {queuedCommand.Command}.");
-                continue;
-            }
-            if (!_automationRuntime.IsCurrent(queuedCommand.Generation))
-            {
-                AppLog.Write(
-                    $"Discarded stale cockpit command from generation {queuedCommand.Generation}; current generation is {_automationRuntime.Current}.");
-                continue;
-            }
-
-            ExecuteCommand(queuedCommand.Command);
+            ExecuteCommand(command);
             if (_oneShotCommand == null && !IsDisposed)
             {
                 Console.Write("> ");
             }
-        }
+        });
     }
 
     private void ExecuteCommand(string command)
@@ -9309,79 +9208,15 @@ internal sealed class CopilotService : Form
         return true;
     }
 
-    private void QueueCommand(string command) =>
-        _commands.Enqueue(_automationRuntime.CreateCommand(command));
-
-    private System.Windows.Forms.Timer ScheduleCockpitAction(
-        int delayMs,
-        Action action,
-        string label,
-        AircraftVariant? expectedVariant = null)
-    {
-        var guardedAction = _automationRuntime.CaptureDelayedAction();
-        var timer = new System.Windows.Forms.Timer { Interval = delayMs };
-        timer.Tick += (_, _) =>
-        {
-            timer.Stop();
-            _nativePulseTimers.Remove(timer);
-            timer.Dispose();
-            var available = !_disposingOrDisposed
-                            && _simConnect != null
-                            && _state != null
-                            && (!expectedVariant.HasValue
-                                || _state.Variant == expectedVariant.Value);
-            if (!guardedAction.TryExecute(available, action))
-            {
-                AppLog.Write(
-                    $"Discarded stale delayed cockpit action '{label}' from generation {guardedAction.Generation}; current generation is {_automationRuntime.Current}.");
-            }
-            FinishOneShot();
-        };
-        _nativePulseTimers.Add(timer, guardedAction);
-        timer.Start();
-        return timer;
-    }
-
-    private GenerationBoundCockpitAction TrackCockpitTimer(
-        System.Windows.Forms.Timer timer)
-    {
-        var guardedAction = _automationRuntime.CaptureDelayedAction();
-        _nativePulseTimers.Add(timer, guardedAction);
-        return guardedAction;
-    }
-
-    private void CompleteCockpitTimer(System.Windows.Forms.Timer timer)
-    {
-        timer.Stop();
-        if (_nativePulseTimers.TryGetValue(timer, out var guardedAction))
-        {
-            _nativePulseTimers.Remove(timer);
-            guardedAction.Dispose();
-        }
-        timer.Dispose();
-    }
-
-    private void CancelDelayedCockpitActions()
-    {
-        foreach (var pair in _nativePulseTimers.ToArray())
-        {
-            pair.Key.Stop();
-            pair.Key.Dispose();
-            pair.Value.Dispose();
-        }
-        _nativePulseTimers.Clear();
-    }
-
     private void InvalidateAircraftAutomation(
         AutomationInvalidationReason reason,
         string? detail = null)
     {
         var policy = AutomationInvalidationPolicy.For(reason);
-        var generation = _automationRuntime.Advance();
+        var generation = _automation.InvalidateLiveWork();
 
         // Live connection, cockpit-command, and aircraft SDK state never
         // survives a generation boundary.
-        CancelDelayedCockpitActions();
         _pendingProcedure = null;
         _pendingBeaconProcedure = null;
         _pendingNavLogoSelectorProcedure = null;
@@ -9422,9 +9257,6 @@ internal sealed class CopilotService : Form
         });
         policy.ApplyToProcedure(_procedureRunner);
         ClearCommandedAircraftState();
-        while (_commands.TryDequeue(out _))
-        {
-        }
         _replayTimer?.Stop();
         _replayTimer?.Dispose();
         _replayTimer = null;
@@ -9755,7 +9587,7 @@ internal sealed class CopilotService : Form
         _pendingAutomaticBeforeTakeoffFlow = false;
         AppendDashboardLog(
             "Runway holding point detected after taxi; starting Flow 6.");
-        QueueCommand($"procedure start {definition.Id}");
+        _automation.Enqueue($"procedure start {definition.Id}");
     }
 
     private void TryStartPendingTakeoffFlow()
@@ -9777,7 +9609,7 @@ internal sealed class CopilotService : Form
         _pendingAutomaticTakeoffFlow = false;
         AppendDashboardLog(
             "Completed Before Takeoff flow restored; arming Flow 7 before the takeoff roll.");
-        QueueCommand($"procedure start {definition.Id}");
+        _automation.Enqueue($"procedure start {definition.Id}");
     }
 
     private static bool IsPushbackUnderway(AircraftState state) =>
@@ -10283,7 +10115,7 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        ScheduleCockpitAction(
+        _automation.Schedule(
             delayMs,
             () => TransmitGearEvent(eventId),
             $"PMDG gear fallback {eventId}",
@@ -10411,7 +10243,7 @@ internal sealed class CopilotService : Form
 
     private void SchedulePmdgRotorBrakeSwitch(uint switchId, uint actionCode, int delayMs)
     {
-        ScheduleCockpitAction(
+        _automation.Schedule(
             delayMs,
             () => SendPmdgRotorBrakeSwitch(switchId, actionCode),
             $"PMDG rotor-brake switch {switchId}",
@@ -10420,7 +10252,7 @@ internal sealed class CopilotService : Form
 
     private void SchedulePmdgNg3Control(uint sdkEventOffset, uint parameter, int delayMs)
     {
-        ScheduleCockpitAction(
+        _automation.Schedule(
             delayMs,
             () => SendPmdgNg3Control(sdkEventOffset, parameter),
             $"PMDG NG3 control {sdkEventOffset}",
@@ -10783,7 +10615,7 @@ internal sealed class CopilotService : Form
                 _asobo737MaxFireTestsInProgress = false;
                 if (timer != null)
                 {
-                    CompleteCockpitTimer(timer);
+                    _automation.Complete(timer);
                 }
                 AppendDashboardLog("737 MAX fire tests stopped: aircraft automation is no longer current.");
                 FinishOneShot(4);
@@ -10807,7 +10639,7 @@ internal sealed class CopilotService : Form
                     _asobo737MaxFireTestsInProgress = false;
                     if (timer != null)
                     {
-                        CompleteCockpitTimer(timer);
+                        _automation.Complete(timer);
                     }
                     AppendDashboardLog("737 MAX fire tests completed.");
                     FinishOneShot();
@@ -10846,7 +10678,7 @@ internal sealed class CopilotService : Form
                 _asobo737MaxFireTestsInProgress = false;
                 if (timer != null)
                 {
-                    CompleteCockpitTimer(timer);
+                    _automation.Complete(timer);
                 }
                 AppendDashboardLog($"737 MAX fire tests failed: {ex.Message}");
                 FinishOneShot(4);
@@ -10873,7 +10705,7 @@ internal sealed class CopilotService : Form
             timer.Stop();
             ContinueSequence();
         };
-        guardedAction = TrackCockpitTimer(timer);
+        guardedAction = _automation.Track(timer);
         ContinueSequence();
     }
 
@@ -11470,7 +11302,7 @@ internal sealed class CopilotService : Form
             {
                 AppendDashboardLog(
                     $"{completedDefinition!.Name} complete; {nextFlow.Name} will start automatically.");
-                QueueCommand($"procedure start {nextFlow.Id}");
+                _automation.Enqueue($"procedure start {nextFlow.Id}");
             }
         }
     }
@@ -12468,7 +12300,7 @@ internal sealed class CopilotService : Form
 
     private void ScheduleInputEvent(ulong inputEventHash, double value, int delayMs)
     {
-        ScheduleCockpitAction(
+        _automation.Schedule(
             delayMs,
             () =>
             {
@@ -12492,7 +12324,7 @@ internal sealed class CopilotService : Form
         int delayMs,
         string label)
     {
-        ScheduleCockpitAction(
+        _automation.Schedule(
             delayMs,
             () =>
             {
@@ -13062,7 +12894,7 @@ internal sealed class CopilotService : Form
         }
 
         _pendingFuelPumpSequence = new PendingFuelPumpSequence(
-            toggles, desiredOn, _automationRuntime.Current, _state!.Variant);
+            toggles, desiredOn, _automation.CurrentGeneration, _state!.Variant);
         _fuelPumpSequenceTimer?.Dispose();
         _fuelPumpSequenceTimer = new System.Windows.Forms.Timer { Interval = 1000 };
         _fuelPumpSequenceTimer.Tick += (_, _) => ExecuteNextFuelPumpToggle();
@@ -13117,7 +12949,7 @@ internal sealed class CopilotService : Form
         }
 
         _pendingFuelPumpSequence = new PendingFuelPumpSequence(
-            toggles, desiredOn, _automationRuntime.Current, _state!.Variant);
+            toggles, desiredOn, _automation.CurrentGeneration, _state!.Variant);
         _fuelPumpSequenceTimer?.Dispose();
         _fuelPumpSequenceTimer = new System.Windows.Forms.Timer { Interval = 1000 };
         _fuelPumpSequenceTimer.Tick += (_, _) => ExecuteNextFuelPumpToggle();
@@ -13173,7 +13005,7 @@ internal sealed class CopilotService : Form
         }
 
         _pendingFuelPumpSequence = new PendingFuelPumpSequence(
-            toggles, desiredOn, _automationRuntime.Current, _state!.Variant);
+            toggles, desiredOn, _automation.CurrentGeneration, _state!.Variant);
         _fuelPumpSequenceTimer?.Dispose();
         _fuelPumpSequenceTimer = new System.Windows.Forms.Timer { Interval = 1000 };
         _fuelPumpSequenceTimer.Tick += (_, _) => ExecuteNextFuelPumpToggle();
@@ -13240,7 +13072,7 @@ internal sealed class CopilotService : Form
         }
 
         _pendingFuelPumpSequence = new PendingFuelPumpSequence(
-            toggles, desiredOn, _automationRuntime.Current, _state!.Variant);
+            toggles, desiredOn, _automation.CurrentGeneration, _state!.Variant);
         _fuelPumpSequenceTimer?.Dispose();
         _fuelPumpSequenceTimer = new System.Windows.Forms.Timer { Interval = 1000 };
         _fuelPumpSequenceTimer.Tick += (_, _) => ExecuteNextFuelPumpToggle();
@@ -13292,7 +13124,7 @@ internal sealed class CopilotService : Form
         }
 
         _pendingFuelPumpSequence = new PendingFuelPumpSequence(
-            toggles, desiredOn, _automationRuntime.Current, _state!.Variant);
+            toggles, desiredOn, _automation.CurrentGeneration, _state!.Variant);
         _fuelPumpSequenceTimer?.Dispose();
         _fuelPumpSequenceTimer = new System.Windows.Forms.Timer { Interval = 1000 };
         _fuelPumpSequenceTimer.Tick += (_, _) => ExecuteNextFuelPumpToggle();
@@ -13309,11 +13141,11 @@ internal sealed class CopilotService : Form
         if (_disposingOrDisposed
             || _simConnect == null
             || _state == null
-            || !_automationRuntime.IsCurrent(_pendingFuelPumpSequence.Generation)
+            || !_automation.IsCurrent(_pendingFuelPumpSequence.Generation)
             || _state.Variant != _pendingFuelPumpSequence.ExpectedVariant)
         {
             AppLog.Write(
-                $"Discarded stale fuel-pump sequence from generation {_pendingFuelPumpSequence.Generation}; current generation is {_automationRuntime.Current}.");
+                $"Discarded stale fuel-pump sequence from generation {_pendingFuelPumpSequence.Generation}; current generation is {_automation.CurrentGeneration}.");
             _pendingFuelPumpSequence = null;
             StopFuelPumpSequenceTimer();
             FinishOneShot(4);
@@ -13508,7 +13340,7 @@ internal sealed class CopilotService : Form
     private void SendInputEventPulse(ulong inputEventHash)
     {
         _simConnect!.SetInputEvent(inputEventHash, 1.0);
-        ScheduleCockpitAction(
+        _automation.Schedule(
             500,
             () => _simConnect!.SetInputEvent(inputEventHash, 0.0),
             $"InputEvent pulse release {inputEventHash}",
@@ -13919,7 +13751,7 @@ internal sealed class CopilotService : Form
         SetFireTestPressed(system, inputEventHash, true);
         AppendDashboardLog($"{name} button held for A330 fire test.");
 
-        ScheduleCockpitAction(
+        _automation.Schedule(
             5000,
             () =>
             {
@@ -13967,7 +13799,7 @@ internal sealed class CopilotService : Form
         AppendDashboardLog($"{name} button held for FBW fire test.");
 
         var expectedVariant = _state.Variant;
-        ScheduleCockpitAction(
+        _automation.Schedule(
             5000,
             () =>
             {
@@ -15629,11 +15461,11 @@ internal sealed class CopilotService : Form
         {
             Interval = A330ControlProfile.FlapStepIntervalMilliseconds
         };
-        var guardedAction = TrackCockpitTimer(timer);
+        var guardedAction = _automation.Track(timer);
 
         void CompleteSequence()
         {
-            CompleteCockpitTimer(timer);
+            _automation.Complete(timer);
             BeginNativeAction(
                 "Flaps CLEAN",
                 state => state.FlapsAtDetent(0),
@@ -15647,7 +15479,7 @@ internal sealed class CopilotService : Form
                 || _simConnect == null
                 || _state?.IsIniBuildsA330 != true)
             {
-                CompleteCockpitTimer(timer);
+                _automation.Complete(timer);
                 return;
             }
             SendMobiFlightCommand(A330ControlProfile.FlapsRetractOneDetentCommand);
@@ -15735,7 +15567,7 @@ internal sealed class CopilotService : Form
     {
         SendMobiFlightCommand($"MF.SimVars.Set.1 (>L:{commandLVar})");
         SendMobiFlightCommand("MF.DummyCmd");
-        ScheduleCockpitAction(
+        _automation.Schedule(
             500,
             () =>
             {
@@ -16901,7 +16733,7 @@ internal sealed class CopilotService : Form
 
             if (_flowList.SelectedItem is ProcedureListItem item)
             {
-                QueueCommand($"procedure start {item.Definition.Id}");
+                _automation.Enqueue($"procedure start {item.Definition.Id}");
             }
         };
         startPanel.Controls.Add(_startSelectedFlowButton, 0, 0);
@@ -17023,7 +16855,7 @@ internal sealed class CopilotService : Form
                 MessageBoxDefaultButton.Button2);
             if (result == DialogResult.Yes)
             {
-                QueueCommand("procedure reset");
+                _automation.Enqueue("procedure reset");
             }
         };
         procedureButtons.Controls.Add(resetProgressButton);
@@ -17666,9 +17498,9 @@ internal sealed class CopilotService : Form
         {
             if (_pmdg777AdiruOnTimer != null)
             {
-                CompleteCockpitTimer(_pmdg777AdiruOnTimer);
+                _automation.Complete(_pmdg777AdiruOnTimer);
             }
-            _pmdg777AdiruOnTimer = ScheduleCockpitAction(
+            _pmdg777AdiruOnTimer = _automation.Schedule(
                 Math.Max(100, (int)Math.Ceiling(remaining.TotalMilliseconds)),
                 () =>
                 {
@@ -18112,14 +17944,14 @@ internal sealed class CopilotService : Form
 
         if (_pmdg777ControlQueueTimer != null)
         {
-            CompleteCockpitTimer(_pmdg777ControlQueueTimer);
+            _automation.Complete(_pmdg777ControlQueueTimer);
         }
         _pmdg777ControlQueueTimer = new System.Windows.Forms.Timer
         {
             Interval = Pmdg777ControlProfile.HumanControlIntervalMilliseconds
         };
         _pmdg777ControlQueueTimer.Tick += (_, _) => SendNextPmdg777QueuedControl();
-        _pmdg777ControlQueueAction = TrackCockpitTimer(_pmdg777ControlQueueTimer);
+        _pmdg777ControlQueueAction = _automation.Track(_pmdg777ControlQueueTimer);
         _pmdg777ControlQueueTimer.Start();
         SendNextPmdg777QueuedControl();
     }
@@ -18133,7 +17965,7 @@ internal sealed class CopilotService : Form
             _pmdg777ControlQueue.Clear();
             if (_pmdg777ControlQueueTimer != null)
             {
-                CompleteCockpitTimer(_pmdg777ControlQueueTimer);
+                _automation.Complete(_pmdg777ControlQueueTimer);
                 _pmdg777ControlQueueTimer = null;
             }
             _pmdg777ControlQueueAction = null;
@@ -18149,7 +17981,7 @@ internal sealed class CopilotService : Form
         {
             if (_pmdg777ControlQueueTimer != null)
             {
-                CompleteCockpitTimer(_pmdg777ControlQueueTimer);
+                _automation.Complete(_pmdg777ControlQueueTimer);
             }
             _pmdg777ControlQueueTimer = null;
             _pmdg777ControlQueueAction = null;
@@ -18249,7 +18081,7 @@ internal sealed class CopilotService : Form
 
     private void ScheduleA310BatteryAutoCommand(int batteryNumber, int delayMs)
     {
-        ScheduleCockpitAction(
+        _automation.Schedule(
             delayMs,
             () => SendA310BatteryAutoCommand(batteryNumber),
             $"A310 battery {batteryNumber} AUTO",
@@ -18858,7 +18690,7 @@ internal sealed class CopilotService : Form
 
     private void ScheduleA310CalculatorCode(string calculatorCode, string label, int delayMs)
     {
-        ScheduleCockpitAction(
+        _automation.Schedule(
             delayMs,
             () =>
             {
@@ -18884,7 +18716,7 @@ internal sealed class CopilotService : Form
         string label,
         int delayMs)
     {
-        ScheduleCockpitAction(
+        _automation.Schedule(
             delayMs,
             () => SendA310ControlValue(stateName, value, label),
             $"A310 {label}",
@@ -19208,7 +19040,7 @@ internal sealed class CopilotService : Form
         }
         else
         {
-            QueueCommand("procedure confirm");
+            _automation.Enqueue("procedure confirm");
         }
     }
 
@@ -19744,13 +19576,12 @@ internal sealed class CopilotService : Form
         {
             Dock = DockStyle.Fill,
             ColumnCount = 1,
-            RowCount = 4,
+            RowCount = 3,
             Margin = new Padding(0, 8, 0, 8)
         };
-        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
-        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
-        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
-        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 25));
+        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 33.333F));
+        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 33.333F));
+        cards.RowStyles.Add(new RowStyle(SizeType.Percent, 33.334F));
         layout.Controls.Add(cards, 0, 1);
 
         var simBriefCard = new GroupBox
@@ -19829,33 +19660,6 @@ internal sealed class CopilotService : Form
         gsxCard.Controls.Add(gsxCardLayout);
         cards.Controls.Add(gsxCard, 0, 2);
 
-        var androidCard = new GroupBox
-        {
-            Text = "Android companion",
-            Dock = DockStyle.Fill,
-            Padding = new Padding(12),
-            Margin = new Padding(0, 7, 0, 0)
-        };
-        var androidCardLayout = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            ColumnCount = 2,
-            RowCount = 1
-        };
-        androidCardLayout.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        androidCardLayout.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        var androidStatus = NewDashboardLabel(AndroidCompanionStatusText());
-        androidStatus.MaximumSize = new System.Drawing.Size(470, 0);
-        var manageAndroid = new Button
-        {
-            Text = "Manage Android",
-            AutoSize = true
-        };
-        androidCardLayout.Controls.Add(androidStatus, 0, 0);
-        androidCardLayout.Controls.Add(manageAndroid, 1, 0);
-        androidCard.Controls.Add(androidCardLayout);
-        cards.Controls.Add(androidCard, 0, 3);
-
         void RefreshStatuses()
         {
             simBriefStatus.Text = SimBriefStatusText();
@@ -19872,10 +19676,6 @@ internal sealed class CopilotService : Form
                 GsxStatusText() + Environment.NewLine + GsxConfigurationSummary();
             gsxStatus.ForeColor = _gsxStatusLabel?.ForeColor
                 ?? System.Drawing.Color.DimGray;
-            androidStatus.Text = AndroidCompanionStatusText();
-            androidStatus.ForeColor = CompanionPairingStore.TryLoad(out _)
-                ? System.Drawing.Color.DarkGoldenrod
-                : System.Drawing.Color.DimGray;
         }
 
         manageSimBrief.Click += (_, _) =>
@@ -19893,12 +19693,6 @@ internal sealed class CopilotService : Form
             ShowGsxDialog(dialog);
             RefreshStatuses();
         };
-        manageAndroid.Click += (_, _) =>
-        {
-            ShowAndroidCompanionDialog(dialog);
-            RefreshStatuses();
-        };
-
         var footer = new FlowLayoutPanel
         {
             Dock = DockStyle.Fill,
@@ -20242,7 +20036,7 @@ internal sealed class CopilotService : Form
             || _procedureRunner.Status is not (ProcedureStatus.WaitingForManualAction
                 or ProcedureStatus.WaitingForVerification))
         {
-            QueueCommand("procedure confirm");
+            _automation.Enqueue("procedure confirm");
             return;
         }
 
@@ -20916,202 +20710,6 @@ internal sealed class CopilotService : Form
         dialog.ShowDialog(this);
     }
 
-    private string AndroidCompanionStatusText() =>
-        CompanionPairingStore.TryLoad(out var pairing) && pairing != null
-            ? "Paired for encrypted LAN/relay access (view-only development mode)."
-            : "Not paired. Native Android companion is optional.";
-
-    private void ShowAndroidCompanionDialog(IWin32Window? owner = null)
-    {
-        CompanionPairingStore.TryLoad(out var pairing);
-        using var dialog = new Form
-        {
-            Text = "Android companion pairing",
-            Width = 760,
-            Height = 720,
-            MinimumSize = new System.Drawing.Size(680, 640),
-            StartPosition = FormStartPosition.CenterParent,
-            FormBorderStyle = FormBorderStyle.Sizable,
-            MaximizeBox = true,
-            MinimizeBox = false
-        };
-        var root = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            Padding = new Padding(18),
-            ColumnCount = 1,
-            RowCount = 5
-        };
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.Percent, 100));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        root.RowStyles.Add(new RowStyle(SizeType.AutoSize));
-        dialog.Controls.Add(root);
-
-        root.Controls.Add(new Label
-        {
-            Text = "Pair the native Android tablet app",
-            AutoSize = true,
-            Font = new System.Drawing.Font(
-                Font.FontFamily,
-                14,
-                System.Drawing.FontStyle.Bold),
-            Margin = new Padding(0, 0, 0, 6)
-        }, 0, 0);
-
-        var setup = new TableLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            AutoSize = true,
-            ColumnCount = 2,
-            Margin = new Padding(0, 4, 0, 12)
-        };
-        setup.ColumnStyles.Add(new ColumnStyle(SizeType.AutoSize));
-        setup.ColumnStyles.Add(new ColumnStyle(SizeType.Percent, 100));
-        setup.Controls.Add(new Label
-        {
-            Text = "Relay URL",
-            AutoSize = true,
-            Margin = new Padding(0, 8, 10, 0)
-        }, 0, 0);
-        var relayBox = new TextBox
-        {
-            Dock = DockStyle.Fill,
-            Text = pairing?.RelayEndpoint ?? "wss://"
-        };
-        setup.Controls.Add(relayBox, 1, 0);
-        root.Controls.Add(setup, 0, 1);
-
-        var qrPicture = new PictureBox
-        {
-            Dock = DockStyle.Fill,
-            SizeMode = PictureBoxSizeMode.Zoom,
-            BackColor = System.Drawing.Color.White,
-            Margin = new Padding(0, 4, 0, 12)
-        };
-        root.Controls.Add(qrPicture, 0, 2);
-
-        var status = new Label
-        {
-            Dock = DockStyle.Fill,
-            AutoSize = true,
-            ForeColor = System.Drawing.Color.DimGray,
-            Text = pairing == null
-                ? "Enter the deployed relay URL, then generate a revocable pairing. Controls remain disabled."
-                : "This pairing is encrypted end to end. Controls remain disabled during development.",
-            Margin = new Padding(0, 0, 0, 10)
-        };
-        root.Controls.Add(status, 0, 3);
-
-        var buttons = new FlowLayoutPanel
-        {
-            Dock = DockStyle.Fill,
-            AutoSize = true,
-            FlowDirection = FlowDirection.RightToLeft
-        };
-        var close = new Button { Text = "Close", AutoSize = true };
-        var revoke = new Button
-        {
-            Text = "Revoke pairing",
-            AutoSize = true,
-            Enabled = pairing != null
-        };
-        var copy = new Button
-        {
-            Text = "Copy pairing URI",
-            AutoSize = true,
-            Enabled = pairing != null
-        };
-        var generate = new Button
-        {
-            Text = pairing == null ? "Generate pairing" : "Replace pairing",
-            AutoSize = true
-        };
-        buttons.Controls.Add(close);
-        buttons.Controls.Add(revoke);
-        buttons.Controls.Add(copy);
-        buttons.Controls.Add(generate);
-        root.Controls.Add(buttons, 0, 4);
-
-        void RenderPairing()
-        {
-            var previous = qrPicture.Image;
-            qrPicture.Image = null;
-            previous?.Dispose();
-            if (pairing == null)
-            {
-                return;
-            }
-            var png = PngByteQRCodeHelper.GetQRCode(
-                pairing.ToPairingUri(),
-                QRCodeGenerator.ECCLevel.Q,
-                8);
-            using var stream = new MemoryStream(png);
-            using var source = System.Drawing.Image.FromStream(stream);
-            qrPicture.Image = new System.Drawing.Bitmap(source);
-        }
-
-        generate.Click += (_, _) =>
-        {
-            if (!Uri.TryCreate(
-                    relayBox.Text.Trim(),
-                    UriKind.Absolute,
-                    out var relayUri)
-                || !string.Equals(
-                    relayUri.Scheme,
-                    "wss",
-                    StringComparison.OrdinalIgnoreCase))
-            {
-                status.Text = "Enter a valid wss:// relay URL.";
-                status.ForeColor = System.Drawing.Color.DarkRed;
-                return;
-            }
-            pairing = CompanionPairing.Create(relayUri.AbsoluteUri);
-            CompanionPairingStore.Save(pairing);
-            RestartCompanionRelay();
-            RenderPairing();
-            generate.Text = "Replace pairing";
-            copy.Enabled = true;
-            revoke.Enabled = true;
-            status.Text = "Pairing generated. Scan this QR code in the Android app. Controls remain disabled.";
-            status.ForeColor = System.Drawing.Color.DarkGreen;
-        };
-        copy.Click += (_, _) =>
-        {
-            if (pairing != null)
-            {
-                Clipboard.SetText(pairing.ToPairingUri());
-                status.Text = "Pairing URI copied. Treat it like a password until this pairing is replaced.";
-                status.ForeColor = System.Drawing.Color.DarkGoldenrod;
-            }
-        };
-        revoke.Click += (_, _) =>
-        {
-            CompanionPairingStore.Revoke();
-            pairing = null;
-            _relayCompanionClient?.Dispose();
-            _relayCompanionClient = null;
-            _localCompanionServer?.Dispose();
-            _localCompanionServer = null;
-            RenderPairing();
-            copy.Enabled = false;
-            revoke.Enabled = false;
-            generate.Text = "Generate pairing";
-            status.Text = "The Android companion pairing was revoked.";
-            status.ForeColor = System.Drawing.Color.DarkRed;
-        };
-        close.Click += (_, _) => dialog.Close();
-        dialog.FormClosed += (_, _) =>
-        {
-            qrPicture.Image?.Dispose();
-            qrPicture.Image = null;
-        };
-
-        RenderPairing();
-        dialog.ShowDialog(owner ?? this);
-    }
-
     private void ShowDebugJumpDialog()
     {
         using var dialog = new Form
@@ -21204,7 +20802,7 @@ internal sealed class CopilotService : Form
         if (dialog.ShowDialog(this) == DialogResult.OK
             && list.SelectedItem is ProcedureListItem item)
         {
-            QueueCommand($"debug jump {item.Definition.Id}");
+            _automation.Enqueue($"debug jump {item.Definition.Id}");
         }
     }
 
@@ -21766,7 +21364,7 @@ internal sealed class CopilotService : Form
             AutoSize = true,
             Margin = new Padding(4)
         };
-        button.Click += (_, _) => QueueCommand(command);
+        button.Click += (_, _) => _automation.Enqueue(command);
         return button;
     }
 
@@ -21815,7 +21413,7 @@ internal sealed class CopilotService : Form
         button.FlatAppearance.MouseOverBackColor = mouseOverColor;
         if (bindCommand)
         {
-            button.Click += (_, _) => QueueCommand(command);
+            button.Click += (_, _) => _automation.Enqueue(command);
         }
         return button;
     }
@@ -22955,7 +22553,7 @@ internal sealed class CopilotService : Form
                     return;
                 }
 
-                QueueCommand($"procedure start {recommendation.Id}");
+                _automation.Enqueue($"procedure start {recommendation.Id}");
                 SendEfbCommandResult(
                     command.RequestId,
                     true,
@@ -23018,7 +22616,7 @@ internal sealed class CopilotService : Form
                     return;
                 }
 
-                QueueCommand($"procedure start {definition.Id}");
+                _automation.Enqueue($"procedure start {definition.Id}");
                 SendEfbCommandResult(
                     command.RequestId,
                     true,
@@ -23135,7 +22733,7 @@ internal sealed class CopilotService : Form
                         "The current flow cannot be paused.");
                     return;
                 }
-                QueueCommand("procedure pause");
+                _automation.Enqueue("procedure pause");
                 SendEfbCommandResult(command.RequestId, true, "Pausing flow.");
                 break;
             case "resume":
@@ -23147,7 +22745,7 @@ internal sealed class CopilotService : Form
                         "The current flow is not paused or failed.");
                     return;
                 }
-                QueueCommand("procedure resume");
+                _automation.Enqueue("procedure resume");
                 SendEfbCommandResult(command.RequestId, true, "Resuming flow.");
                 break;
             case "cancel":
@@ -23159,7 +22757,7 @@ internal sealed class CopilotService : Form
                         "No flow is active.");
                     return;
                 }
-                QueueCommand("procedure cancel");
+                _automation.Enqueue("procedure cancel");
                 SendEfbCommandResult(command.RequestId, true, "Cancelling flow.");
                 break;
         }
@@ -23184,15 +22782,6 @@ internal sealed class CopilotService : Form
                 ["sentUtc"] = DateTime.UtcNow.ToString("O")
             };
         SendEfbEnvelope(efbEnvelope);
-
-        if (_companionRequestIds.Remove(requestId))
-        {
-            var companionEnvelope = new Dictionary<string, object?>(efbEnvelope)
-            {
-                ["protocolVersion"] = CompanionProtocol.Version
-            };
-            _companionBridge.Publish(companionEnvelope);
-        }
     }
 
     private void PublishEfbState(bool force = false)
@@ -23212,8 +22801,6 @@ internal sealed class CopilotService : Form
 
         var envelope = BuildEfbStateEnvelope(EfbCompanionProtocol.Version);
         SendEfbEnvelope(envelope);
-        _companionBridge.Publish(
-            BuildEfbStateEnvelope(CompanionProtocol.Version));
     }
 
     private Dictionary<string, object?> BuildEfbStateEnvelope(int protocolVersion)
@@ -23530,7 +23117,7 @@ internal sealed class CopilotService : Form
             || _pendingFlyByWireFireTest.HasValue
             || _asobo737MaxFireTestsInProgress
             || _pendingFuelPumpSequence != null
-            || _automationRuntime.HasPendingActions)
+            || _automation.HasPendingActions)
         {
             return;
         }
@@ -23740,18 +23327,13 @@ internal sealed class CopilotService : Form
             }
             _sayIntentionsCancellation.Cancel();
             ReleaseGsxRemoteControl();
-            CancelDelayedCockpitActions();
+            _automation.Dispose();
             StopReplay();
             _aircraftIdentityLookupCancellation?.Cancel();
             _aircraftIdentityLookupCancellation?.Dispose();
             _aircraftIdentityLookupCancellation = null;
             SetAircraftThumbnail(null);
             _flightTelemetryStore.Dispose();
-            _relayCompanionClient?.Dispose();
-            _relayCompanionClient = null;
-            _localCompanionServer?.Dispose();
-            _localCompanionServer = null;
-            _companionBridge.CommandReceived -= DispatchCompanionCommand;
             _voiceCalloutQueue?.Dispose();
             _voiceCalloutQueue = null;
             _sayIntentionsClient.Dispose();

@@ -1,2 +1,0 @@
--keepattributes *Annotation*
--keep class com.noscapect.vfo.companion.protocol.** { *; }

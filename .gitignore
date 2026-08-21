@@ -5,12 +5,6 @@ build-check/
 artifacts/
 src/EfbCompanion/PackageSources/.sdk/
 src/EfbCompanion/PackageSources/VfoEfb/node_modules/
-src/CompanionRelay/node_modules/
-src/CompanionRelay/.dry-run/
-src/CompanionRelay/.wrangler/
-src/AndroidCompanion/.gradle/
-src/AndroidCompanion/**/build/
-src/AndroidCompanion/local.properties
 src/EfbCompanion/PackageSources/VfoEfb/dist/
 src/EfbCompanion/Packages/
 src/EfbCompanion/PackagesMetadata/

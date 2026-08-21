@@ -92,8 +92,6 @@ Copy-Item -LiteralPath (Join-Path $outputRoot "Copilot.exe") -Destination $stage
 Copy-Item -LiteralPath (Join-Path $outputRoot "Copilot.exe.config") -Destination $stageRoot
 Copy-Item -LiteralPath (Join-Path $outputRoot "Microsoft.FlightSimulator.SimConnect.dll") -Destination $stageRoot
 Copy-Item -LiteralPath (Join-Path $outputRoot "SimConnect.dll") -Destination $stageRoot
-Copy-Item -LiteralPath (Join-Path $outputRoot "BouncyCastle.Cryptography.dll") -Destination $stageRoot
-Copy-Item -LiteralPath (Join-Path $outputRoot "QRCoder.dll") -Destination $stageRoot
 Copy-Item -LiteralPath (Join-Path $outputRoot "Assets") -Destination $stageRoot -Recurse
 Copy-Item -LiteralPath (Join-Path $workspace "README.md") -Destination $stageRoot
 Copy-Item -LiteralPath (Join-Path $workspace "docs\RELEASE_NOTES.md") -Destination $stageRoot

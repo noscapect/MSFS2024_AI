@@ -19,6 +19,7 @@ using Msfs2024Ai.Copilot.Procedures;
 using Msfs2024Ai.Copilot.Settings;
 using Msfs2024Ai.Copilot.SayIntentions;
 using Msfs2024Ai.Copilot.SimBrief;
+using Msfs2024Ai.Copilot.Simulation;
 using Msfs2024Ai.Copilot.Telemetry;
 using Msfs2024Ai.Copilot.Voice;
 using System.Collections.Generic;
@@ -129,7 +130,8 @@ internal sealed class CopilotService : Form
     private bool _taxiToRunwayArmed;
     private bool _pendingAutomaticBeforeTakeoffFlow;
     private bool _pendingAutomaticTakeoffFlow;
-    private SimConnect? _simConnect;
+    private readonly SimConnectSessionManager _simConnectSession;
+    private SimConnect? Connection => _simConnectSession.Connection;
     private AircraftState? _state;
     private PendingExternalPowerProcedure? _pendingProcedure;
     private PendingBeaconProcedure? _pendingBeaconProcedure;
@@ -573,7 +575,6 @@ internal sealed class CopilotService : Form
     private bool _pmdgFireWarnCancellationObserved;
     private bool _pmdgExtinguisherTest1ActiveObserved;
     private bool _pmdgExtinguisherTest2ActiveObserved;
-    private System.Windows.Forms.Timer? _reconnectTimer;
     private bool _initialStateReceived;
     private bool _oneShotCommandExecuted;
     private bool _procedureSessionRestoreAttempted;
@@ -1523,9 +1524,19 @@ internal sealed class CopilotService : Form
         _settings = SettingsStore.Load();
         _flightTelemetryStore = new FlightTelemetryStore();
         _procedureSession = ProcedureSessionStore.Load();
+        _simConnectSession = new SimConnectSessionManager(
+            () => new SimConnectSessionConnection(
+                "MSFS 2024 Virtual First Officer",
+                Handle,
+                WmUserSimConnect),
+            RegisterSimConnectHandlers);
+        _simConnectSession.Connected += HandleSimConnectOpened;
+        _simConnectSession.Disconnected += HandleSimConnectDisconnected;
+        _simConnectSession.SimConnectException += HandleSimConnectException;
+        _simConnectSession.ConnectionFailed += OnConnectionFailed;
         _automation = new CockpitAutomationScheduler(
             runtimeAvailable: () => !_disposingOrDisposed
-                                    && _simConnect != null
+                                    && Connection != null
                                     && _state != null,
             currentVariant: () => _state?.Variant,
             log: AppLog.Write,
@@ -1585,75 +1596,46 @@ internal sealed class CopilotService : Form
 
     public void Connect()
     {
-        if (_simConnect != null)
-        {
-            return;
-        }
-
-        try
-        {
-            _ = Handle;
-            _simConnect = new SimConnect(
-                "MSFS 2024 Virtual First Officer",
-                Handle,
-                WmUserSimConnect,
-                null,
-                0);
-
-            _simConnect.OnRecvOpen += OnOpen;
-            _simConnect.OnRecvQuit += OnQuit;
-            _simConnect.OnRecvException += OnException;
-            _simConnect.OnRecvSimobjectData += OnAircraftData;
-            _simConnect.OnRecvClientData += OnClientData;
-            _simConnect.OnRecvEnumerateInputEvents += OnEnumerateInputEvents;
-            _simConnect.OnRecvGetInputEvent += OnGetInputEvent;
-            _simConnect.OnRecvEvent += OnGsxEvent;
-            _simConnect.OnRecvCommBus += OnEfbCommBusEvent;
-        }
-        catch (COMException exception)
-        {
-            Console.Error.WriteLine($"Could not connect to SimConnect: {exception.Message}");
-            AppLog.Write($"SimConnect connection failed: {exception}");
-            if (_connectionLabel != null)
-            {
-                _connectionLabel.Text = "Waiting for MSFS SimConnect...";
-                _connectionLabel.ForeColor = System.Drawing.Color.DarkRed;
-            }
-            AppendDashboardLog("SimConnect unavailable; retrying in 5 seconds.");
-            ScheduleReconnect();
-        }
+        _simConnectSession.Connect();
     }
 
-    private void ScheduleReconnect()
+    private void RegisterSimConnectHandlers(SimConnect connection)
     {
-        if (_reconnectTimer != null)
-        {
-            return;
-        }
+        connection.OnRecvSimobjectData += OnAircraftData;
+        connection.OnRecvClientData += OnClientData;
+        connection.OnRecvEnumerateInputEvents += OnEnumerateInputEvents;
+        connection.OnRecvGetInputEvent += OnGetInputEvent;
+        connection.OnRecvEvent += OnGsxEvent;
+        connection.OnRecvCommBus += OnEfbCommBusEvent;
+    }
 
-        _reconnectTimer = new System.Windows.Forms.Timer { Interval = 5000 };
-        _reconnectTimer.Tick += (_, _) =>
+    private void OnConnectionFailed(COMException exception)
+    {
+        Console.Error.WriteLine($"Could not connect to SimConnect: {exception.Message}");
+        AppLog.Write($"SimConnect connection failed: {exception}");
+        if (_connectionLabel != null)
         {
-            _reconnectTimer.Stop();
-            _reconnectTimer.Dispose();
-            _reconnectTimer = null;
-            Connect();
-        };
-        _reconnectTimer.Start();
+            _connectionLabel.Text = "Waiting for MSFS SimConnect...";
+            _connectionLabel.ForeColor = System.Drawing.Color.DarkRed;
+        }
+        AppendDashboardLog("SimConnect unavailable; retrying in 5 seconds.");
     }
 
     protected override void WndProc(ref Message message)
     {
         if (message.Msg == WmUserSimConnect)
         {
-            _simConnect?.ReceiveMessage();
+            _simConnectSession.ReceivePendingMessage();
         }
 
         base.WndProc(ref message);
     }
 
-    private void OnOpen(SimConnect sender, SIMCONNECT_RECV_OPEN data)
+    private void HandleSimConnectOpened(SIMCONNECT_RECV_OPEN data)
     {
+        var sender = Connection
+                     ?? throw new InvalidOperationException(
+                         "SimConnect opened without an active connection.");
         InvalidateAircraftAutomation(
             AutomationInvalidationReason.NewSimConnectSession);
         ResetMobiFlightRuntimeAfterDisconnect();
@@ -2737,7 +2719,7 @@ internal sealed class CopilotService : Form
             AppendDashboardLog("GSX is not installed; the normal flight flow remains available.");
             return false;
         }
-        if (!_gsxCouatlStarted || _simConnect == null)
+        if (!_gsxCouatlStarted || Connection == null)
         {
             AppendDashboardLog("GSX Couatl is not ready; use GSX manually or retry shortly.");
             return false;
@@ -2833,7 +2815,7 @@ internal sealed class CopilotService : Form
 
     private void SetGsxValue(Definition definition, double value)
     {
-        _simConnect?.SetDataOnSimObject(
+        Connection?.SetDataOnSimObject(
             definition,
             SimConnect.SIMCONNECT_OBJECT_ID_USER,
             SIMCONNECT_DATA_SET_FLAG.DEFAULT,
@@ -2874,7 +2856,7 @@ internal sealed class CopilotService : Form
 
     private void ReleaseGsxRemoteControl()
     {
-        if (!_gsxOwnsRemoteControl || _simConnect == null)
+        if (!_gsxOwnsRemoteControl || Connection == null)
         {
             return;
         }
@@ -2901,7 +2883,7 @@ internal sealed class CopilotService : Form
 
     private void RecoverGsxRemoteControl()
     {
-        if (_simConnect == null
+        if (Connection == null
             || !_gsxCouatlStarted
             || !_gsxRemoteControlActive
             || _gsxOwnsRemoteControl)
@@ -2953,7 +2935,7 @@ internal sealed class CopilotService : Form
 
     private void SendMobiFlightCommand(string command)
     {
-        _simConnect?.SetClientData(
+        Connection?.SetClientData(
             ClientDataArea.MobiFlightCommand,
             ClientDataDefinition.MobiFlightMessage,
             SIMCONNECT_CLIENT_DATA_SET_FLAG.DEFAULT,
@@ -2963,7 +2945,7 @@ internal sealed class CopilotService : Form
 
     private void SendMobiFlightRuntimeCommand(string command)
     {
-        _simConnect?.SetClientData(
+        Connection?.SetClientData(
             ClientDataArea.MobiFlightRuntimeCommand,
             ClientDataDefinition.MobiFlightRuntimeMessage,
             SIMCONNECT_CLIENT_DATA_SET_FLAG.DEFAULT,
@@ -7691,12 +7673,12 @@ internal sealed class CopilotService : Form
 
     private void SendPmdgNg3Control(uint sdkEventOffset, uint parameter)
     {
-        if (_simConnect == null)
+        if (Connection == null)
         {
             return;
         }
 
-        _simConnect.SetClientData(
+        Connection.SetClientData(
             ClientDataArea.PmdgNg3Control,
             ClientDataDefinition.PmdgNg3Control,
             SIMCONNECT_CLIENT_DATA_SET_FLAG.DEFAULT,
@@ -10124,12 +10106,12 @@ internal sealed class CopilotService : Form
 
     private void TransmitGearEvent(CopilotEvent eventId)
     {
-        if (_simConnect == null)
+        if (Connection == null)
         {
             return;
         }
 
-        _simConnect.TransmitClientEvent(
+        Connection.TransmitClientEvent(
             SimConnect.SIMCONNECT_OBJECT_ID_USER,
             eventId,
             0,
@@ -10153,7 +10135,7 @@ internal sealed class CopilotService : Form
 
     private void SetAirbusRunwayTurnoffLights(bool on)
     {
-        if (_state == null || _simConnect == null)
+        if (_state == null || Connection == null)
         {
             AppendDashboardLog("Runway turnoff lights blocked: aircraft state is unavailable.");
             FinishOneShot(4);
@@ -10175,7 +10157,7 @@ internal sealed class CopilotService : Form
                 : _state.IsIniBuildsA330
                     ? A330ControlProfile.RunwayTurnoffInputEventHash
                     : A320RunwayTurnoffProfile.InputEventHash;
-            _simConnect.SetInputEvent(inputEventHash, on ? 1.0 : 0.0);
+            Connection.SetInputEvent(inputEventHash, on ? 1.0 : 0.0);
         }
 
         BeginNativeAction(
@@ -10228,12 +10210,12 @@ internal sealed class CopilotService : Form
 
     private void SendPmdgRotorBrakeSwitch(uint switchId, uint actionCode)
     {
-        if (_simConnect == null)
+        if (Connection == null)
         {
             return;
         }
 
-        _simConnect.TransmitClientEvent(
+        Connection.TransmitClientEvent(
             SimConnect.SIMCONNECT_OBJECT_ID_USER,
             CopilotEvent.RotorBrake,
             switchId * 100u + actionCode,
@@ -10557,7 +10539,7 @@ internal sealed class CopilotService : Form
 
     private void RunAsobo737MaxFireTests()
     {
-        if (_simConnect == null || _state?.IsAsobo737Max8 != true)
+        if (Connection == null || _state?.IsAsobo737Max8 != true)
         {
             AppendDashboardLog("737 MAX fire tests blocked: Asobo 737 MAX profile is not active.");
             FinishOneShot(3);
@@ -10609,7 +10591,7 @@ internal sealed class CopilotService : Form
         void ContinueSequence()
         {
             if (guardedAction?.IsCurrent != true
-                || _simConnect == null
+                || Connection == null
                 || _state?.IsAsobo737Max8 != true)
             {
                 _asobo737MaxFireTestsInProgress = false;
@@ -10667,7 +10649,7 @@ internal sealed class CopilotService : Form
                     }
                     else if (currentStep.Hash.HasValue)
                     {
-                        _simConnect.SetInputEvent(currentStep.Hash.Value, currentStep.Position);
+                        Connection.SetInputEvent(currentStep.Hash.Value, currentStep.Position);
                     }
 
                     stepSent = true;
@@ -10711,7 +10693,7 @@ internal sealed class CopilotService : Form
 
     private void SetAsobo737MaxIrsSelector(bool left, int position)
     {
-        if (_simConnect == null || _state?.IsAsobo737Max8 != true)
+        if (Connection == null || _state?.IsAsobo737Max8 != true)
         {
             AppendDashboardLog("737 MAX IRS command blocked: Asobo 737 MAX profile is not active.");
             FinishOneShot(3);
@@ -10797,7 +10779,7 @@ internal sealed class CopilotService : Form
             var readbackHash = left ? _asobo737MaxLeftIrsInputEventHash : _asobo737MaxRightIrsInputEventHash;
             if (readbackHash.HasValue)
             {
-                _simConnect.GetInputEvent(
+                Connection.GetInputEvent(
                     left ? Request.Asobo737MaxLeftIrsInputEvent : Request.Asobo737MaxRightIrsInputEvent,
                     readbackHash.Value);
             }
@@ -10843,7 +10825,7 @@ internal sealed class CopilotService : Form
 
     private void SetAsobo737MaxEmergencyExitLightsArmed()
     {
-        if (_simConnect == null || _state?.IsAsobo737Max8 != true)
+        if (Connection == null || _state?.IsAsobo737Max8 != true)
         {
             AppendDashboardLog("737 MAX emergency-exit lights command blocked: Asobo 737 MAX profile is not active.");
             FinishOneShot(3);
@@ -10886,10 +10868,10 @@ internal sealed class CopilotService : Form
 
         try
         {
-            _simConnect.SetInputEvent(_asobo737MaxEmergencyExitCoverInputEventHash.Value, 0d);
+            Connection.SetInputEvent(_asobo737MaxEmergencyExitCoverInputEventHash.Value, 0d);
             if (_asobo737MaxEmergencyExitInputEventHash.HasValue)
             {
-                _simConnect.SetInputEvent(_asobo737MaxEmergencyExitInputEventHash.Value, 1d);
+                Connection.SetInputEvent(_asobo737MaxEmergencyExitInputEventHash.Value, 1d);
             }
 
             AppLog.Write("Asobo 737 MAX emergency-exit lights command sent: cover closed, switch armed.");
@@ -10914,7 +10896,7 @@ internal sealed class CopilotService : Form
         ulong? inputEventHash,
         Func<double?> readDirectInputEventState)
     {
-        if (_simConnect == null || _state?.IsAsobo737Max8 != true)
+        if (Connection == null || _state?.IsAsobo737Max8 != true)
         {
             AppendDashboardLog($"737 MAX {name} command blocked: Asobo 737 MAX profile is not active.");
             FinishOneShot(3);
@@ -10944,7 +10926,7 @@ internal sealed class CopilotService : Form
 
         try
         {
-            _simConnect.SetInputEvent(inputEventHash.Value, desiredPosition);
+            Connection.SetInputEvent(inputEventHash.Value, desiredPosition);
             AppLog.Write($"Asobo 737 MAX {name} InputEvent command sent: {desiredPosition:0.###}.");
         }
         catch (Exception ex) when (ex is COMException or InvalidOperationException)
@@ -10964,7 +10946,7 @@ internal sealed class CopilotService : Form
 
     private void SetAsobo737MaxApuSelector(double desiredPosition)
     {
-        if (_simConnect == null || _state?.IsAsobo737Max8 != true)
+        if (Connection == null || _state?.IsAsobo737Max8 != true)
         {
             AppendDashboardLog("737 MAX APU selector command blocked: Asobo 737 MAX profile is not active.");
             FinishOneShot(3);
@@ -11009,7 +10991,7 @@ internal sealed class CopilotService : Form
 
         try
         {
-            _simConnect.SetInputEvent(_asobo737MaxApuInputEventHash.Value, desiredPosition);
+            Connection.SetInputEvent(_asobo737MaxApuInputEventHash.Value, desiredPosition);
             AppLog.Write($"Asobo 737 MAX APU selector InputEvent command sent: {desiredPosition:0.###}.");
         }
         catch (Exception ex) when (ex is COMException or InvalidOperationException)
@@ -11042,7 +11024,7 @@ internal sealed class CopilotService : Form
         Func<AircraftState, bool> fallbackVerify,
         Action<AircraftState> applyVerifiedState)
     {
-        if (_simConnect == null || _state?.IsAsobo737Max8 != true)
+        if (Connection == null || _state?.IsAsobo737Max8 != true)
         {
             AppendDashboardLog($"737 MAX {name} command blocked: Asobo 737 MAX profile is not active.");
             FinishOneShot(3);
@@ -11082,7 +11064,7 @@ internal sealed class CopilotService : Form
 
         try
         {
-            _simConnect.SetInputEvent(inputEventHash.Value, desiredInputEventValue);
+            Connection.SetInputEvent(inputEventHash.Value, desiredInputEventValue);
             AppLog.Write(
                 $"Asobo 737 MAX {name} InputEvent command sent: {desiredInputEventValue:0.###}.");
         }
@@ -11727,7 +11709,7 @@ internal sealed class CopilotService : Form
 
     private void SetBeacon(bool desiredOn)
     {
-        if (_simConnect == null || _state == null)
+        if (Connection == null || _state == null)
         {
             Console.Error.WriteLine("Beacon procedure blocked: aircraft state is unavailable.");
             FinishOneShot(3);
@@ -11748,7 +11730,7 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        _simConnect.TransmitClientEvent(
+        Connection.TransmitClientEvent(
             SimConnect.SIMCONNECT_OBJECT_ID_USER,
             CopilotEvent.SetBeacon,
             desiredOn ? 1u : 0u,
@@ -11821,7 +11803,7 @@ internal sealed class CopilotService : Form
         };
         if (_state.IsIniBuildsA330)
         {
-            _simConnect!.SetInputEvent(A330NavLogoInputEventHash, (double)nativePosition);
+            Connection!.SetInputEvent(A330NavLogoInputEventHash, (double)nativePosition);
         }
         SendMobiFlightCommand($"MF.SimVars.Set.(>B:{stateEvent})");
         SendMobiFlightCommand("MF.DummyCmd");
@@ -11889,7 +11871,7 @@ internal sealed class CopilotService : Form
 
     private void SetBattery(int batteryNumber, bool desiredOn)
     {
-        if (_simConnect == null || _state == null)
+        if (Connection == null || _state == null)
         {
             Console.Error.WriteLine("Battery procedure blocked: aircraft state is unavailable.");
             FinishOneShot(3);
@@ -11992,7 +11974,7 @@ internal sealed class CopilotService : Form
 
         if (_state?.IsIniBuildsA330 == true)
         {
-            if (_simConnect == null)
+            if (Connection == null)
             {
                 AppendDashboardLog("APU master blocked: simulator state is unavailable.");
                 FinishOneShot(4);
@@ -12005,7 +11987,7 @@ internal sealed class CopilotService : Form
                 return;
             }
 
-            _simConnect.SetInputEvent(
+            Connection.SetInputEvent(
                 A330ApuInputEventHashes[0],
                 desiredOn ? 1.0 : 0.0);
             BeginNativeAction(
@@ -12154,7 +12136,7 @@ internal sealed class CopilotService : Form
 
         if (_state?.IsIniBuildsA330 == true)
         {
-            if (_simConnect == null)
+            if (Connection == null)
             {
                 AppendDashboardLog("APU bleed blocked: simulator state is unavailable.");
                 FinishOneShot(4);
@@ -12167,7 +12149,7 @@ internal sealed class CopilotService : Form
                 return;
             }
 
-            _simConnect.SetInputEvent(
+            Connection.SetInputEvent(
                 A330ApuInputEventHashes[2],
                 desiredOn ? 1.0 : 0.0);
             BeginNativeAction(
@@ -12189,7 +12171,7 @@ internal sealed class CopilotService : Form
 
     private void SetAsobo737MaxApuBleed(bool desiredOn)
     {
-        if (_simConnect == null || _state?.IsAsobo737Max8 != true)
+        if (Connection == null || _state?.IsAsobo737Max8 != true)
         {
             AppendDashboardLog("737 MAX APU bleed blocked: Asobo 737 MAX profile is not active.");
             FinishOneShot(4);
@@ -12206,7 +12188,7 @@ internal sealed class CopilotService : Form
                 return;
             }
 
-            _simConnect.SetInputEvent(
+            Connection.SetInputEvent(
                 _asobo737MaxApuBleedInputEventHash.Value,
                 desiredOn ? 0.0 : 1.0);
             AppLog.Write(
@@ -12231,7 +12213,7 @@ internal sealed class CopilotService : Form
         TimeSpan? timeout = null,
         bool forceCommand = false)
     {
-        if (_simConnect == null || _state?.IsAsobo737Max8 != true)
+        if (Connection == null || _state?.IsAsobo737Max8 != true)
         {
             AppendDashboardLog($"737 MAX {name} blocked: Asobo 737 MAX profile is not active.");
             FinishOneShot(4);
@@ -12247,7 +12229,7 @@ internal sealed class CopilotService : Form
 
         try
         {
-            _simConnect.SetInputEvent(inputEventHash, desiredValue);
+            Connection.SetInputEvent(inputEventHash, desiredValue);
             AppLog.Write($"Asobo 737 MAX {name} InputEvent command sent: {desiredValue:0.###}.");
         }
         catch (Exception ex) when (ex is COMException or InvalidOperationException)
@@ -12271,7 +12253,7 @@ internal sealed class CopilotService : Form
         Func<AircraftState, bool> verify,
         TimeSpan? timeout = null)
     {
-        if (_simConnect == null || _state?.IsAsobo737Max8 != true)
+        if (Connection == null || _state?.IsAsobo737Max8 != true)
         {
             AppendDashboardLog($"737 MAX {name} blocked: Asobo 737 MAX profile is not active.");
             FinishOneShot(4);
@@ -12280,7 +12262,7 @@ internal sealed class CopilotService : Form
 
         try
         {
-            _simConnect.SetInputEvent(inputEventHash, commandValue);
+            Connection.SetInputEvent(inputEventHash, commandValue);
             AppLog.Write(
                 $"Asobo 737 MAX {name} forced single InputEvent command sent: {commandValue:0.###}.");
         }
@@ -12306,7 +12288,7 @@ internal sealed class CopilotService : Form
             {
                 try
                 {
-                    _simConnect!.SetInputEvent(inputEventHash, value);
+                    Connection!.SetInputEvent(inputEventHash, value);
                 }
                 catch (Exception ex) when (ex is COMException or InvalidOperationException)
                 {
@@ -12350,7 +12332,7 @@ internal sealed class CopilotService : Form
         TimeSpan? timeout = null,
         bool forceCommand = false)
     {
-        if (_simConnect == null || _state?.IsAsobo737Max8 != true)
+        if (Connection == null || _state?.IsAsobo737Max8 != true)
         {
             AppendDashboardLog($"737 MAX {name} blocked: Asobo 737 MAX profile is not active.");
             FinishOneShot(4);
@@ -12368,7 +12350,7 @@ internal sealed class CopilotService : Form
         {
             foreach (var inputEventHash in inputEventHashes)
             {
-                _simConnect.SetInputEvent(inputEventHash, desiredValue);
+                Connection.SetInputEvent(inputEventHash, desiredValue);
             }
 
             AppLog.Write($"Asobo 737 MAX {name} InputEvent command sent: {desiredValue:0.###} on {inputEventHashes.Count} switch(es).");
@@ -12461,7 +12443,7 @@ internal sealed class CopilotService : Form
 
     private void ForceSetAsobo737MaxApuGenerator(bool desiredOn)
     {
-        if (_state?.IsAsobo737Max8 != true || _simConnect == null)
+        if (_state?.IsAsobo737Max8 != true || Connection == null)
         {
             AppendDashboardLog("Blocked Asobo 737 MAX APU generator command: a different aircraft profile is active.");
             FinishOneShot(3);
@@ -12479,7 +12461,7 @@ internal sealed class CopilotService : Form
         {
             if (hash.HasValue)
             {
-                _simConnect.SetInputEvent(hash.Value, desiredOn ? 1.0 : 0.0);
+                Connection.SetInputEvent(hash.Value, desiredOn ? 1.0 : 0.0);
             }
         }
 
@@ -12528,7 +12510,7 @@ internal sealed class CopilotService : Form
 
     private void PulseAsobo737MaxMcpButton(string name, ulong inputEventHash)
     {
-        if (_simConnect == null || _state?.IsAsobo737Max8 != true)
+        if (Connection == null || _state?.IsAsobo737Max8 != true)
         {
             AppendDashboardLog($"737 MAX {name} blocked: Asobo 737 MAX profile is not active.");
             FinishOneShot(4);
@@ -12537,8 +12519,8 @@ internal sealed class CopilotService : Form
 
         try
         {
-            _simConnect.SetInputEvent(inputEventHash, 1.0);
-            _simConnect.SetInputEvent(inputEventHash, 0.0);
+            Connection.SetInputEvent(inputEventHash, 1.0);
+            Connection.SetInputEvent(inputEventHash, 0.0);
             AppLog.Write($"Asobo 737 MAX {name} MCP button pulse sent.");
             FinishOneShot();
         }
@@ -12609,7 +12591,7 @@ internal sealed class CopilotService : Form
 
     private void SetAsobo737MaxGroundPowerOff()
     {
-        if (_simConnect == null || _state?.IsAsobo737Max8 != true)
+        if (Connection == null || _state?.IsAsobo737Max8 != true)
         {
             AppendDashboardLog("737 MAX ground power OFF blocked: Asobo 737 MAX profile is not active.");
             FinishOneShot(4);
@@ -12625,7 +12607,7 @@ internal sealed class CopilotService : Form
 
         try
         {
-            _simConnect.SetInputEvent(
+            Connection.SetInputEvent(
                 Asobo737MaxExternalPowerInputEventHash,
                 Asobo737MaxControlProfile.ExternalPowerOff);
             ScheduleInputEvent(
@@ -12787,7 +12769,7 @@ internal sealed class CopilotService : Form
             {
                 if (hash.HasValue)
                 {
-                    _simConnect!.SetInputEvent(hash.Value, desiredOn ? 1.0 : 0.0);
+                    Connection!.SetInputEvent(hash.Value, desiredOn ? 1.0 : 0.0);
                 }
             }
 
@@ -12909,7 +12891,7 @@ internal sealed class CopilotService : Form
             FinishOneShot(3);
             return;
         }
-        if (_simConnect == null)
+        if (Connection == null)
         {
             AppendDashboardLog("737 MAX fuel pumps blocked: SimConnect is unavailable.");
             FinishOneShot(3);
@@ -13014,7 +12996,7 @@ internal sealed class CopilotService : Form
 
     private void SetA330FuelPumps(bool desiredOn)
     {
-        if (_simConnect == null || _state == null)
+        if (Connection == null || _state == null)
         {
             AppendDashboardLog("A330 fuel pumps blocked: simulator state is unavailable.");
             FinishOneShot(4);
@@ -13081,7 +13063,7 @@ internal sealed class CopilotService : Form
 
     private void SetFlyByWireFuelPumps(bool desiredOn)
     {
-        if (_simConnect == null || _state == null)
+        if (Connection == null || _state == null)
         {
             AppendDashboardLog("Fuel pumps blocked: aircraft state is unavailable.");
             FinishOneShot(3);
@@ -13139,7 +13121,7 @@ internal sealed class CopilotService : Form
             return;
         }
         if (_disposingOrDisposed
-            || _simConnect == null
+            || Connection == null
             || _state == null
             || !_automation.IsCurrent(_pendingFuelPumpSequence.Generation)
             || _state.Variant != _pendingFuelPumpSequence.ExpectedVariant)
@@ -13171,7 +13153,7 @@ internal sealed class CopilotService : Form
         // Buttons are spaced one second apart for a believable F/O cadence.
         if (toggle.InputEventHash.HasValue)
         {
-            _simConnect!.SetInputEvent(
+            Connection!.SetInputEvent(
                 toggle.InputEventHash.Value,
                 toggle.InputEventValue ?? (_pendingFuelPumpSequence.DesiredOn ? 1.0 : 0.0));
         }
@@ -13339,10 +13321,10 @@ internal sealed class CopilotService : Form
 
     private void SendInputEventPulse(ulong inputEventHash)
     {
-        _simConnect!.SetInputEvent(inputEventHash, 1.0);
+        Connection!.SetInputEvent(inputEventHash, 1.0);
         _automation.Schedule(
             500,
-            () => _simConnect!.SetInputEvent(inputEventHash, 0.0),
+            () => Connection!.SetInputEvent(inputEventHash, 0.0),
             $"InputEvent pulse release {inputEventHash}",
             _state?.Variant);
     }
@@ -13391,7 +13373,7 @@ internal sealed class CopilotService : Form
         {
             // The A330 uses AIRLINER_ADIRSn_MODE (OFF=0/NAV=1/ATT=2).
             // Command that live InputEvent and use the same event for readback.
-            _simConnect!.SetInputEvent(
+            Connection!.SetInputEvent(
                 A330AdirsInputEventHashes[selector - 1],
                 (double)position);
             SendMobiFlightCommand(
@@ -13402,7 +13384,7 @@ internal sealed class CopilotService : Form
         }
         else
         {
-            _simConnect!.SetInputEvent(inputEventHash, (double)position);
+            Connection!.SetInputEvent(inputEventHash, (double)position);
         }
         BeginNativeAction(
             $"ADIRS {selector} selector",
@@ -13414,7 +13396,7 @@ internal sealed class CopilotService : Form
 
     private void SetFlyByWireAdirsSelector(int selector, int position)
     {
-        if (_simConnect == null || _state == null)
+        if (Connection == null || _state == null)
         {
             AppendDashboardLog($"ADIRS {selector} blocked: aircraft state is unavailable.");
             FinishOneShot(3);
@@ -13449,7 +13431,7 @@ internal sealed class CopilotService : Form
         var calculatorCode = $"{position} (>L:{lvarName})";
         try
         {
-            _simConnect.SetInputEvent(inputEventHash, (double)position);
+            Connection.SetInputEvent(inputEventHash, (double)position);
         }
         catch (COMException ex)
         {
@@ -13497,7 +13479,7 @@ internal sealed class CopilotService : Form
 
         if (_state?.IsIniBuildsA330 == true)
         {
-            if (_simConnect == null || !_a330CrewOxygenInputState.HasValue)
+            if (Connection == null || !_a330CrewOxygenInputState.HasValue)
             {
                 AppendDashboardLog("Crew oxygen blocked: A330 InputEvent readback is unavailable.");
                 FinishOneShot(4);
@@ -13510,7 +13492,7 @@ internal sealed class CopilotService : Form
                 return;
             }
 
-            _simConnect.SetInputEvent(
+            Connection.SetInputEvent(
                 A330CrewOxygenInputEventHash,
                 desiredOn ? 1.0 : 0.0);
             BeginNativeAction(
@@ -13548,7 +13530,7 @@ internal sealed class CopilotService : Form
 
     private void SetFlyByWireCrewOxygen(bool desiredOn)
     {
-        if (_simConnect == null)
+        if (Connection == null)
         {
             AppendDashboardLog("Crew oxygen blocked: simulator connection is unavailable.");
             FinishOneShot(3);
@@ -13576,7 +13558,7 @@ internal sealed class CopilotService : Form
 
         try
         {
-            _simConnect.SetInputEvent(plan.InputEventHash, plan.RawState);
+            Connection.SetInputEvent(plan.InputEventHash, plan.RawState);
         }
         catch (COMException ex)
         {
@@ -13626,7 +13608,7 @@ internal sealed class CopilotService : Form
         // ON=0, AUTO=1, OFF=2. Verify against INI_STROBE_LIGHT_SWITCH.
         if (_state!.IsIniBuildsA330)
         {
-            _simConnect!.SetInputEvent(A330StrobeInputEventHash, (double)desiredPosition);
+            Connection!.SetInputEvent(A330StrobeInputEventHash, (double)desiredPosition);
             SendMobiFlightCommand($"MF.SimVars.Set.(>B:AIRLINER_STROBE_TOGGLE_{desiredPosition})");
             SendMobiFlightCommand("MF.DummyCmd");
             AppLog.Write(
@@ -13634,7 +13616,7 @@ internal sealed class CopilotService : Form
         }
         else
         {
-            _simConnect!.SetInputEvent(8986586253276960537UL, (double)desiredPosition);
+            Connection!.SetInputEvent(8986586253276960537UL, (double)desiredPosition);
         }
         BeginNativeAction(
             "Strobe selector",
@@ -13779,7 +13761,7 @@ internal sealed class CopilotService : Form
 
     private void StartFlyByWireFireTest(FireTestSystem system)
     {
-        if (_simConnect == null || _state == null)
+        if (Connection == null || _state == null)
         {
             AppendDashboardLog($"{FormatFireTestName(system)} blocked: aircraft state is unavailable.");
             FinishOneShot(3);
@@ -13828,7 +13810,7 @@ internal sealed class CopilotService : Form
 
     private void VerifyPendingFireTest()
     {
-        if (_pendingFireTest == null || _state == null || _simConnect == null)
+        if (_pendingFireTest == null || _state == null || Connection == null)
         {
             return;
         }
@@ -14001,7 +13983,7 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        _simConnect!.SetInputEvent(inputEventHash, (double)desiredPosition);
+        Connection!.SetInputEvent(inputEventHash, (double)desiredPosition);
         BeginNativeAction(
             FormatSignSelectorName(selector),
             Verify,
@@ -14011,7 +13993,7 @@ internal sealed class CopilotService : Form
 
     private void SetA321SignSelector(SignSelector selector, int desiredPosition)
     {
-        if (_simConnect == null || _state == null)
+        if (Connection == null || _state == null)
         {
             AppendDashboardLog(
                 $"{FormatSignSelectorName(selector)} blocked: simulator state is unavailable.");
@@ -14042,7 +14024,7 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        _simConnect.SetInputEvent(
+        Connection.SetInputEvent(
             A321ControlProfile.GetSignInputEventHash((int)selector),
             (double)desiredPosition);
         BeginNativeAction(
@@ -14054,7 +14036,7 @@ internal sealed class CopilotService : Form
 
     private void SetA330SignSelector(SignSelector selector, int desiredPosition)
     {
-        if (_simConnect == null || _state == null)
+        if (Connection == null || _state == null)
         {
             AppendDashboardLog($"{FormatSignSelectorName(selector)} blocked: simulator state is unavailable.");
             FinishOneShot(4);
@@ -14099,7 +14081,7 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        _simConnect.SetInputEvent(
+        Connection.SetInputEvent(
             A330SignInputEventHashes[index],
             A330ControlProfile.ToPhysicalSignPosition(desiredPosition));
         BeginNativeAction(
@@ -14111,7 +14093,7 @@ internal sealed class CopilotService : Form
 
     private void SetFlyByWireSignSelector(SignSelector selector, int desiredPosition)
     {
-        if (_simConnect == null || _state == null)
+        if (Connection == null || _state == null)
         {
             AppendDashboardLog($"{FormatSignSelectorName(selector)} blocked: aircraft state is unavailable.");
             FinishOneShot(3);
@@ -14243,7 +14225,7 @@ internal sealed class CopilotService : Form
 
         if (_state!.IsIniBuildsA330)
         {
-            _simConnect!.SetInputEvent(
+            Connection!.SetInputEvent(
                 A330TransponderModeInputEventHash,
                 (double)desiredPosition);
         }
@@ -14368,7 +14350,7 @@ internal sealed class CopilotService : Form
 
         if (_state?.IsIniBuildsA330 == true)
         {
-            if (_simConnect == null || !_a330TcasTrafficInputState.HasValue)
+            if (Connection == null || !_a330TcasTrafficInputState.HasValue)
             {
                 AppendDashboardLog("TCAS traffic mode blocked: A330 readback is unavailable.");
                 FinishOneShot(4);
@@ -14470,7 +14452,7 @@ internal sealed class CopilotService : Form
 
         if (_state?.IsIniBuildsA330 == true)
         {
-            if (_simConnect == null || !_a330TcasAltitudeInputState.HasValue)
+            if (Connection == null || !_a330TcasAltitudeInputState.HasValue)
             {
                 AppendDashboardLog("TCAS altitude reporting blocked: A330 readback is unavailable.");
                 FinishOneShot(4);
@@ -14483,7 +14465,7 @@ internal sealed class CopilotService : Form
                 return;
             }
 
-            _simConnect.SetInputEvent(
+            Connection.SetInputEvent(
                 A330TcasAltitudeInputEventHash,
                 desiredOn ? 1.0 : 0.0);
             BeginNativeAction(
@@ -14520,7 +14502,7 @@ internal sealed class CopilotService : Form
 
     private void SetGearUp()
     {
-        if (_simConnect == null || _state == null)
+        if (Connection == null || _state == null)
         {
             AppendDashboardLog("Landing gear UP blocked: simulator state is unavailable.");
             FinishOneShot(3);
@@ -14564,7 +14546,7 @@ internal sealed class CopilotService : Form
 
     private void SetGearDown()
     {
-        if (_simConnect == null || _state == null)
+        if (Connection == null || _state == null)
         {
             AppendDashboardLog("Landing gear DOWN blocked: simulator state is unavailable.");
             FinishOneShot(3);
@@ -14610,7 +14592,7 @@ internal sealed class CopilotService : Form
 
     private void SetGroundSpoilersDisarmed()
     {
-        if (_simConnect == null || _state == null || !_state.IsSupportedA320)
+        if (Connection == null || _state == null || !_state.IsSupportedA320)
         {
             AppendDashboardLog("Ground spoilers DISARM blocked: simulator state is unavailable.");
             FinishOneShot(3);
@@ -14650,7 +14632,7 @@ internal sealed class CopilotService : Form
 
     private void SetAltimetersStandard()
     {
-        if (_simConnect == null || _state == null)
+        if (Connection == null || _state == null)
         {
             AppendDashboardLog("Altimeters STD blocked: simulator state is unavailable.");
             FinishOneShot(3);
@@ -14694,7 +14676,7 @@ internal sealed class CopilotService : Form
     {
         if (_state?.IsFlyByWireAirbus == true)
         {
-            if (_simConnect == null
+            if (Connection == null
                 || !_mobiFlightReady
                 || !_mobiFlightRuntimeReady
                 || !_state.WeatherRadarPwsSelectorPosition.HasValue)
@@ -14729,7 +14711,7 @@ internal sealed class CopilotService : Form
 
         if (_state?.IsIniBuildsA330 == true)
         {
-            if (_simConnect == null || !_a330WeatherRadarPwsInputState.HasValue)
+            if (Connection == null || !_a330WeatherRadarPwsInputState.HasValue)
             {
                 AppendDashboardLog("WXR/PWS selector blocked: A330 readback is unavailable.");
                 FinishOneShot(4);
@@ -14782,7 +14764,7 @@ internal sealed class CopilotService : Form
                 "WXR/PWS selector position must be OFF, 1, or 2.")
         };
 
-        _simConnect!.SetInputEvent(14794713865952973521UL, (double)nativePosition);
+        Connection!.SetInputEvent(14794713865952973521UL, (double)nativePosition);
         BeginNativeAction(
             "WXR/PWS selector",
             state => state.WeatherRadarPwsSelectorPosition.HasValue
@@ -14797,7 +14779,7 @@ internal sealed class CopilotService : Form
     {
         if (_state?.IsFlyByWireAirbus == true)
         {
-            if (_simConnect == null || !_mobiFlightReady)
+            if (Connection == null || !_mobiFlightReady)
             {
                 AppendDashboardLog("Nose light selector blocked: simulator state is unavailable.");
                 FinishOneShot(3);
@@ -14834,7 +14816,7 @@ internal sealed class CopilotService : Form
 
         if (_state?.IsIniBuildsA330 == true)
         {
-            if (_simConnect == null || !_a330NoseLightInputState.HasValue)
+            if (Connection == null || !_a330NoseLightInputState.HasValue)
             {
                 AppendDashboardLog("Nose light selector blocked: A330 readback is unavailable.");
                 FinishOneShot(4);
@@ -14907,7 +14889,7 @@ internal sealed class CopilotService : Form
     {
         if (_state?.IsFlyByWireAirbus == true)
         {
-            if (_simConnect == null || !_mobiFlightReady)
+            if (Connection == null || !_mobiFlightReady)
             {
                 AppendDashboardLog("Landing lights blocked: simulator state is unavailable.");
                 FinishOneShot(3);
@@ -14951,7 +14933,7 @@ internal sealed class CopilotService : Form
 
         if (_state?.IsIniBuildsA330 == true)
         {
-            if (_simConnect == null || !_a330LandingLightInputState.HasValue)
+            if (Connection == null || !_a330LandingLightInputState.HasValue)
             {
                 AppendDashboardLog("Landing light blocked: A330 switch readback is unavailable.");
                 FinishOneShot(4);
@@ -14971,7 +14953,7 @@ internal sealed class CopilotService : Form
                 return;
             }
 
-            _simConnect.SetInputEvent(
+            Connection.SetInputEvent(
                 A330LandingLightInputEventHash,
                 desiredOn ? 1.0 : 0.0);
             BeginNativeAction(
@@ -15028,7 +15010,7 @@ internal sealed class CopilotService : Form
     {
         if (!_cruiseSeatbeltMonitoring
             || _state == null
-            || _simConnect == null
+            || Connection == null
             || !_state.IsSupportedA320
             || _state.OnGround)
         {
@@ -15202,7 +15184,7 @@ internal sealed class CopilotService : Form
         uint data0,
         uint data1)
     {
-        _simConnect!.TransmitClientEvent_EX1(
+        Connection!.TransmitClientEvent_EX1(
             SimConnect.SIMCONNECT_OBJECT_ID_USER,
             eventId,
             Priority.Highest,
@@ -15216,7 +15198,7 @@ internal sealed class CopilotService : Form
 
     private bool ValidateAfterStartAction(string name)
     {
-        if (_simConnect == null
+        if (Connection == null
             || _state == null
             || !_state.IsSupportedA320
             || !_state.OnGround
@@ -15234,7 +15216,7 @@ internal sealed class CopilotService : Form
     {
         if (_state?.IsFlyByWireAirbus == true)
         {
-            if (_simConnect == null || !_mobiFlightRuntimeReady)
+            if (Connection == null || !_mobiFlightRuntimeReady)
             {
                 AppendDashboardLog("Ground spoilers blocked: FBW runtime adapter is unavailable.");
                 FinishOneShot(4);
@@ -15318,7 +15300,7 @@ internal sealed class CopilotService : Form
 
     private void SetFlapsExtended(uint desiredPosition)
     {
-        if (_simConnect == null || _state == null || !_state.IsSupportedA320)
+        if (Connection == null || _state == null || !_state.IsSupportedA320)
         {
             AppendDashboardLog("Flap extension blocked: simulator state is unavailable.");
             FinishOneShot(3);
@@ -15403,7 +15385,7 @@ internal sealed class CopilotService : Form
 
     private void SetFlapsClean()
     {
-        if (_simConnect == null || _state == null || !_state.IsSupportedA320)
+        if (Connection == null || _state == null || !_state.IsSupportedA320)
         {
             AppendDashboardLog("Flaps retraction blocked: simulator state is unavailable.");
             FinishOneShot(3);
@@ -15476,7 +15458,7 @@ internal sealed class CopilotService : Form
         void SendNextStep()
         {
             if (!guardedAction.IsCurrent
-                || _simConnect == null
+                || Connection == null
                 || _state?.IsIniBuildsA330 != true)
             {
                 _automation.Complete(timer);
@@ -15501,7 +15483,7 @@ internal sealed class CopilotService : Form
 
     private void SetAutobrake(int desiredLevel, string label)
     {
-        if (_simConnect == null
+        if (Connection == null
             || _state == null
             || !_state.IsSupportedA320
             || !_mobiFlightReady
@@ -15583,7 +15565,7 @@ internal sealed class CopilotService : Form
         bool requireCompleteNativeState = true,
         bool requireStationary = true)
     {
-        if (_simConnect == null
+        if (Connection == null
             || _state == null
             || !_mobiFlightReady
             || !_mobiFlightRuntimeReady
@@ -15638,7 +15620,7 @@ internal sealed class CopilotService : Form
 
     private void SetExternalPower(bool desiredOn)
     {
-        if (_simConnect == null || _state == null)
+        if (Connection == null || _state == null)
         {
             Console.Error.WriteLine("External-power procedure blocked: aircraft state is unavailable.");
             FinishOneShot(3);
@@ -15725,7 +15707,7 @@ internal sealed class CopilotService : Form
 
     private void TransmitExternalPowerCommand(uint index, bool desiredOn)
     {
-        _simConnect!.TransmitClientEvent_EX1(
+        Connection!.TransmitClientEvent_EX1(
             SimConnect.SIMCONNECT_OBJECT_ID_USER,
             CopilotEvent.SetExternalPower,
             Priority.Highest,
@@ -17414,7 +17396,7 @@ internal sealed class CopilotService : Form
 
     private void SetPmdg777BatteryOn()
     {
-        if (_simConnect == null
+        if (Connection == null
             || _state?.IsPmdg777300Er != true
             || !_pmdg777SdkInitialized
             || !_pmdg777DataReady)
@@ -17441,7 +17423,7 @@ internal sealed class CopilotService : Form
             Event = Pmdg777ControlProfile.BatterySwitchEvent,
             Parameter = 1
         };
-        _simConnect.SetClientData(
+        Connection.SetClientData(
             ClientDataArea.Pmdg777Control,
             ClientDataDefinition.Pmdg777Control,
             SIMCONNECT_CLIENT_DATA_SET_FLAG.DEFAULT,
@@ -17826,7 +17808,7 @@ internal sealed class CopilotService : Form
 
     private void SetPmdg777Gear(bool down)
     {
-        if (_simConnect == null
+        if (Connection == null
             || _state?.IsPmdg777300Er != true
             || !_pmdg777DataReady)
         {
@@ -17860,7 +17842,7 @@ internal sealed class CopilotService : Form
 
     private void SetPmdg777SpeedbrakeArmed()
     {
-        if (_simConnect == null
+        if (Connection == null
             || _state?.IsPmdg777300Er != true
             || !_pmdg777DataReady)
         {
@@ -17959,7 +17941,7 @@ internal sealed class CopilotService : Form
     private void SendNextPmdg777QueuedControl()
     {
         if (_pmdg777ControlQueueAction?.IsCurrent != true
-            || _simConnect == null
+            || Connection == null
             || _state?.Variant != AircraftVariant.Pmdg777300Er)
         {
             _pmdg777ControlQueue.Clear();
@@ -18021,7 +18003,7 @@ internal sealed class CopilotService : Form
 
     private void SendPmdg777Control(uint eventId, uint parameter, string label)
     {
-        if (_simConnect == null
+        if (Connection == null
             || _state?.IsPmdg777300Er != true
             || !_pmdg777SdkInitialized
             || !_pmdg777DataReady)
@@ -18036,7 +18018,7 @@ internal sealed class CopilotService : Form
         }
 
         var command = new Pmdg777Control { Event = eventId, Parameter = parameter };
-        _simConnect.SetClientData(
+        Connection.SetClientData(
             ClientDataArea.Pmdg777Control,
             ClientDataDefinition.Pmdg777Control,
             SIMCONNECT_CLIENT_DATA_SET_FLAG.DEFAULT,
@@ -18048,7 +18030,7 @@ internal sealed class CopilotService : Form
 
     private void SetA310BatteriesAuto()
     {
-        if (_simConnect == null || _state?.IsIniBuildsA310 != true)
+        if (Connection == null || _state?.IsIniBuildsA310 != true)
         {
             AppendDashboardLog("A310 battery command blocked: A310 aircraft state is unavailable.");
             FinishOneShot(3);
@@ -18090,7 +18072,7 @@ internal sealed class CopilotService : Form
 
     private void SetA310WipersAndWeatherRadarOff()
     {
-        if (_simConnect == null || _state?.IsIniBuildsA310 != true || !_mobiFlightReady)
+        if (Connection == null || _state?.IsIniBuildsA310 != true || !_mobiFlightReady)
         {
             AppendDashboardLog("A310 wiper/radar command blocked: A310 adapter is unavailable.");
             FinishOneShot(3);
@@ -18431,7 +18413,7 @@ internal sealed class CopilotService : Form
 
     private void SetA310SelectedAirspeed(int targetKnots)
     {
-        if (_simConnect == null
+        if (Connection == null
             || _state?.IsIniBuildsA310 != true
             || _state.OnGround)
         {
@@ -18599,7 +18581,7 @@ internal sealed class CopilotService : Form
 
     private void StartA310Apu()
     {
-        if (_simConnect == null || _state?.IsIniBuildsA310 != true)
+        if (Connection == null || _state?.IsIniBuildsA310 != true)
         {
             AppendDashboardLog("A310 APU start blocked: simulator state is unavailable.");
             FinishOneShot(4);
@@ -21430,8 +21412,8 @@ internal sealed class CopilotService : Form
         _phaseLabel!.Text = OperationalPhaseDetector.Detect(_state).ToString();
         SetStatusBadge(
             _simBadgeLabel,
-            _simConnect != null ? "MSFS CONNECTED" : "MSFS DISCONNECTED",
-            _simConnect != null
+            Connection != null ? "MSFS CONNECTED" : "MSFS DISCONNECTED",
+            Connection != null
                 ? System.Drawing.Color.FromArgb(39, 130, 87)
                 : System.Drawing.Color.FromArgb(150, 48, 48));
         SetStatusBadge(
@@ -22786,7 +22768,7 @@ internal sealed class CopilotService : Form
 
     private void PublishEfbState(bool force = false)
     {
-        if (_simConnect == null)
+        if (Connection == null)
         {
             return;
         }
@@ -22872,7 +22854,7 @@ internal sealed class CopilotService : Form
             ["kind"] = "state",
             ["sentUtc"] = DateTime.UtcNow.ToString("O"),
             ["companionVersion"] = GetApplicationVersion(),
-            ["connected"] = _simConnect != null,
+            ["connected"] = Connection != null,
             ["aircraftReady"] = state != null,
             ["aircraft"] = new Dictionary<string, object?>
             {
@@ -22970,14 +22952,14 @@ internal sealed class CopilotService : Form
 
     private void SendEfbEnvelope(object envelope)
     {
-        if (_simConnect == null)
+        if (Connection == null)
         {
             return;
         }
 
         try
         {
-            _simConnect.CallCommBusEvent(
+            Connection.CallCommBusEvent(
                 EfbCompanionProtocol.StateEventName,
                 SIMCONNECT_COMM_BUS_BROADCAST_TO.JS,
                 EfbCompanionProtocol.Serialize(envelope));
@@ -23134,7 +23116,7 @@ internal sealed class CopilotService : Form
         Application.ExitThread();
     }
 
-    private static void OnException(SimConnect sender, SIMCONNECT_RECV_EXCEPTION data)
+    private static void HandleSimConnectException(SIMCONNECT_RECV_EXCEPTION data)
     {
         var exception = (SIMCONNECT_EXCEPTION)data.dwException;
         if (exception == SIMCONNECT_EXCEPTION.ALREADY_CREATED)
@@ -23149,7 +23131,7 @@ internal sealed class CopilotService : Form
         AppLog.Write(detail);
     }
 
-    private void OnQuit(SimConnect sender, SIMCONNECT_RECV data)
+    private void HandleSimConnectDisconnected()
     {
         Console.WriteLine("MSFS closed the SimConnect session.");
         AppLog.Write("MSFS closed the SimConnect session.");
@@ -23173,14 +23155,11 @@ internal sealed class CopilotService : Form
         _pmdg777AdiruOnTimer = null;
         _loggedPmdg777FlowOneSignature = null;
         ResetMobiFlightRuntimeAfterDisconnect();
-        _simConnect?.Dispose();
-        _simConnect = null;
         if (_connectionLabel != null)
         {
             _connectionLabel.Text = "Disconnected; waiting for MSFS...";
             _connectionLabel.ForeColor = System.Drawing.Color.DarkRed;
         }
-        ScheduleReconnect();
     }
 
     private void ResetMobiFlightRuntimeAfterDisconnect()
@@ -23278,7 +23257,7 @@ internal sealed class CopilotService : Form
             StopFuelPumpSequenceTimer();
             if (_pendingFireTest != null)
             {
-                if (_simConnect != null)
+                if (Connection != null)
                 {
                     SetFireTestPressed(
                         _pendingFireTest.System,
@@ -23293,7 +23272,6 @@ internal sealed class CopilotService : Form
                 _pendingFlyByWireFireTest = null;
             }
             _asobo737MaxFireTestsInProgress = false;
-            _reconnectTimer?.Dispose();
             _commandTimer?.Stop();
             _commandTimer?.Dispose();
             _commandTimer = null;
@@ -23339,7 +23317,7 @@ internal sealed class CopilotService : Form
             _sayIntentionsClient.Dispose();
             _sayIntentionsCommsModeGate.Dispose();
             _sayIntentionsCancellation.Dispose();
-            _simConnect?.Dispose();
+            _simConnectSession.Dispose();
         }
 
         base.Dispose(disposing);

@@ -16,6 +16,8 @@ changes, and provides spoken operational callouts.
 - iniBuilds A310-300
 - FlyByWire A32NX for MSFS 2024
 - PMDG 737-800
+- PMDG 777-300ER (**development integration on `main`; not included in
+  v0.9.7**)
 - Asobo 737 MAX 8 (**development beta; see the warning below**)
 
 Unsupported aircraft are detected but not controlled. The app does not send
@@ -53,7 +55,7 @@ focuses on verified configuration changes and operational calls.
 The release package contains the required SimConnect client libraries. The
 MSFS SDK is not required to run the app.
 
-### PMDG 737-800
+### PMDG 737-800 and 777-300ER
 
 PMDG SDK data broadcast must be enabled in the aircraft options file:
 
@@ -62,15 +64,32 @@ PMDG SDK data broadcast must be enabled in the aircraft options file:
 EnableDataBroadcast=1
 ```
 
-The dashboard should show `PMDG SDK OK` after the aircraft is loaded.
+For the 777, set this in `777_Options.ini`. The 737 uses its corresponding PMDG
+options file. Restart or reload the aircraft after changing the option, then
+confirm that the dashboard reports the PMDG SDK connection as ready.
+
+### PMDG 777-300ER development integration
+
+The current `main` branch contains a dedicated PMDG 777-300ER profile with its
+own PMDG 777X SDK telemetry, controls, checklists, and twelve-flow gate-to-gate
+procedure catalog. The implementation includes automated startup, departure,
+cruise, arrival, taxi-in, parking, shutdown, and turnaround handling with
+aircraft-specific readbacks.
+
+This work was added after v0.9.7 and remains a development integration until
+the flows complete ordered live validation in the simulator. It does not reuse
+the PMDG 737 SDK namespace or procedures. Pilots testing a build from `main`
+must supervise every action and stop the flow if the reported state differs
+from the cockpit. See the
+[PMDG 777-300ER integration status](docs/PMDG_777_300ER_SUPPORT_PLAN.md).
 
 ### Asobo 737 MAX 8 experimental support
 
 The repository contains a dedicated Asobo 737 MAX profile using native
 SimConnect Input Events and aircraft-specific procedures. Flows 1–6 have
 received iterative live testing, but the MAX profile is not yet gate-to-gate
-validated. It is included in v0.9.7 only as an explicitly
-**experimental**, and further MAX development is paused while work focuses on
+validated. It is included in v0.9.7 only as explicitly **experimental**, and
+further MAX development is paused while work focuses on
 the desktop UX redesign and MSFS 2024 EFB companion.
 
 Do not rely on its current "Takeoff configuration normal" callout as an
@@ -229,19 +248,10 @@ installed or disabled.
   Deliberate captain decisions and controls without a safe native interface
   remain manual. Further A310 work is maintenance and field validation rather
   than planned feature development.
-- PMDG 777-300ER integration has started. The app recognizes the installed
-  `777-300ER` title, isolates the official `PMDG_777X` SDK namespace, and
-  exposes the complete dedicated twelve-flow gate-to-gate catalog. Active Flow
-  1 uses PMDG-native readbacks for BATTERY, both external-power sources, bus
-  ties, hydraulic-pump starting state, wipers, gear, alternate flaps, and
-  ADIRU. Its deliberate 3–5 second verification intervals and the 30-second
-  ADIRU-off requirement keep the flow usable at normal cockpit pace. Flow 2
-  follows the same Boeing crew-workflow pattern as the 737: explicit Captain
-  flight-deck, UFT, CDU and clearance work followed by the detailed First
-  Officer preflight. FO electrical, emergency-light selector and guard,
-  navigation-light, flight-director and transponder actions have independent
-  readbacks. Display, console, IRS, CDU and electronic PREFLIGHT-checklist
-  gates use exact PMDG data; MCP setup remains in Before Start per PMDG SOP.
+- The PMDG 777-300ER implementation on `main` has a complete dedicated
+  twelve-flow automation and checklist catalog, but it is newer than v0.9.7
+  and is not yet classified as operationally supported. Ordered in-simulator
+  validation remains required before its development warning can be removed.
 
 ## Troubleshooting and issue reports
 

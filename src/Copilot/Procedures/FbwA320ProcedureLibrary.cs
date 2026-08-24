@@ -100,16 +100,29 @@ internal static class FbwA320ProcedureLibrary
         AircraftState state,
         int maximumDistanceNm,
         bool fallbackReached,
-        int maximumSpeedKnots) =>
-        ApproachDistanceReached(state, maximumDistanceNm)
-        || fallbackReached;
+        int maximumSpeedKnots)
+    {
+        var distanceAvailable =
+            state.ApproachDistanceToTouchdownNm.HasValue
+            && state.ApproachDistanceToTouchdownNm.Value > 0;
+        return fallbackReached
+               && (!distanceAvailable
+                   || ApproachDistanceReached(state, maximumDistanceNm));
+    }
 
-    private static bool ApproachGearGateReached(AircraftState state) =>
-        state.IndicatedAirspeedKnots <= state.ApproachGearSpeedKnots
-        && (ApproachDistanceReached(state, state.ApproachGearDistanceNm)
-            || (!state.ApproachDistanceToTouchdownNm.HasValue
-                && state.AltitudeAboveGroundFeet
-                   <= state.ApproachGearAltitudeAglFeet));
+    private static bool ApproachGearGateReached(AircraftState state)
+    {
+        var distanceAvailable =
+            state.ApproachDistanceToTouchdownNm.HasValue
+            && state.ApproachDistanceToTouchdownNm.Value > 0;
+        return state.IndicatedAirspeedKnots <= state.ApproachGearSpeedKnots
+               && state.AltitudeAboveGroundFeet
+                  <= state.ApproachGearAltitudeAglFeet
+               && (!distanceAvailable
+                   || ApproachDistanceReached(
+                       state,
+                       state.ApproachGearDistanceNm));
+    }
 
     public static ProcedureDefinition PowerUpAndInitialSetup { get; } =
         new(

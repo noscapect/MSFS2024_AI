@@ -430,6 +430,68 @@ public sealed class ProcedureRecoveryTests
     }
 
     [TestMethod]
+    public void FbwApproachDistanceCannotBypassVerticalConfigurationGates()
+    {
+        var state = new AircraftState
+        {
+            Title = "FlyByWire A32NX",
+            OnGround = false,
+            ApproachDistanceToTouchdownNm = 4.5,
+            ApproachFlaps1DistanceNm = 15,
+            ApproachFlaps1AltitudeFeet = 10000,
+            ApproachFlaps2DistanceNm = 10,
+            ApproachFlaps2AltitudeAglFeet = 4000,
+            ApproachGearDistanceNm = 7,
+            ApproachGearAltitudeAglFeet = 2500,
+            ApproachGearSpeedKnots = 210,
+            ApproachLandingConfigDistanceNm = 5,
+            ApproachLandingConfigAltitudeAglFeet = 1800,
+            IndicatedAltitudeFeet = 10005,
+            AltitudeAboveGroundFeet = 9700,
+            IndicatedAirspeedKnots = 143
+        };
+        var gates = FbwA320ProcedureLibrary.ApproachAndLanding.Steps
+            .Where(step => step.Id is "approach-config-start"
+                or "flaps-two-point"
+                or "gear-down-point"
+                or "landing-config-point")
+            .ToDictionary(step => step.Id);
+
+        Assert.IsFalse(gates["approach-config-start"].IsComplete(state));
+        Assert.IsFalse(gates["flaps-two-point"].IsComplete(state));
+        Assert.IsFalse(gates["gear-down-point"].IsComplete(state));
+        Assert.IsFalse(gates["landing-config-point"].IsComplete(state));
+
+        state.IndicatedAltitudeFeet = 9900;
+        state.AltitudeAboveGroundFeet = 1700;
+
+        Assert.IsTrue(gates["approach-config-start"].IsComplete(state));
+        Assert.IsTrue(gates["flaps-two-point"].IsComplete(state));
+        Assert.IsTrue(gates["gear-down-point"].IsComplete(state));
+        Assert.IsTrue(gates["landing-config-point"].IsComplete(state));
+    }
+
+    [TestMethod]
+    public void FbwApproachUsesVerticalFallbackWhenRunwayDistanceIsUnavailable()
+    {
+        var state = new AircraftState
+        {
+            Title = "FlyByWire A32NX",
+            OnGround = false,
+            ApproachDistanceToTouchdownNm = null,
+            ApproachGearDistanceNm = 7,
+            ApproachGearAltitudeAglFeet = 2500,
+            ApproachGearSpeedKnots = 210,
+            AltitudeAboveGroundFeet = 2400,
+            IndicatedAirspeedKnots = 190
+        };
+        var gearGate = FbwA320ProcedureLibrary.ApproachAndLanding.Steps
+            .Single(step => step.Id == "gear-down-point");
+
+        Assert.IsTrue(gearGate.IsComplete(state));
+    }
+
+    [TestMethod]
     public void ApproachFlowUsesTakeoffNoseLightBeforeLanding()
     {
         var commands = new List<string>();

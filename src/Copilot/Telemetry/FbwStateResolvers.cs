@@ -91,11 +91,24 @@ internal static class FbwStateResolvers
         float? commandedValue,
         DateTime? commandedUtc,
         float? typedValue,
-        float? untypedValue)
+        float? untypedValue) =>
+        ResolveSelector(
+            commandedValue,
+            commandedUtc,
+            typedValue,
+            untypedValue,
+            DateTime.UtcNow);
+
+    public static double ResolveSelector(
+        float? commandedValue,
+        DateTime? commandedUtc,
+        float? typedValue,
+        float? untypedValue,
+        DateTime utcNow)
     {
         var recentCommand = commandedValue.HasValue
                             && commandedUtc.HasValue
-                            && DateTime.UtcNow - commandedUtc.Value < TimeSpan.FromSeconds(10);
+                            && utcNow - commandedUtc.Value < TimeSpan.FromSeconds(10);
         if (recentCommand
             && ((typedValue.HasValue && Math.Abs(typedValue.Value - commandedValue!.Value) < 0.1f)
                 || (untypedValue.HasValue && Math.Abs(untypedValue.Value - commandedValue!.Value) < 0.1f)))

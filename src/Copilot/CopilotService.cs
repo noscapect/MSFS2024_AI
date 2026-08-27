@@ -19686,7 +19686,6 @@ internal sealed class CopilotService : Form
         _pmdg777AdiruOnTimer?.Stop();
         _pmdg777AdiruOnTimer?.Dispose();
         _pmdg777AdiruOnTimer = null;
-        _loggedPmdg777FlowOneSignature = null;
         ResetMobiFlightRuntimeAfterDisconnect();
         if (_connectionLabel != null)
         {

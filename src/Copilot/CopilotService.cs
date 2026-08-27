@@ -81,6 +81,7 @@ internal sealed class CopilotService : Form
     private bool _taxiClearanceReceived;
     private bool _takeoffClearanceReceived;
     private bool _pmdg777TaxiLightsCommandedThisFlow;
+    private readonly Pmdg777RuntimeState _pmdg777Runtime = new();
     private readonly FlightTelemetryStore _flightTelemetryStore;
     private readonly AircraftIdentityResolver _aircraftIdentityResolver = new();
     private System.Windows.Forms.Timer? _replayTimer;
@@ -115,19 +116,10 @@ internal sealed class CopilotService : Form
     private DateTime? _mobiFlightRuntimeInitializedUtc;
     private readonly PmdgNg3RuntimeState _pmdgNg3Runtime = new();
     private bool _pmdg777SdkInitialized;
-    private bool _pmdg777DataReady;
-    private Pmdg777SdkData? _pmdg777State;
-    private Pmdg777Control _pmdg777ControlState;
     private readonly Queue<(uint EventId, uint Parameter, string Label)> _pmdg777ControlQueue = new();
     private System.Windows.Forms.Timer? _pmdg777ControlQueueTimer;
     private GenerationBoundCockpitAction? _pmdg777ControlQueueAction;
-    private bool _pmdg777FireOverheatTestObserved;
-    private bool _pmdg777FirstOfficerOxygenTestObserved;
-    private bool _pmdg777ControlReady;
-    private string? _loggedPmdg777FlowOneSignature;
-    private byte[]? _pmdg777RawSnapshot;
     private bool? _loggedPmdg777GenericBattery;
-    private DateTime? _pmdg777AdiruOffSinceUtc;
     private System.Windows.Forms.Timer? _pmdg777AdiruOnTimer;
     private double? _lastLoggedA380ExternalPowerDirectSignature;
     private double? _lastLoggedA380AcPowerSignature;
@@ -1803,9 +1795,7 @@ internal sealed class CopilotService : Form
         {
             if (data.dwData[0] is Pmdg777Control control)
             {
-                var becameReady = !_pmdg777ControlReady;
-                _pmdg777ControlState = control;
-                _pmdg777ControlReady = true;
+                var becameReady = _pmdg777Runtime.ApplyControlData(control);
                 if (becameReady)
                 {
                     AppLog.Write("PMDG 777X control channel ready.");
@@ -1822,7 +1812,8 @@ internal sealed class CopilotService : Form
                     + $"received {data.dwData[0]?.GetType().FullName ?? "null"}.");
                 return;
             }
-            if (!Pmdg777SdkData.TryParse(raw.Data, out var parsed))
+            var update = _pmdg777Runtime.ApplyAircraftData(raw.Data);
+            if (!update.Accepted)
             {
                 AppLog.Write(
                     $"PMDG 777X SDK data block rejected: no published 777-300ER state "
@@ -1830,11 +1821,9 @@ internal sealed class CopilotService : Form
                 return;
             }
 
-            _pmdg777State = parsed;
-            LogPmdg777FlowOneState(parsed);
-            if (!_pmdg777DataReady)
+            LogPmdg777FlowOneState(_pmdg777Runtime.State!);
+            if (update.BecameDataReady)
             {
-                _pmdg777DataReady = true;
                 AppendDashboardLog("PMDG 777X SDK data broadcast received; Flow 1 readbacks active.");
                 AppLog.Write("PMDG 777X SDK data broadcast received; Flow 1 readbacks active.");
             }
@@ -2870,7 +2859,7 @@ internal sealed class CopilotService : Form
         var isPmdg737 = aircraftVariant == AircraftVariant.Pmdg737800;
         var isAsobo737Max = aircraftVariant == AircraftVariant.Asobo737Max8;
         var pmdg = _pmdgNg3Runtime.State;
-        var pmdg777 = _pmdg777State;
+        var pmdg777 = _pmdg777Runtime.State;
         if (isPmdg777 && !_pmdg777SdkInitialized)
         {
             InitializePmdg777Sdk(sender);
@@ -2979,14 +2968,15 @@ internal sealed class CopilotService : Form
 
         if (isPmdg777)
         {
-            _pmdg777FireOverheatTestObserved |= raw.Pmdg777FireOverheatTestSwitch > 0.5;
-            _pmdg777FirstOfficerOxygenTestObserved |= raw.Pmdg777FirstOfficerOxygenTestSwitch > 0.5;
+            _pmdg777Runtime.RecordFireAndOxygenObservations(
+                raw.Pmdg777FireOverheatTestSwitch,
+                raw.Pmdg777FirstOfficerOxygenTestSwitch);
         }
 
         _state = new AircraftState
         {
             Title = raw.Title,
-            Pmdg777SdkDataReady = isPmdg777 && _pmdg777DataReady,
+            Pmdg777SdkDataReady = isPmdg777 && _pmdg777Runtime.DataReady,
             Pmdg777BatteryOn = isPmdg777 && pmdg777?.BatteryOn == true,
             Pmdg777IfePassengerSeatsOn = isPmdg777 && pmdg777?.IfePassengerSeatsOn == true,
             Pmdg777CabinUtilityOn = isPmdg777 && pmdg777?.CabinUtilityOn == true,
@@ -3101,8 +3091,8 @@ internal sealed class CopilotService : Form
             Pmdg777FuelToRemainSelectorIn = isPmdg777 && pmdg777?.FuelToRemainSelectorIn == true,
             Pmdg777TemperatureControlsPreflight = isPmdg777 && pmdg777?.TemperatureControlsPreflight == true,
             Pmdg777FirstOfficerNdMap = isPmdg777 && pmdg777?.FirstOfficerNdMap == true,
-            Pmdg777FireOverheatTestComplete = isPmdg777 && _pmdg777FireOverheatTestObserved,
-            Pmdg777FirstOfficerOxygenTestComplete = isPmdg777 && _pmdg777FirstOfficerOxygenTestObserved,
+            Pmdg777FireOverheatTestComplete = isPmdg777 && _pmdg777Runtime.FireOverheatTestObserved,
+            Pmdg777FirstOfficerOxygenTestComplete = isPmdg777 && _pmdg777Runtime.FirstOfficerOxygenTestObserved,
             Pmdg777FirstOfficerSourcesNormal = isPmdg777 && pmdg777?.FirstOfficerSourcesNormal == true,
             Pmdg777FirstOfficerDisplaysReady = isPmdg777 && pmdg777?.FirstOfficerDisplaysReady == true,
             Pmdg777SpeedbrakeDown = isPmdg777 && pmdg777?.SpeedbrakeDown == true,
@@ -4222,13 +4212,13 @@ internal sealed class CopilotService : Form
 
     private void ApplyPmdg777SdkState()
     {
-        if (_state?.IsPmdg777300Er != true || _pmdg777State == null)
+        if (_state?.IsPmdg777300Er != true || _pmdg777Runtime.State == null)
         {
             return;
         }
 
-        var sdk = _pmdg777State;
-        _state.Pmdg777SdkDataReady = _pmdg777DataReady;
+        var sdk = _pmdg777Runtime.State!;
+        _state.Pmdg777SdkDataReady = _pmdg777Runtime.DataReady;
         _state.Pmdg777BatteryOn = sdk.BatteryOn;
         _state.Pmdg777IfePassengerSeatsOn = sdk.IfePassengerSeatsOn;
         _state.Pmdg777CabinUtilityOn = sdk.CabinUtilityOn;
@@ -4251,14 +4241,7 @@ internal sealed class CopilotService : Form
         _state.Pmdg777GroundAirConfigurationSet =
             sdk.PacksOff && sdk.RecirculationFansOff;
         _state.Pmdg777AdiruOn = sdk.AdiruOn;
-        if (sdk.AdiruOn)
-        {
-            _pmdg777AdiruOffSinceUtc = null;
-        }
-        else if (!_pmdg777AdiruOffSinceUtc.HasValue)
-        {
-            _pmdg777AdiruOffSinceUtc = DateTime.UtcNow;
-        }
+        _pmdg777Runtime.ObserveAdiruState(DateTime.UtcNow);
         _state.Pmdg777EmergencyLightsArmed = sdk.EmergencyLightsSelector == 1;
         _state.Pmdg777FirstOfficerFlightDirectorOn = sdk.FirstOfficerFlightDirectorOn;
         _state.Pmdg777ServiceInterphoneOff = sdk.ServiceInterphoneOff;
@@ -4336,8 +4319,8 @@ internal sealed class CopilotService : Form
         _state.Pmdg777FuelToRemainSelectorIn = sdk.FuelToRemainSelectorIn;
         _state.Pmdg777TemperatureControlsPreflight = sdk.TemperatureControlsPreflight;
         _state.Pmdg777FirstOfficerNdMap = sdk.FirstOfficerNdMap;
-        _state.Pmdg777FireOverheatTestComplete = _pmdg777FireOverheatTestObserved;
-        _state.Pmdg777FirstOfficerOxygenTestComplete = _pmdg777FirstOfficerOxygenTestObserved;
+        _state.Pmdg777FireOverheatTestComplete = _pmdg777Runtime.FireOverheatTestObserved;
+        _state.Pmdg777FirstOfficerOxygenTestComplete = _pmdg777Runtime.FirstOfficerOxygenTestObserved;
         _state.Pmdg777FirstOfficerSourcesNormal = sdk.FirstOfficerSourcesNormal;
         _state.Pmdg777FirstOfficerDisplaysReady = sdk.FirstOfficerDisplaysReady;
         _state.Pmdg777SpeedbrakeDown = sdk.SpeedbrakeDown;
@@ -4369,68 +4352,15 @@ internal sealed class CopilotService : Form
 
     private void LogPmdg777FlowOneState(Pmdg777SdkData sdk)
     {
-        var signature =
-            $"BAT={sdk.BatteryOn.ToOnOff()} "
-            + $"EXT_AVAIL={sdk.PrimaryExternalPowerAvailable.ToOnOff()}/{sdk.SecondaryExternalPowerAvailable.ToOnOff()} "
-            + $"EXT_ON={sdk.PrimaryExternalPowerOn.ToOnOff()}/{sdk.SecondaryExternalPowerOn.ToOnOff()} "
-            + $"HYD_SAFE={(sdk.CenterPrimaryPumpsOff && sdk.DemandPumpsOff).ToOnOff()} "
-            + $"WIPERS_OFF={sdk.WipersOff.ToOnOff()} GEAR_DOWN={sdk.GearLeverDown.ToOnOff()} "
-            + $"ALT_FLAPS_OFF={sdk.AlternateFlapsOff.ToOnOff()} PARK_BRAKE={sdk.ParkingBrakeSet.ToOnOff()} "
-            + $"RAW_GEAR={sdk.GearLeverRaw} RAW_ALT={sdk.AlternateFlapsArmRaw}/{sdk.AlternateFlapsControlRaw} "
-            + $"RAW_PARK={sdk.ParkingBrakeRaw} "
-            + $"NAV={sdk.NavigationLightOn.ToOnOff()} LOGO={sdk.LogoLightOn.ToOnOff()} "
-            + $"PACKS_OFF={sdk.PacksOff.ToOnOff()} RECIRC_OFF={sdk.RecirculationFansOff.ToOnOff()} "
-            + $"ADIRU={sdk.AdiruOn.ToOnOff()} IRS_ALIGNED={sdk.IrsAligned.ToOnOff()} EMER={sdk.EmergencyLightsSelector} "
-            + $"EMER_GUARD={(_state?.Pmdg777EmergencyLightsGuardClosed == true ? "CLOSED" : "OPEN")} "
-            + $"FO_FD={sdk.FirstOfficerFlightDirectorOn.ToOnOff()} FO_SRC={sdk.FirstOfficerSourcesNormal.ToOnOff()} "
-            + $"FO_DSP={sdk.FirstOfficerDisplaysReady.ToOnOff()} CONSOLE={sdk.SpeedbrakeDown.ToOnOff()}/{sdk.FlapsUp.ToOnOff()}/{sdk.FuelControlsCutoff.ToOnOff()}/{sdk.TransponderStandby.ToOnOff()} "
-            + $"FLOW2_PANEL={sdk.ThrustAsymmetryCompensationAuto.ToOnOff()}/{sdk.PrimaryFlightComputersAuto.ToOnOff()}/{sdk.FirePanelNormal.ToOnOff()}/{sdk.EngineControlPanelNormal.ToOnOff()}/{sdk.FuelPanelPreflight.ToOnOff()}/{sdk.AntiIceAuto.ToOnOff()}/{sdk.ExteriorLightsPreflight.ToOnOff()}/{sdk.AirPanelPreflight.ToOnOff()}/{sdk.AutobrakeRto.ToOnOff()}/{sdk.TransponderAltitudeSourceNormal.ToOnOff()} "
-            + $"FLOW2_DETAIL=SEAT_OFF_{sdk.SeatBeltsOff.ToOnOff()}/SEAT_AUTO_{sdk.SeatBeltsAuto.ToOnOff()}/NOSMOKE_AUTO_{sdk.NoSmokingAuto.ToOnOff()}/FUELSEL_{sdk.FuelToRemainSelectorIn.ToOnOff()}/TEMP_{sdk.TemperatureControlsPreflight.ToOnOff()}/FO_ND_MAP_{sdk.FirstOfficerNdMap.ToOnOff()}/FIRETEST_{_pmdg777FireOverheatTestObserved.ToOnOff()}/OXYTEST_{_pmdg777FirstOfficerOxygenTestObserved.ToOnOff()} "
-            + $"FMC={sdk.FmcFlightNumber}/{sdk.FmcCruiseAltitude}/{sdk.FmcDistanceToDestination:0.0}/{sdk.FmcPerformanceInputComplete.ToOnOff()} "
-            + $"MCP_ALT={sdk.McpAltitude} TO={sdk.FmcTakeoffFlaps}/{sdk.FmcV1}/{sdk.FmcVr}/{sdk.FmcV2} "
-            + $"FLAPS={sdk.FlapsLever}/{sdk.TakeoffFlapsSet.ToOnOff()} ECL_PREFLIGHT={sdk.PreflightChecklistComplete.ToOnOff()}";
-        if (string.Equals(
-                signature,
-                _loggedPmdg777FlowOneSignature,
-                StringComparison.Ordinal))
+        var diagnostic = _pmdg777Runtime.ObserveFlowOneDiagnostic(
+            sdk,
+            _state?.Pmdg777EmergencyLightsGuardClosed == true);
+        if (diagnostic == null)
         {
             return;
         }
 
-        _loggedPmdg777FlowOneSignature = signature;
-        AppLog.Write($"PMDG 777 Flow 1/2 readbacks: {signature}.");
-    }
-
-    private void LogPmdg777ChangedOffsets(byte[]? data)
-    {
-        if (data == null || data.Length < Pmdg777ControlProfile.DataSize)
-        {
-            return;
-        }
-
-        if (_pmdg777RawSnapshot == null)
-        {
-            _pmdg777RawSnapshot = (byte[])data.Clone();
-            AppLog.Write("PMDG 777X raw-data change monitor initialized for Flow 1/2 validation.");
-            return;
-        }
-
-        var changes = new List<string>();
-        for (var offset = 0; offset < Pmdg777ControlProfile.DataSize; offset++)
-        {
-            if (_pmdg777RawSnapshot[offset] == data[offset])
-            {
-                continue;
-            }
-
-            changes.Add($"{offset}:{_pmdg777RawSnapshot[offset]}>{data[offset]}");
-        }
-
-        if (changes.Count > 0)
-        {
-            AppLog.Write($"PMDG 777X raw-data changes: {string.Join(", ", changes)}.");
-            Buffer.BlockCopy(data, 0, _pmdg777RawSnapshot, 0, Pmdg777ControlProfile.DataSize);
-        }
+        AppLog.Write(diagnostic);
     }
 
     private void SendPmdgNg3Control(uint sdkEventOffset, uint parameter)
@@ -5979,12 +5909,9 @@ internal sealed class CopilotService : Form
         _pmdg777ControlQueueTimer?.Dispose();
         _pmdg777ControlQueueTimer = null;
         _pmdg777ControlQueueAction = null;
-        _pmdg777ControlState = default;
+        _pmdg777Runtime.ResetConnectionState();
         _pmdgNg3Runtime.ResetConnectionState();
         _pmdg777SdkInitialized = false;
-        _pmdg777DataReady = false;
-        _pmdg777State = null;
-        _pmdg777ControlReady = false;
         _pmdg777AdiruOnTimer?.Stop();
         _pmdg777AdiruOnTimer?.Dispose();
         _pmdg777AdiruOnTimer = null;
@@ -7159,8 +7086,7 @@ internal sealed class CopilotService : Form
     private void ClearCommandedAircraftState()
     {
         _pmdgNg3Runtime.ClearCommandedState();
-        _pmdg777FireOverheatTestObserved = false;
-        _pmdg777FirstOfficerOxygenTestObserved = false;
+        _pmdg777Runtime.ClearObservedTests();
 
         _nativeRuntime.ClearCommandedState();
     }
@@ -13983,7 +13909,7 @@ internal sealed class CopilotService : Form
         if (Connection == null
             || _state?.IsPmdg777300Er != true
             || !_pmdg777SdkInitialized
-            || !_pmdg777DataReady)
+            || !_pmdg777Runtime.DataReady)
         {
             _procedureRunner.Fail("PMDG 777 battery command blocked: verified 777X data or the SDK control mapping is not ready.");
             AppLog.Write("PMDG 777 battery command blocked: published 777X data or SDK control mapping not ready.");
@@ -13996,9 +13922,9 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        if (_pmdg777ControlState.Event != 0)
+        if (_pmdg777Runtime.ControlState.Event != 0)
         {
-            _procedureRunner.Fail($"PMDG 777 battery command blocked: SDK control event {_pmdg777ControlState.Event} is pending.");
+            _procedureRunner.Fail($"PMDG 777 battery command blocked: SDK control event {_pmdg777Runtime.ControlState.Event} is pending.");
             return;
         }
 
@@ -14013,7 +13939,7 @@ internal sealed class CopilotService : Form
             SIMCONNECT_CLIENT_DATA_SET_FLAG.DEFAULT,
             0,
             command);
-        _pmdg777ControlState = command;
+        _pmdg777Runtime.SetPendingControl(command);
         AppLog.Write("PMDG 777 FO action sent: BATTERY switch ON; awaiting independent 777X data readback.");
     }
 
@@ -14056,8 +13982,8 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        var offDuration = _pmdg777AdiruOffSinceUtc.HasValue
-            ? DateTime.UtcNow - _pmdg777AdiruOffSinceUtc.Value
+        var offDuration = _pmdg777Runtime.AdiruOffSinceUtc.HasValue
+            ? DateTime.UtcNow - _pmdg777Runtime.AdiruOffSinceUtc.Value
             : TimeSpan.Zero;
         var remaining = TimeSpan.FromSeconds(30) - offDuration;
         if (remaining > TimeSpan.Zero)
@@ -14394,7 +14320,7 @@ internal sealed class CopilotService : Form
     {
         if (Connection == null
             || _state?.IsPmdg777300Er != true
-            || !_pmdg777DataReady)
+            || !_pmdg777Runtime.DataReady)
         {
             _procedureRunner.Fail(
                 $"PMDG 777 landing gear {(down ? "DOWN" : "UP")} blocked: verified 777X data is not ready.");
@@ -14428,7 +14354,7 @@ internal sealed class CopilotService : Form
     {
         if (Connection == null
             || _state?.IsPmdg777300Er != true
-            || !_pmdg777DataReady)
+            || !_pmdg777Runtime.DataReady)
         {
             _procedureRunner.Fail(
                 "PMDG 777 speedbrake ARMED blocked: verified 777X data is not ready.");
@@ -14538,7 +14464,7 @@ internal sealed class CopilotService : Form
             FinishOneShot(4);
             return;
         }
-        if (_pmdg777ControlState.Event != 0)
+        if (_pmdg777Runtime.ControlState.Event != 0)
         {
             return;
         }
@@ -14590,14 +14516,14 @@ internal sealed class CopilotService : Form
         if (Connection == null
             || _state?.IsPmdg777300Er != true
             || !_pmdg777SdkInitialized
-            || !_pmdg777DataReady)
+            || !_pmdg777Runtime.DataReady)
         {
             _procedureRunner.Fail($"PMDG 777 {label} blocked: verified SDK data or control mapping is not ready.");
             return;
         }
-        if (_pmdg777ControlState.Event != 0)
+        if (_pmdg777Runtime.ControlState.Event != 0)
         {
-            _procedureRunner.Fail($"PMDG 777 {label} blocked: SDK control event {_pmdg777ControlState.Event} is still pending.");
+            _procedureRunner.Fail($"PMDG 777 {label} blocked: SDK control event {_pmdg777Runtime.ControlState.Event} is still pending.");
             return;
         }
 
@@ -14608,7 +14534,7 @@ internal sealed class CopilotService : Form
             SIMCONNECT_CLIENT_DATA_SET_FLAG.DEFAULT,
             0,
             command);
-        _pmdg777ControlState = command;
+        _pmdg777Runtime.SetPendingControl(command);
         AppLog.Write($"PMDG 777 FO action sent: {label}; awaiting independent 777X data readback.");
     }
 
@@ -18027,7 +17953,7 @@ internal sealed class CopilotService : Form
         SetStatusBadge(
             _adapterBadgeLabel,
             _state.IsPmdg777300Er
-                ? _pmdg777DataReady
+                ? _pmdg777Runtime.DataReady
                     ? "777 SDK OK"
                     : "777 SDK WAITING"
             : _state.IsPmdg737800
@@ -18038,7 +17964,7 @@ internal sealed class CopilotService : Form
                     ? "MSFS/ASOBO OK"
                 : _mobiFlightReady ? "MOBIFLIGHT OK" : "ADAPTER OFFLINE",
             _state.IsPmdg777300Er
-                ? _pmdg777DataReady
+                ? _pmdg777Runtime.DataReady
                     ? System.Drawing.Color.FromArgb(39, 130, 87)
                     : System.Drawing.Color.FromArgb(172, 113, 37)
             : _state.IsPmdg737800
@@ -18058,7 +17984,7 @@ internal sealed class CopilotService : Form
             $"{(_state.NavLogoSelectorPosition.HasValue ? FormatNavLogoPosition((int)Math.Round(_state.NavLogoSelectorPosition.Value)) : "UNKNOWN")} | " +
             $"APU {_state.ApuMasterSwitchOn.ToOnOff()}/{_state.ApuRpmPercent:F0}%";
         _adapterLabel!.Text = _state.IsPmdg777300Er
-            ? _pmdg777DataReady
+            ? _pmdg777Runtime.DataReady
                 ? "PMDG 777X SDK connected; Flow 1 BATTERY ON action and PMDG switch readback active."
                 : "PMDG 777X SDK waiting - enable [SDK] EnableDataBroadcast=1 in 777_Options.ini and restart MSFS."
         : _state.IsPmdg737800
@@ -18073,7 +17999,7 @@ internal sealed class CopilotService : Form
                 ? "MobiFlight connected"
                 : "MobiFlight not connected - aircraft controls unavailable";
         _adapterLabel.ForeColor = _state.IsPmdg777300Er
-            ? _pmdg777DataReady
+            ? _pmdg777Runtime.DataReady
                 ? System.Drawing.Color.DarkGreen
                 : System.Drawing.Color.DarkOrange
         : _state.IsPmdg737800
@@ -19756,11 +19682,7 @@ internal sealed class CopilotService : Form
         UpdateGsxStatus();
         _mobiFlightReady = false;
         _pmdg777SdkInitialized = false;
-        _pmdg777DataReady = false;
-        _pmdg777State = null;
-        _pmdg777ControlReady = false;
-        _pmdg777ControlState = default;
-        _pmdg777AdiruOffSinceUtc = null;
+        _pmdg777Runtime.ResetConnectionState();
         _pmdg777AdiruOnTimer?.Stop();
         _pmdg777AdiruOnTimer?.Dispose();
         _pmdg777AdiruOnTimer = null;

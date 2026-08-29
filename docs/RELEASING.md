@@ -1,6 +1,7 @@
 # Publishing a GitHub release
 
-Releases are created from the current `main` branch with:
+Releases are created from the current `main` branch with the project application
+closed (unrelated applications named `Copilot` do not block publishing):
 
 ```powershell
 powershell.exe -NoProfile -ExecutionPolicy Bypass `

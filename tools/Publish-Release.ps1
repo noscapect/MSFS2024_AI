@@ -6,6 +6,17 @@ param(
 
 $ErrorActionPreference = "Stop"
 
+$workspace = [System.IO.Path]::GetFullPath(
+    (Join-Path $PSScriptRoot ".."))
+Set-Location $workspace
+
+$projectExecutable = Join-Path $workspace "src\Copilot\bin\Release\net472\Copilot.exe"
+$runningProjectApplication = Get-Process Copilot -ErrorAction SilentlyContinue |
+    Where-Object { $_.Path -eq $projectExecutable }
+if ($runningProjectApplication) {
+    throw "Close the running project Copilot application before publishing a release."
+}
+
 function Invoke-GitHubJson {
     param(
         [Parameter(Mandatory = $true)]
@@ -27,14 +38,6 @@ function Invoke-GitHubJson {
         $parameters.ContentType = "application/json"
     }
     Invoke-RestMethod @parameters
-}
-
-$workspace = [System.IO.Path]::GetFullPath(
-    (Join-Path $PSScriptRoot ".."))
-Set-Location $workspace
-
-if (Get-Process Copilot -ErrorAction SilentlyContinue) {
-    throw "Close the running Copilot application before publishing a release."
 }
 
 $projectPath = Join-Path $workspace "src\Copilot\Copilot.csproj"

@@ -57,8 +57,7 @@ internal sealed class CopilotService : Form
     private readonly GsxIntegrationController _gsx;
     private GsxFileReader? _gsxFileReader;
     private ProcedureDefinition? _pendingGsxEngineStartProcedure;
-    private double? _sayIntentionsPushbackTargetHeadingDegrees;
-    private DateTime _sayIntentionsPushbackTargetCapturedUtc = DateTime.MinValue;
+    private readonly SayIntentionsRuntimeState _sayIntentionsRuntime = new();
     private Form? _gsxChoiceDialog;
     private readonly object _sayIntentionsVoiceQueueSync = new();
     private Task _sayIntentionsVoiceTail = Task.CompletedTask;
@@ -67,11 +66,8 @@ internal sealed class CopilotService : Form
     private readonly SemaphoreSlim _sayIntentionsCommsModeGate = new(1, 1);
     private readonly CancellationTokenSource _sayIntentionsCancellation = new();
     private bool _disposingOrDisposed;
-    private SayIntentionsFlightContext? _sayIntentionsFlight;
     private System.Windows.Forms.Timer? _sayIntentionsTimer;
     private bool _sayIntentionsRefreshInProgress;
-    private bool _sayIntentionsCopilotModeApplied;
-    private string? _sayIntentionsCopilotModeSessionKey;
     private string? _pendingSayIntentionsAtcStepId;
     private long _pendingSayIntentionsAtcBaselineId;
     private DateTime? _pendingSayIntentionsAtcStartedUtc;
@@ -284,12 +280,6 @@ internal sealed class CopilotService : Form
     private Button? _startSelectedFlowButton;
     private Button? _confirmCompletedButton;
     private bool _sayIntentionsHandoffInProgress;
-    private string? _sayIntentionsCommunicationSessionKey;
-    private long _sayIntentionsLastCommunicationId;
-    private string _sayIntentionsApproachRunway = "";
-    private bool _sayIntentionsApproachIsIls;
-    private readonly SayIntentionsCommunicationTracker
-        _sayIntentionsCommunicationTracker = new();
     private ImportedFlightPlan? _simBriefFlightPlan;
     private bool _simBriefImportInProgress;
 
@@ -3066,10 +3056,10 @@ internal sealed class CopilotService : Form
             BoeingFmcVrKnots = cockpitVr,
             BoeingFmcTakeoffReferenceComplete = isPmdg737 && pmdg?.FmcPerfInputComplete == true,
             SimBriefTakeoffStatus = SimBriefOperationalContext.TakeoffComparison(activePlan, aircraftVariant, cockpitV1, cockpitVr, cockpitFlaps),
-            SayIntentionsAtcActive = _sayIntentionsFlight != null
+            SayIntentionsAtcActive = _sayIntentionsRuntime.Flight != null
                                   && _settings.UseSayIntentionsCopilotCommunications,
-            SayIntentionsApproachRunway = _sayIntentionsApproachRunway,
-            SayIntentionsApproachIsIls = _sayIntentionsApproachIsIls,
+            SayIntentionsApproachRunway = _sayIntentionsRuntime.ApproachRunway,
+            SayIntentionsApproachIsIls = _sayIntentionsRuntime.ApproachIsIls,
             ApproachDistanceToTouchdownNm = approachDistance.DistanceNm,
             ApproachDistanceSource = approachDistance.Source,
             ApproachFlaps1DistanceNm = approachSchedule.Flaps1DistanceNm,
@@ -5812,14 +5802,14 @@ internal sealed class CopilotService : Form
         var gsx = _gsx.Snapshot;
         if (!gsx.MenuOpen
             || _state == null
-            || !_sayIntentionsPushbackTargetHeadingDegrees.HasValue
-            || DateTime.UtcNow - _sayIntentionsPushbackTargetCapturedUtc
+            || !_sayIntentionsRuntime.PushbackTargetHeadingDegrees.HasValue
+            || DateTime.UtcNow - _sayIntentionsRuntime.PushbackTargetCapturedUtc
                 > TimeSpan.FromMinutes(30))
         {
             return false;
         }
 
-        var targetHeading = _sayIntentionsPushbackTargetHeadingDegrees.Value;
+        var targetHeading = _sayIntentionsRuntime.PushbackTargetHeadingDegrees.Value;
         var choice = GsxPushbackDirectionCoordinator.FindChoice(
             gsx.CurrentMenu,
             _state.MagneticHeadingDegrees,
@@ -5831,8 +5821,7 @@ internal sealed class CopilotService : Form
 
         var label = gsx.CurrentMenu.Choices[choice.Value];
         var currentHeading = _state.MagneticHeadingDegrees;
-        _sayIntentionsPushbackTargetHeadingDegrees = null;
-        _sayIntentionsPushbackTargetCapturedUtc = DateTime.MinValue;
+        _sayIntentionsRuntime.ClearPushbackTargetHeading();
         SubmitLiveGsxChoice(choice.Value, label, null);
         CloseGsxChoiceDialog();
         AppendDashboardLog(
@@ -6629,8 +6618,7 @@ internal sealed class CopilotService : Form
         _takeoffClearanceReceived = false;
         _pmdg777TaxiLightsCommandedThisFlow = false;
         _pendingGsxEngineStartProcedure = null;
-        _sayIntentionsPushbackTargetHeadingDegrees = null;
-        _sayIntentionsPushbackTargetCapturedUtc = DateTime.MinValue;
+        _sayIntentionsRuntime.ClearPushbackTargetHeading();
         _procedureSession.ResetProgress(DateTime.UtcNow);
         _simBriefFlightPlan = null;
         ProcedureSessionStore.Save(_procedureSession);
@@ -7541,7 +7529,7 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        var sayIntentionsFlight = _sayIntentionsFlight;
+        var sayIntentionsFlight = _sayIntentionsRuntime.Flight;
         if (_settings.UseSayIntentionsVoiceCallouts && sayIntentionsFlight != null)
         {
             var callout = new SayIntentionsQueuedCallout(
@@ -13086,7 +13074,7 @@ internal sealed class CopilotService : Form
         {
             var result = await _sayIntentionsClient
                 .DiscoverAsync(_sayIntentionsCancellation.Token);
-            _sayIntentionsFlight = result.Context;
+            _sayIntentionsRuntime.SetFlight(result.Context);
             if (_pendingSayIntentionsAtcStepId != null
                 && _pendingSayIntentionsAtcStartedUtc.HasValue
                 && DateTime.UtcNow - _pendingSayIntentionsAtcStartedUtc.Value
@@ -13118,11 +13106,7 @@ internal sealed class CopilotService : Form
             }
             else
             {
-                _sayIntentionsCopilotModeApplied = false;
-                _sayIntentionsCopilotModeSessionKey = null;
-                _sayIntentionsCommunicationSessionKey = null;
-                _sayIntentionsLastCommunicationId = 0;
-                _sayIntentionsCommunicationTracker.Reset();
+                _sayIntentionsRuntime.ResetDiscoverySession();
                 // A short local-client or SAPI outage must not detach a valid
                 // ATC checkpoint from its procedure. Explicit cancel/reset and
                 // procedure transitions own pending-request cancellation.
@@ -13212,12 +13196,7 @@ internal sealed class CopilotService : Form
     {
         var desired = desiredOverride
                       ?? _settings.UseSayIntentionsCopilotCommunications;
-        if (!force
-            && string.Equals(
-                _sayIntentionsCopilotModeSessionKey,
-                flight.SessionKey,
-                StringComparison.Ordinal)
-            && _sayIntentionsCopilotModeApplied == desired)
+        if (!force && _sayIntentionsRuntime.IsCopilotModeCurrent(flight.SessionKey, desired))
         {
             return true;
         }
@@ -13225,12 +13204,7 @@ internal sealed class CopilotService : Form
         await _sayIntentionsCommsModeGate.WaitAsync(cancellationToken);
         try
         {
-            if (!force
-                && string.Equals(
-                    _sayIntentionsCopilotModeSessionKey,
-                    flight.SessionKey,
-                    StringComparison.Ordinal)
-                && _sayIntentionsCopilotModeApplied == desired)
+            if (!force && _sayIntentionsRuntime.IsCopilotModeCurrent(flight.SessionKey, desired))
             {
                 return true;
             }
@@ -13247,8 +13221,7 @@ internal sealed class CopilotService : Form
                 return false;
             }
 
-            _sayIntentionsCopilotModeApplied = desired;
-            _sayIntentionsCopilotModeSessionKey = flight.SessionKey;
+            _sayIntentionsRuntime.RecordCopilotModeApplied(flight.SessionKey, desired);
             AppLog.Write(
                 desired
                     ? "SayIntentions communications assigned to its First Officer."
@@ -13278,19 +13251,9 @@ internal sealed class CopilotService : Form
             var communications = await _sayIntentionsClient
                 .GetCommunicationsAsync(flight, cancellationToken);
             CaptureSayIntentionsArrivalStand(flight, communications);
-            if (!string.Equals(
-                    _sayIntentionsCommunicationSessionKey,
-                    flight.SessionKey,
-                    StringComparison.Ordinal))
+            if (_sayIntentionsRuntime.IsNewCommunicationSession(flight.SessionKey))
             {
-                _sayIntentionsCommunicationSessionKey = flight.SessionKey;
-                _sayIntentionsApproachRunway = "";
-                _sayIntentionsApproachIsIls = false;
-                _sayIntentionsLastCommunicationId = communications.Count == 0
-                    ? 0
-                    : communications.Max(item => item.Id);
-                _sayIntentionsCommunicationTracker.Reset();
-                _sayIntentionsCommunicationTracker.Prime(communications);
+                _sayIntentionsRuntime.BeginCommunicationSession(flight.SessionKey, communications);
                 CaptureRecentSayIntentionsPushbackDirection(communications);
                 CaptureRecentSayIntentionsApproach(communications);
                 await TryCompleteCurrentSayIntentionsAtcStepFromHistoryAsync(
@@ -13303,11 +13266,7 @@ internal sealed class CopilotService : Form
             foreach (var communication in communications
                          .OrderBy(item => item.Id))
             {
-                _sayIntentionsLastCommunicationId = Math.Max(
-                    _sayIntentionsLastCommunicationId,
-                    communication.Id);
-                var change = _sayIntentionsCommunicationTracker.Observe(
-                    communication);
+                var change = _sayIntentionsRuntime.ObserveCommunication(communication);
                 if (!change.HasChanges)
                 {
                     continue;
@@ -14803,17 +14762,11 @@ internal sealed class CopilotService : Form
     private void CaptureSayIntentionsApproach(
         SayIntentionsApproachAssignment assignment)
     {
-        if (string.Equals(
-                _sayIntentionsApproachRunway,
-                assignment.Runway,
-                StringComparison.OrdinalIgnoreCase)
-            && _sayIntentionsApproachIsIls == assignment.IsIls)
+        if (!_sayIntentionsRuntime.RecordApproachAssignment(assignment))
         {
             return;
         }
 
-        _sayIntentionsApproachRunway = assignment.Runway;
-        _sayIntentionsApproachIsIls = assignment.IsIls;
         AppendDashboardLog(
             $"SayIntentions approach captured: {(assignment.IsIls ? "ILS " : "")}runway {assignment.Runway}.");
         AppLog.Write(
@@ -14834,8 +14787,7 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        _sayIntentionsPushbackTargetHeadingDegrees = heading;
-        _sayIntentionsPushbackTargetCapturedUtc = DateTime.UtcNow;
+        _sayIntentionsRuntime.RecordPushbackTargetHeading(heading, DateTime.UtcNow);
         AppLog.Write(
             $"Captured SayIntentions pushback target heading {heading:000} degrees magnetic.");
     }
@@ -14857,7 +14809,7 @@ internal sealed class CopilotService : Form
             && _gsxInstallation != null
             && gsx.CouatlStarted,
             gsx.OwnsRemoteControl,
-            _sayIntentionsFlight != null,
+            _sayIntentionsRuntime.Flight != null,
             _state?.OnGround == true,
             arrivalFlowActive);
     }
@@ -15738,15 +15690,15 @@ internal sealed class CopilotService : Form
         {
             _settings.UseSayIntentionsCopilotCommunications = copilotCommsBox.Checked;
             SettingsStore.Save(_settings);
-            if (_sayIntentionsFlight != null && !copilotCommsBox.Checked)
+            if (_sayIntentionsRuntime.Flight != null && !copilotCommsBox.Checked)
             {
                 await EnsureSayIntentionsCopilotModeAsync(
-                    _sayIntentionsFlight,
+                    _sayIntentionsRuntime.Flight,
                     dialogCancellation.Token,
                     force: true,
                     desiredOverride: false);
                 UpdateSayIntentionsStatus(
-                    SayIntentionsDiscoveryResult.Connected(_sayIntentionsFlight));
+                    SayIntentionsDiscoveryResult.Connected(_sayIntentionsRuntime.Flight));
             }
         };
         layout.Controls.Add(copilotCommsBox, 0, 1);
@@ -15860,7 +15812,7 @@ internal sealed class CopilotService : Form
         {
             var discovery = await _sayIntentionsClient
                 .DiscoverAsync(cancellationToken);
-            _sayIntentionsFlight = discovery.Context;
+            _sayIntentionsRuntime.SetFlight(discovery.Context);
             if (discovery.Context == null)
             {
                 UpdateSayIntentionsStatus(discovery);
@@ -16002,7 +15954,7 @@ internal sealed class CopilotService : Form
             PublishEfbState(force: true);
             return;
         }
-        var flight = _sayIntentionsFlight;
+        var flight = _sayIntentionsRuntime.Flight;
         if (step == null
             || !IsSayIntentionsAtcStep(step.Id)
             || flight == null
@@ -16039,18 +15991,12 @@ internal sealed class CopilotService : Form
             {
                 return;
             }
-            _sayIntentionsCommunicationSessionKey = flight.SessionKey;
-            _sayIntentionsLastCommunicationId = communications.Count == 0
-                ? 0
-                : communications.Max(item => item.Id);
-            _sayIntentionsCommunicationTracker.Prime(communications);
-            _pendingSayIntentionsAtcBaselineId = _sayIntentionsLastCommunicationId;
+            _sayIntentionsRuntime.EstablishCommunicationBaseline(flight.SessionKey, communications);
+            _pendingSayIntentionsAtcBaselineId = _sayIntentionsRuntime.LastCommunicationId;
 
-            var copilotModeWasReady = string.Equals(
-                                          _sayIntentionsCopilotModeSessionKey,
-                                          flight.SessionKey,
-                                          StringComparison.Ordinal)
-                                      && _sayIntentionsCopilotModeApplied;
+            var copilotModeWasReady = _sayIntentionsRuntime.IsCopilotModeCurrent(
+                flight.SessionKey,
+                true);
             var accepted = await EnsureSayIntentionsCopilotModeAsync(
                 flight,
                 _sayIntentionsCancellation.Token,
@@ -18055,7 +18001,7 @@ internal sealed class CopilotService : Form
             {
                 return "Waiting for: GSX boarding completion before requesting pushback and engine-start clearance.";
             }
-            if (_sayIntentionsFlight != null && IsSayIntentionsAtcStep(step.Id))
+            if (_sayIntentionsRuntime.Flight != null && IsSayIntentionsAtcStep(step.Id))
             {
                 return step.Id switch
                 {
@@ -19214,7 +19160,7 @@ internal sealed class CopilotService : Form
             _sayIntentionsTimer?.Stop();
             _sayIntentionsTimer?.Dispose();
             _sayIntentionsTimer = null;
-            if (_sayIntentionsCopilotModeApplied && _sayIntentionsFlight != null)
+            if (_sayIntentionsRuntime.CopilotModeApplied && _sayIntentionsRuntime.Flight != null)
             {
                 try
                 {
@@ -19222,7 +19168,7 @@ internal sealed class CopilotService : Form
                         TimeSpan.FromSeconds(2));
                     _sayIntentionsClient
                         .SetCopilotCommunicationsAsync(
-                            _sayIntentionsFlight,
+                            _sayIntentionsRuntime.Flight,
                             false,
                             restoreTimeout.Token)
                         .GetAwaiter()

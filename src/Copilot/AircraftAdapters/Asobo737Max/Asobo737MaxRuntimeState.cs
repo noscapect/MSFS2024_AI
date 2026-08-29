@@ -174,8 +174,32 @@ internal sealed class Asobo737MaxRuntimeState
         BatteryInputEventOn = null; BatteryCoverInputEventOn = null;
         BatteryInputEventHash = null; BatteryCoverInputEventHash = null;
         LeftIrsInputEventHash = null; RightIrsInputEventHash = null;
+        PositionLightInputEventHash = null; LogoLightInputEventHash = null;
+        EmergencyExitInputEventHash = null; EmergencyExitCoverInputEventHash = null;
+        SeatbeltsInputEventHash = null; NoSmokingInputEventHash = null;
+        ApuInputEventHash = null; ApuBleedInputEventHash = null;
+        Array.Clear(_apuGeneratorInputEventHashes, 0, _apuGeneratorInputEventHashes.Length);
+        Array.Clear(_fuelPumpInputEventHashes, 0, _fuelPumpInputEventHashes.Length);
+
         _leftIrsInputState = null; _rightIrsInputState = null;
+        _positionLightInputState = null; _logoLightInputState = null;
+        _emergencyExitInputState = null; _emergencyExitCoverInputState = null;
+        _seatbeltsInputState = null; _noSmokingInputState = null;
+        _apuInputState = null; _apuBleedInputState = null;
+        _isolationValveInputState = null; _leftPackInputState = null; _rightPackInputState = null;
+        _taxiLightInputState = null; _antiCollisionInputState = null;
+        _flapsInputState = null; _autobrakeInputState = null;
         _autothrottleInputState = null; _transponderModeInputState = null; _transponderOperatingModeInputState = null;
+        Array.Clear(_apuGeneratorInputStates, 0, _apuGeneratorInputStates.Length);
+        Array.Clear(_fuelPumpInputStates, 0, _fuelPumpInputStates.Length);
+        Array.Clear(_engineBleedInputStates, 0, _engineBleedInputStates.Length);
+        Array.Clear(_engineGeneratorInputStates, 0, _engineGeneratorInputStates.Length);
+        Array.Clear(_electricHydraulicPumpInputStates, 0, _electricHydraulicPumpInputStates.Length);
+        Array.Clear(_runwayTurnoffInputStates, 0, _runwayTurnoffInputStates.Length);
+        Array.Clear(_landingLightInputStates, 0, _landingLightInputStates.Length);
+
+        _commandedLeftIrsState = null; _commandedRightIrsState = null;
+        _commandedLeftIrsUtc = null; _commandedRightIrsUtc = null;
         InputEventsEnumerated = false;
     }
 

@@ -90,11 +90,7 @@ internal sealed class CopilotService : Form
     private SimConnect? Connection => _simConnectSession.Connection;
     private AircraftState? _state;
     private readonly NativeAircraftRuntimeState _nativeRuntime = new();
-    private PendingExternalPowerProcedure? _pendingProcedure;
-    private PendingBeaconProcedure? _pendingBeaconProcedure;
-    private PendingNavLogoSelectorProcedure? _pendingNavLogoSelectorProcedure;
-    private PendingBatteryProcedure? _pendingBatteryProcedure;
-    private PendingNativeAction? _pendingNativeAction;
+    private readonly PendingAircraftVerificationState _pendingAircraftVerifications = new();
     private PendingFireTest? _pendingFireTest;
     private FireTestSystem? _pendingFlyByWireFireTest;
     private PendingFuelPumpSequence? _pendingFuelPumpSequence;
@@ -5175,11 +5171,7 @@ internal sealed class CopilotService : Form
 
         // Live connection, cockpit-command, and aircraft SDK state never
         // survives a generation boundary.
-        _pendingProcedure = null;
-        _pendingBeaconProcedure = null;
-        _pendingNavLogoSelectorProcedure = null;
-        _pendingBatteryProcedure = null;
-        _pendingNativeAction = null;
+        _pendingAircraftVerifications.Reset();
         _pendingFireTest = null;
         _pendingFlyByWireFireTest = null;
         _asobo737MaxFireTestsInProgress = false;
@@ -7568,7 +7560,7 @@ internal sealed class CopilotService : Form
             Priority.Highest,
             SIMCONNECT_EVENT_FLAG.GROUPID_IS_PRIORITY);
 
-        _pendingBeaconProcedure = new PendingBeaconProcedure(
+        _pendingAircraftVerifications.BeginBeacon(
             desiredOn,
             DateTime.UtcNow.AddSeconds(5));
         Console.WriteLine($"Beacon command sent: {(desiredOn ? "ON" : "OFF")}; awaiting readback.");
@@ -7639,7 +7631,7 @@ internal sealed class CopilotService : Form
         SendMobiFlightCommand($"MF.SimVars.Set.(>B:{stateEvent})");
         SendMobiFlightCommand("MF.DummyCmd");
 
-        _pendingNavLogoSelectorProcedure = new PendingNavLogoSelectorProcedure(
+        _pendingAircraftVerifications.BeginNavLogo(
             nativePosition,
             DateTime.UtcNow.AddSeconds(5));
         AppendDashboardLog(
@@ -7684,7 +7676,7 @@ internal sealed class CopilotService : Form
         SendMobiFlightCommand($"MF.SimVars.Set.{fbwPosition} (>B:A32NX_OVH_LIGHTS_NAV_LOGO_SW_Set)");
         SendMobiFlightCommand("MF.DummyCmd");
 
-        _pendingNavLogoSelectorProcedure = new PendingNavLogoSelectorProcedure(
+        _pendingAircraftVerifications.BeginNavLogo(
             nativePosition,
             DateTime.UtcNow.AddSeconds(5));
         AppendDashboardLog(
@@ -7749,7 +7741,7 @@ internal sealed class CopilotService : Form
             }
         }
         SendMobiFlightCommand("MF.DummyCmd");
-        _pendingBatteryProcedure = new PendingBatteryProcedure(
+        _pendingAircraftVerifications.BeginBattery(
             batteryNumber,
             desiredOn,
             DateTime.UtcNow.AddSeconds(5));
@@ -10828,7 +10820,7 @@ internal sealed class CopilotService : Form
             _smoothCruiseSinceUtc = null;
             if (DateTime.UtcNow >= _nextCruiseSeatbeltCommandUtc
                 && !_state.SeatbeltSignsOn
-                && _pendingNativeAction == null)
+                && !_pendingAircraftVerifications.NativeActionPending)
             {
                 _nextCruiseSeatbeltCommandUtc = DateTime.UtcNow.AddSeconds(15);
                 AppendDashboardLog(
@@ -10848,7 +10840,7 @@ internal sealed class CopilotService : Form
         if (DateTime.UtcNow - _smoothCruiseSinceUtc.Value < TimeSpan.FromMinutes(5)
             || DateTime.UtcNow < _nextCruiseSeatbeltCommandUtc
             || !_state.SeatbeltSignsOn
-            || _pendingNativeAction != null)
+            || _pendingAircraftVerifications.NativeActionPending)
         {
             return;
         }
@@ -11400,7 +11392,7 @@ internal sealed class CopilotService : Form
         string? desiredLabel = null,
         bool logProgressToDashboard = true)
     {
-        _pendingNativeAction = new PendingNativeAction(
+        _pendingAircraftVerifications.BeginNativeAction(
             name,
             verify,
             desiredOn,
@@ -11408,7 +11400,7 @@ internal sealed class CopilotService : Form
             DateTime.UtcNow.Add(timeout ?? TimeSpan.FromSeconds(8)),
             logProgressToDashboard);
         var message =
-            $"{name} command sent: {_pendingNativeAction.DesiredLabel}; awaiting native readback.";
+            $"{name} command sent: {_pendingAircraftVerifications.NativeAction!.DesiredLabel}; awaiting native readback.";
         if (logProgressToDashboard)
         {
             AppendDashboardLog(message);
@@ -11500,7 +11492,7 @@ internal sealed class CopilotService : Form
                 $"A330 external power command sent: EXT A and EXT B {desiredOn.ToOnOff()}.");
         }
 
-        _pendingProcedure = new PendingExternalPowerProcedure(
+        _pendingAircraftVerifications.BeginExternalPower(
             desiredOn,
             DateTime.UtcNow.AddSeconds(5));
         Console.WriteLine($"External power command sent: {(desiredOn ? "ON" : "OFF")}; awaiting readback.");
@@ -11556,214 +11548,34 @@ internal sealed class CopilotService : Form
 
     private void VerifyPendingProcedure()
     {
-        if (_pendingProcedure == null || _state == null)
-        {
-            VerifyPendingBeaconProcedure();
-            VerifyPendingNavLogoSelectorProcedure();
-            VerifyPendingBatteryProcedure();
-            VerifyPendingNativeAction();
-            return;
-        }
-
-        if (_state.ExternalPowerOn == _pendingProcedure.DesiredOn)
-        {
-            Console.WriteLine($"External power verified {_pendingProcedure.DesiredOn.ToOnOff()}.");
-            _pendingProcedure = null;
-            FinishOneShot();
-            return;
-        }
-
-        if (DateTime.UtcNow >= _pendingProcedure.DeadlineUtc)
-        {
-            var message =
-                $"External power verification failed; aircraft still reports {_state.ExternalPowerOn.ToOnOff()}.";
-            Console.Error.WriteLine(message);
-            RecordDiagnosticFailure(
-                "External power verification failed",
-                new[]
-                {
-                    $"Expected: {_pendingProcedure.DesiredOn.ToOnOff()}",
-                    $"Actual: {_state.ExternalPowerOn.ToOnOff()}"
-                });
-            _pendingProcedure = null;
-            FinishOneShot(4);
-        }
-
-        VerifyPendingBeaconProcedure();
-        VerifyPendingNavLogoSelectorProcedure();
-        VerifyPendingBatteryProcedure();
-        VerifyPendingNativeAction();
+        var result = _pendingAircraftVerifications.EvaluateExternalPower(_state, DateTime.UtcNow); var pending = result.Pending;
+        if (result.Status == PendingVerificationStatus.Verified) { Console.WriteLine($"External power verified {pending!.DesiredOn.ToOnOff()}."); FinishOneShot(); return; }
+        if (result.Status == PendingVerificationStatus.TimedOut) { var message = $"External power verification failed; aircraft still reports {_state!.ExternalPowerOn.ToOnOff()}."; Console.Error.WriteLine(message); RecordDiagnosticFailure("External power verification failed", new[] { $"Expected: {pending!.DesiredOn.ToOnOff()}", $"Actual: {_state.ExternalPowerOn.ToOnOff()}" }); FinishOneShot(4); }
+        VerifyPendingBeaconProcedure(); VerifyPendingNavLogoSelectorProcedure(); VerifyPendingBatteryProcedure(); VerifyPendingNativeAction();
     }
-
     private void VerifyPendingBeaconProcedure()
     {
-        if (_pendingBeaconProcedure == null || _state == null)
-        {
-            return;
-        }
-
-        if (_state.BeaconOn == _pendingBeaconProcedure.DesiredOn)
-        {
-            Console.WriteLine($"Beacon verified {_pendingBeaconProcedure.DesiredOn.ToOnOff()}.");
-            _pendingBeaconProcedure = null;
-            FinishOneShot();
-            return;
-        }
-
-        if (DateTime.UtcNow >= _pendingBeaconProcedure.DeadlineUtc)
-        {
-            var message =
-                $"Beacon verification failed; aircraft still reports {_state.BeaconOn.ToOnOff()}.";
-            Console.Error.WriteLine(message);
-            RecordDiagnosticFailure(
-                "Beacon verification failed",
-                new[]
-                {
-                    $"Expected: {_pendingBeaconProcedure.DesiredOn.ToOnOff()}",
-                    $"Actual: {_state.BeaconOn.ToOnOff()}"
-                });
-            _pendingBeaconProcedure = null;
-            FinishOneShot(4);
-        }
+        var result = _pendingAircraftVerifications.EvaluateBeacon(_state, DateTime.UtcNow); var pending = result.Pending;
+        if (result.Status == PendingVerificationStatus.Verified) { Console.WriteLine($"Beacon verified {pending!.DesiredOn.ToOnOff()}."); FinishOneShot(); return; }
+        if (result.Status == PendingVerificationStatus.TimedOut) { var message = $"Beacon verification failed; aircraft still reports {_state!.BeaconOn.ToOnOff()}."; Console.Error.WriteLine(message); RecordDiagnosticFailure("Beacon verification failed", new[] { $"Expected: {pending!.DesiredOn.ToOnOff()}", $"Actual: {_state.BeaconOn.ToOnOff()}" }); FinishOneShot(4); }
     }
-
     private void VerifyPendingNavLogoSelectorProcedure()
     {
-        if (_pendingNavLogoSelectorProcedure == null || _state == null)
-        {
-            return;
-        }
-
-        if (_state.IsFlyByWireAirbus)
-        {
-            var desiredOff = _pendingNavLogoSelectorProcedure.DesiredPosition == 2;
-            var lightsMatch = desiredOff
-                ? !_state.NavigationLightsOn && !_state.LogoLightsOn
-                : _state.NavigationLightsOn && _state.LogoLightsOn;
-            if (lightsMatch)
-            {
-                AppendDashboardLog(
-                    $"NAV & LOGO lights verified " +
-                    $"{(desiredOff ? "OFF" : "ON")}.");
-                _pendingNavLogoSelectorProcedure = null;
-                FinishOneShot();
-                return;
-            }
-        }
-
-        if (_state.NavLogoSelectorPosition.HasValue
-            && Math.Abs(
-                _state.NavLogoSelectorPosition.Value
-                - _pendingNavLogoSelectorProcedure.DesiredPosition) < 0.1)
-        {
-            AppendDashboardLog(
-                $"NAV & LOGO selector verified " +
-                $"{FormatNavLogoPosition(_pendingNavLogoSelectorProcedure.DesiredPosition)}.");
-            _pendingNavLogoSelectorProcedure = null;
-            FinishOneShot();
-            return;
-        }
-
-        if (DateTime.UtcNow >= _pendingNavLogoSelectorProcedure.DeadlineUtc)
-        {
-            RecordDiagnosticFailure(
-                "NAV & LOGO verification failed",
-                new[]
-                {
-                    $"Expected selector: {_pendingNavLogoSelectorProcedure.DesiredPosition}",
-                    $"Actual selector: {(_state.NavLogoSelectorPosition.HasValue ? _state.NavLogoSelectorPosition.Value.ToString("F0") : "unknown")}"
-                });
-            AppendDashboardLog(
-                "NAV & LOGO verification failed; native selector reports " +
-                $"{(_state.NavLogoSelectorPosition.HasValue ? _state.NavLogoSelectorPosition.Value.ToString("F0") : "unknown")}.");
-            _pendingNavLogoSelectorProcedure = null;
-            FinishOneShot(4);
-        }
+        var result = _pendingAircraftVerifications.EvaluateNavLogo(_state, DateTime.UtcNow); var pending = result.Pending;
+        if (result.Status == PendingVerificationStatus.Verified) { var desiredOff = pending!.DesiredPosition == 2; var fbwLightsMatch = _state!.IsFlyByWireAirbus && (desiredOff ? !_state.NavigationLightsOn && !_state.LogoLightsOn : _state.NavigationLightsOn && _state.LogoLightsOn); AppendDashboardLog(fbwLightsMatch ? $"NAV & LOGO lights verified {(desiredOff ? "OFF" : "ON")}." : $"NAV & LOGO selector verified {FormatNavLogoPosition(pending.DesiredPosition)}."); FinishOneShot(); return; }
+        if (result.Status == PendingVerificationStatus.TimedOut) { var actual = _state!.NavLogoSelectorPosition.HasValue ? _state.NavLogoSelectorPosition.Value.ToString("F0") : "unknown"; RecordDiagnosticFailure("NAV & LOGO verification failed", new[] { $"Expected selector: {pending!.DesiredPosition}", $"Actual selector: {actual}" }); AppendDashboardLog("NAV & LOGO verification failed; native selector reports " + actual + "."); FinishOneShot(4); }
     }
-
     private void VerifyPendingBatteryProcedure()
     {
-        if (_pendingBatteryProcedure == null || _state == null)
-        {
-            return;
-        }
-
-        var actual = _pendingBatteryProcedure.BatteryNumber == 1
-            ? _state.Battery1On
-            : _state.Battery2On;
-        if (actual == _pendingBatteryProcedure.DesiredOn)
-        {
-            Console.WriteLine(
-                $"BAT {_pendingBatteryProcedure.BatteryNumber} verified " +
-                $"{_pendingBatteryProcedure.DesiredOn.ToOnOff()}.");
-            AppendDashboardLog(
-                $"BAT {_pendingBatteryProcedure.BatteryNumber} verified " +
-                _pendingBatteryProcedure.DesiredOn.ToOnOff());
-            _pendingBatteryProcedure = null;
-            FinishOneShot();
-            return;
-        }
-
-        if (DateTime.UtcNow >= _pendingBatteryProcedure.DeadlineUtc)
-        {
-            Console.Error.WriteLine(
-                $"BAT {_pendingBatteryProcedure.BatteryNumber} verification failed; " +
-                $"aircraft still reports {actual.ToOnOff()}.");
-            RecordDiagnosticFailure(
-                $"BAT {_pendingBatteryProcedure.BatteryNumber} verification failed",
-                new[]
-                {
-                    $"Expected: {_pendingBatteryProcedure.DesiredOn.ToOnOff()}",
-                    $"Actual: {actual.ToOnOff()}"
-                });
-            AppendDashboardLog(
-                $"BAT {_pendingBatteryProcedure.BatteryNumber} verification failed");
-            _pendingBatteryProcedure = null;
-            FinishOneShot(4);
-        }
+        var result = _pendingAircraftVerifications.EvaluateBattery(_state, DateTime.UtcNow); var pending = result.Pending; if (result.Status == PendingVerificationStatus.None || pending == null || _state == null) return; var actual = pending.BatteryNumber == 1 ? _state.Battery1On : _state.Battery2On;
+        if (result.Status == PendingVerificationStatus.Verified) { Console.WriteLine($"BAT {pending.BatteryNumber} verified {pending.DesiredOn.ToOnOff()}."); AppendDashboardLog($"BAT {pending.BatteryNumber} verified " + pending.DesiredOn.ToOnOff()); FinishOneShot(); return; }
+        if (result.Status == PendingVerificationStatus.TimedOut) { Console.Error.WriteLine($"BAT {pending.BatteryNumber} verification failed; aircraft still reports {actual.ToOnOff()}."); RecordDiagnosticFailure($"BAT {pending.BatteryNumber} verification failed", new[] { $"Expected: {pending.DesiredOn.ToOnOff()}", $"Actual: {actual.ToOnOff()}" }); AppendDashboardLog($"BAT {pending.BatteryNumber} verification failed"); FinishOneShot(4); }
     }
-
     private void VerifyPendingNativeAction()
     {
-        if (_pendingNativeAction == null || _state == null)
-        {
-            return;
-        }
-        if (_pendingNativeAction.Verify(_state))
-        {
-            var message =
-                $"{_pendingNativeAction.Name} verified {_pendingNativeAction.DesiredLabel}.";
-            if (_pendingNativeAction.LogProgressToDashboard)
-            {
-                AppendDashboardLog(message);
-            }
-            else
-            {
-                AppLog.Write(message);
-            }
-            _pendingNativeAction = null;
-            FinishOneShot();
-            return;
-        }
-        if (DateTime.UtcNow >= _pendingNativeAction.DeadlineUtc)
-        {
-            var message = $"{_pendingNativeAction.Name} native verification failed.";
-            RecordDiagnosticFailure(
-                message,
-                new[]
-                {
-                    $"Pending action: {_pendingNativeAction.Name}",
-                    $"Expected: {_pendingNativeAction.DesiredLabel}",
-                    $"Deadline UTC: {_pendingNativeAction.DeadlineUtc:O}"
-                });
-            AppendDashboardLog(message);
-            _pendingNativeAction = null;
-            if (_procedureRunner.Status == ProcedureStatus.WaitingForVerification)
-            {
-                _procedureRunner.Fail(message);
-            }
-            FinishOneShot(4);
-        }
+        var result = _pendingAircraftVerifications.EvaluateNativeAction(_state, DateTime.UtcNow); var pending = result.Pending;
+        if (result.Status == PendingVerificationStatus.Verified) { var message = $"{pending!.Name} verified {pending.DesiredLabel}."; if (pending.LogProgressToDashboard) AppendDashboardLog(message); else AppLog.Write(message); FinishOneShot(); return; }
+        if (result.Status == PendingVerificationStatus.TimedOut) { var message = $"{pending!.Name} native verification failed."; RecordDiagnosticFailure(message, new[] { $"Pending action: {pending.Name}", $"Expected: {pending.DesiredLabel}", $"Deadline UTC: {pending.DeadlineUtc:O}" }); AppendDashboardLog(message); if (_procedureRunner.Status == ProcedureStatus.WaitingForVerification) _procedureRunner.Fail(message); FinishOneShot(4); }
     }
 
     private void RecordDiagnosticFailure(string summary, IEnumerable<string>? details = null)
@@ -18808,11 +18620,7 @@ internal sealed class CopilotService : Form
     private void FinishOneShot(int exitCode = 0)
     {
         if (_oneShotCommand == null
-            || _pendingProcedure != null
-            || _pendingBeaconProcedure != null
-            || _pendingNavLogoSelectorProcedure != null
-            || _pendingBatteryProcedure != null
-            || _pendingNativeAction != null
+            || _pendingAircraftVerifications.HasPendingVerifications
             || _pendingFireTest != null
             || _pendingFlyByWireFireTest.HasValue
             || _asobo737MaxFireTestsInProgress
@@ -18985,18 +18793,6 @@ internal sealed class CopilotService : Form
         base.Dispose(disposing);
     }
 
-    private sealed class PendingExternalPowerProcedure
-    {
-        public PendingExternalPowerProcedure(bool desiredOn, DateTime deadlineUtc)
-        {
-            DesiredOn = desiredOn;
-            DeadlineUtc = deadlineUtc;
-        }
-
-        public bool DesiredOn { get; }
-        public DateTime DeadlineUtc { get; }
-    }
-
     private sealed class ReplayFlightItem
     {
         public ReplayFlightItem(string path)
@@ -19029,73 +18825,6 @@ internal sealed class CopilotService : Form
         public Msfs2024Ai.Copilot.AircraftIdentity.AircraftIdentity? Identity { get; }
         public IReadOnlyList<string> ImagePaths { get; }
         public System.Drawing.Image? Image { get; }
-    }
-
-    private sealed class PendingBeaconProcedure
-    {
-        public PendingBeaconProcedure(bool desiredOn, DateTime deadlineUtc)
-        {
-            DesiredOn = desiredOn;
-            DeadlineUtc = deadlineUtc;
-        }
-
-        public bool DesiredOn { get; }
-        public DateTime DeadlineUtc { get; }
-    }
-
-    private sealed class PendingNavLogoSelectorProcedure
-    {
-        public PendingNavLogoSelectorProcedure(int desiredPosition, DateTime deadlineUtc)
-        {
-            DesiredPosition = desiredPosition;
-            DeadlineUtc = deadlineUtc;
-        }
-
-        public int DesiredPosition { get; }
-        public DateTime DeadlineUtc { get; }
-    }
-
-    private sealed class PendingBatteryProcedure
-    {
-        public PendingBatteryProcedure(
-            int batteryNumber,
-            bool desiredOn,
-            DateTime deadlineUtc)
-        {
-            BatteryNumber = batteryNumber;
-            DesiredOn = desiredOn;
-            DeadlineUtc = deadlineUtc;
-        }
-
-        public int BatteryNumber { get; }
-        public bool DesiredOn { get; }
-        public DateTime DeadlineUtc { get; }
-    }
-
-    private sealed class PendingNativeAction
-    {
-        public PendingNativeAction(
-            string name,
-            Func<AircraftState, bool> verify,
-            bool desiredOn,
-            string desiredLabel,
-            DateTime deadlineUtc,
-            bool logProgressToDashboard)
-        {
-            Name = name;
-            Verify = verify;
-            DesiredOn = desiredOn;
-            DesiredLabel = desiredLabel;
-            DeadlineUtc = deadlineUtc;
-            LogProgressToDashboard = logProgressToDashboard;
-        }
-
-        public string Name { get; }
-        public Func<AircraftState, bool> Verify { get; }
-        public bool DesiredOn { get; }
-        public string DesiredLabel { get; }
-        public DateTime DeadlineUtc { get; }
-        public bool LogProgressToDashboard { get; }
     }
 
     private sealed class PendingFireTest

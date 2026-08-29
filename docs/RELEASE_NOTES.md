@@ -1,23 +1,19 @@
-# Version 0.9.7
+# Version 0.9.8
 
-Version 0.9.7 expands aircraft coverage and strengthens native cockpit-state
-verification throughout gate-to-gate operation.
+Version 0.9.8 adds the PMDG 777-300ER development integration and improves
+runtime-state ownership across the supported aircraft adapters.
 
 ## Highlights
 
-- Added the dedicated twelve-flow iniBuilds A310-300 procedure and checklist
-  framework, using A310-specific commands and native
-  readbacks instead of modern-Airbus mappings.
-- Expanded A310 startup, payload, takeoff, climb, approach, landing, and
-  turnaround automation, including corrected gear, altimeter, and approach
-  flap verification.
-- Fixed FlyByWire A32NX landing-gear verification when generic wheel telemetry
-  remains stale after the cockpit handle moves.
-- Made the native A32NX flap-handle signal authoritative across recurring
-  simulator updates, preventing false flap completion during climb and taxi-in.
-- Added the A32NX seat-belt-sign action above 10,000 feet and retained the
-  approach/descent sign transition.
-- Expanded regression coverage to 437 automated desktop tests.
+- Added the dedicated PMDG 777-300ER twelve-flow procedure and checklist
+  catalog, its isolated 777X SDK adapter, and PMDG-specific command/readback
+  paths. The profile remains a development integration pending ordered live
+  validation and is not operationally supported.
+- Extracted native, PMDG NG3, PMDG 777, and Asobo 737 MAX runtime/readback
+  state into focused components, preserving aircraft-specific control paths.
+- Hardened reconnection/runtime-generation handling and FlyByWire approach
+  configuration gates.
+- Expanded regression coverage to 497 automated desktop tests.
 
 ## Compatibility
 

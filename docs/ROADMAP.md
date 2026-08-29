@@ -6,10 +6,11 @@ profiles remain protected by their aircraft-specific regression tests.
 
 ## Current stabilization
 
-The latest public release is v0.9.7. It includes the dashboard redesign, the
-optional EFB companion, expanded optional GSX coordination, and the Asobo 737
-MAX profile under an explicit experimental warning. Active MAX development is
-paused while UX, EFB, and integration reliability are stabilized on `main`.
+The latest public release is v0.9.8. It includes the dashboard redesign, the
+optional EFB companion, expanded optional GSX coordination, the PMDG 777-300ER
+development integration, and the Asobo 737 MAX profile under an explicit
+experimental warning. Active MAX development is paused while UX, EFB, and
+integration reliability are stabilized on `main`.
 
 Priorities are:
 

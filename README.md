@@ -16,8 +16,8 @@ changes, and provides spoken operational callouts.
 - iniBuilds A310-300
 - FlyByWire A32NX for MSFS 2024
 - PMDG 737-800
-- PMDG 777-300ER (**development integration on `main`; not included in
-  v0.9.7**)
+- PMDG 777-300ER (**development integration in v0.9.8; not operationally
+  supported**)
 - Asobo 737 MAX 8 (**development beta; see the warning below**)
 
 Unsupported aircraft are detected but not controlled. The app does not send
@@ -76,8 +76,8 @@ procedure catalog. The implementation includes automated startup, departure,
 cruise, arrival, taxi-in, parking, shutdown, and turnaround handling with
 aircraft-specific readbacks.
 
-This work was added after v0.9.7 and remains a development integration until
-the flows complete ordered live validation in the simulator. It does not reuse
+Version 0.9.8 includes this development integration, which remains subject to
+ordered live validation in the simulator. It does not reuse
 the PMDG 737 SDK namespace or procedures. Pilots testing a build from `main`
 must supervise every action and stop the flow if the reported state differs
 from the cockpit. See the
@@ -88,7 +88,7 @@ from the cockpit. See the
 The repository contains a dedicated Asobo 737 MAX profile using native
 SimConnect Input Events and aircraft-specific procedures. Flows 1–6 have
 received iterative live testing, but the MAX profile is not yet gate-to-gate
-validated. It is included in v0.9.7 only as explicitly **experimental**, and
+validated. It remains explicitly **experimental** in v0.9.8, and
 further MAX development is paused while work focuses on
 the desktop UX redesign and MSFS 2024 EFB companion.
 
@@ -116,7 +116,7 @@ repository before allowing it to run.
 
 ### In-simulator EFB companion
 
-The v0.9.7 release includes an optional native MSFS 2024 EFB app. It displays
+The v0.9.8 release includes an optional native MSFS 2024 EFB app. It displays
 the current flow and step, allows the pilot to start, confirm, pause, resume, or
 cancel a flow, and surfaces aircraft telemetry and GSX boarding progress
 without Alt-Tabbing.
@@ -248,9 +248,9 @@ installed or disabled.
   Deliberate captain decisions and controls without a safe native interface
   remain manual. Further A310 work is maintenance and field validation rather
   than planned feature development.
-- The PMDG 777-300ER implementation on `main` has a complete dedicated
-  twelve-flow automation and checklist catalog, but it is newer than v0.9.7
-  and is not yet classified as operationally supported. Ordered in-simulator
+- The PMDG 777-300ER implementation has a complete dedicated twelve-flow
+  automation and checklist catalog, but is not yet classified as operationally
+  supported. Ordered in-simulator
   validation remains required before its development warning can be removed.
 
 ## Troubleshooting and issue reports

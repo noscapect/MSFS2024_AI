@@ -44,10 +44,7 @@ internal sealed class CopilotService : Form
     // Change the schema suffix whenever the ordered runtime LVar list changes.
     // MobiFlight client-data layouts persist for the simulator session.
     private const string MobiFlightRuntimeClientName = "MSFS2024_AI_Copilot_v27";
-    private readonly Dictionary<EfbCommBusEvent, List<string>> _efbCommBusChunks =
-        new();
-    private DateTime _lastEfbStateRequestResponseUtc = DateTime.MinValue;
-    private DateTime _lastEfbStatePublishedUtc = DateTime.MinValue;
+    private readonly EfbCompanionTransport _efbTransport = new();
     private readonly string? _oneShotCommand;
     private readonly bool _showUi;
     private readonly CopilotSettings _settings;
@@ -18450,25 +18447,16 @@ internal sealed class CopilotService : Form
         SimConnect sender,
         SIMCONNECT_RECV_COMM_BUS data)
     {
-        var eventId = (EfbCommBusEvent)data.uEventID;
-        if (eventId != EfbCommBusEvent.Command)
+        if (!_efbTransport.TryAcceptCommandChunk(
+                (EfbCommBusEvent)data.uEventID,
+                data.dwEntryNumber,
+                data.dwOutOf,
+                data.rgData,
+                out var payload))
         {
             return;
         }
 
-        if (!_efbCommBusChunks.TryGetValue(eventId, out var chunks))
-        {
-            chunks = new List<string>();
-            _efbCommBusChunks[eventId] = chunks;
-        }
-        chunks.Add(data.rgData ?? string.Empty);
-        if (data.dwEntryNumber + 1 < data.dwOutOf)
-        {
-            return;
-        }
-
-        var payload = string.Concat(chunks);
-        chunks.Clear();
         AppLog.Write(
             $"Received MSFS EFB CommBus command payload ({payload.Length} chars).");
         HandleEfbCommand(payload);
@@ -18492,12 +18480,11 @@ internal sealed class CopilotService : Form
             // renderer from a disconnected desktop. Rate limiting also keeps
             // older EFB builds from recreating their acknowledgement loop.
             var now = DateTime.UtcNow;
-            if (now - _lastEfbStateRequestResponseUtc < TimeSpan.FromSeconds(1))
+            if (!_efbTransport.CanAcknowledgeStateRequest(now))
             {
                 return;
             }
 
-            _lastEfbStateRequestResponseUtc = now;
             SendEfbCommandResult(
                 command.RequestId,
                 true,
@@ -18774,16 +18761,19 @@ internal sealed class CopilotService : Form
         bool accepted,
         string message)
     {
-        var efbEnvelope = new Dictionary<string, object?>
-            {
-                ["protocolVersion"] = EfbCompanionProtocol.Version,
-                ["kind"] = "commandResult",
-                ["requestId"] = requestId,
-                ["accepted"] = accepted,
-                ["message"] = message,
-                ["sentUtc"] = DateTime.UtcNow.ToString("O")
-            };
-        SendEfbEnvelope(efbEnvelope);
+        if (Connection == null)
+        {
+            return;
+        }
+
+        _efbTransport.SendEnvelope(
+            Connection,
+            _efbTransport.CreateCommandResultEnvelope(
+                requestId,
+                accepted,
+                message,
+                DateTime.UtcNow),
+            AppLog.Write);
     }
 
     private void PublishEfbState(bool force = false)
@@ -18794,15 +18784,13 @@ internal sealed class CopilotService : Form
         }
 
         var now = DateTime.UtcNow;
-        if (!force
-            && now - _lastEfbStatePublishedUtc < TimeSpan.FromMilliseconds(750))
+        if (!_efbTransport.ShouldPublishState(now, force))
         {
             return;
         }
-        _lastEfbStatePublishedUtc = now;
 
         var envelope = BuildEfbStateEnvelope(EfbCompanionProtocol.Version);
-        SendEfbEnvelope(envelope);
+        _efbTransport.SendEnvelope(Connection, envelope, AppLog.Write);
     }
 
     private Dictionary<string, object?> BuildEfbStateEnvelope(int protocolVersion)
@@ -18972,28 +18960,6 @@ internal sealed class CopilotService : Form
                         || gsxRuntime.OwnsRemoteControl)
             }
         };
-    }
-
-    private void SendEfbEnvelope(object envelope)
-    {
-        if (Connection == null)
-        {
-            return;
-        }
-
-        try
-        {
-            Connection.CallCommBusEvent(
-                EfbCompanionProtocol.StateEventName,
-                SIMCONNECT_COMM_BUS_BROADCAST_TO.JS,
-                EfbCompanionProtocol.Serialize(envelope));
-        }
-        catch (Exception exception)
-        {
-            AppLog.Write(
-                $"Could not publish MSFS EFB companion state: "
-                + exception.Message);
-        }
     }
 
     private void DrawFlowItem(object? sender, DrawItemEventArgs e)
@@ -19171,6 +19137,7 @@ internal sealed class CopilotService : Form
         _pmdg777AdiruOnTimer?.Stop();
         _pmdg777AdiruOnTimer?.Dispose();
         _pmdg777AdiruOnTimer = null;
+        _efbTransport.ResetConnectionState();
         ResetMobiFlightRuntimeAfterDisconnect();
         if (_connectionLabel != null)
         {

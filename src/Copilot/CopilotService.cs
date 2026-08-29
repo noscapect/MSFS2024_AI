@@ -41,9 +41,6 @@ internal sealed class CopilotService : Form
     private const uint PmdgMouseRightSingle = 0x80000000;
     private const uint PmdgMouseLeftSingle = 0x20000000;
     private const double PmdgCenterFuelPumpRequiredThresholdPounds = 500;
-    // Change the schema suffix whenever the ordered runtime LVar list changes.
-    // MobiFlight client-data layouts persist for the simulator session.
-    private const string MobiFlightRuntimeClientName = "MSFS2024_AI_Copilot_v27";
     private readonly EfbCompanionTransport _efbTransport = new();
     private readonly string? _oneShotCommand;
     private readonly bool _showUi;
@@ -104,9 +101,7 @@ internal sealed class CopilotService : Form
     private System.Windows.Forms.Timer? _fuelPumpSequenceTimer;
     private System.Windows.Forms.Timer? _commandTimer;
     private System.Windows.Forms.Timer? _a330InputEventPollingTimer;
-    private bool _mobiFlightReady;
-    private bool _mobiFlightRuntimeReady;
-    private DateTime? _mobiFlightRuntimeInitializedUtc;
+    private readonly MobiFlightAdapterSession _mobiFlightSession = new();
     private readonly PmdgNg3RuntimeState _pmdgNg3Runtime = new();
     private bool _pmdg777SdkInitialized;
     private readonly Queue<(uint EventId, uint Parameter, string Label)> _pmdg777ControlQueue = new();
@@ -1390,18 +1385,18 @@ internal sealed class CopilotService : Form
         if (request == Request.MobiFlightResponse
             && string.Equals(response, "MF.Pong", StringComparison.OrdinalIgnoreCase))
         {
-            _mobiFlightReady = true;
+            _mobiFlightSession.MarkAdapterReady();
             AppendDashboardLog("MobiFlight aircraft adapter connected.");
             AppLog.Write("MobiFlight aircraft adapter connected (MF.Pong).");
             SendMobiFlightCommand("MF.DummyCmd");
-            SendMobiFlightCommand($"MF.Clients.Add.{MobiFlightRuntimeClientName}");
+            SendMobiFlightCommand($"MF.Clients.Add.{MobiFlightAdapterSession.RuntimeClientName}");
             UpdateDashboard();
             TryExecuteOneShotCommand();
             return;
         }
 
         if (request == Request.MobiFlightResponse
-            && response.IndexOf(MobiFlightRuntimeClientName, StringComparison.OrdinalIgnoreCase) >= 0)
+            && response.IndexOf(MobiFlightAdapterSession.RuntimeClientName, StringComparison.OrdinalIgnoreCase) >= 0)
         {
             InitializeMobiFlightRuntime(sender);
             return;
@@ -1416,237 +1411,26 @@ internal sealed class CopilotService : Form
 
     private void InitializeMobiFlightRuntime(SimConnect sender)
     {
-        if (_mobiFlightRuntimeReady)
+        if (_mobiFlightSession.RuntimeReady)
         {
             return;
         }
 
         SimConnectRegistrationService.RegisterMobiFlightRuntime(
             sender,
-            MobiFlightRuntimeClientName);
-        _mobiFlightRuntimeReady = true;
-        _mobiFlightRuntimeInitializedUtc = DateTime.UtcNow;
-        SendMobiFlightRuntimeCommand("MF.SimVars.Clear");
-        AppLog.Write("MobiFlight runtime SimVar table clear requested before registering app variables.");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:INI_OVHD_ELEC_BAT_1_PB_IS_AUTO_SWITCH)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:INI_OVHD_ELEC_BAT_2_PB_IS_AUTO_SWITCH)");
-        foreach (var pump in A320FuelPumpProfile.Pumps)
+            MobiFlightAdapterSession.RuntimeClientName);
+        _mobiFlightSession.MarkRuntimeReady(DateTime.UtcNow);
+        foreach (var command in _mobiFlightSession.RuntimeRegistrationCommands)
         {
-            SendMobiFlightRuntimeCommand(
-                $"MF.SimVars.Add.(L:{pump.ReadbackLVar})");
+            SendMobiFlightRuntimeCommand(command);
+            if (string.Equals(command, "MF.SimVars.Clear", StringComparison.Ordinal))
+            {
+                AppLog.Write("MobiFlight runtime SimVar table clear requested before registering app variables.");
+            }
         }
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_LOGO_LIGHT_SWITCH)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_APU_AVAILABLE)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_APU_MASTER_SWITCH)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_APU_START_BUTTON)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_APU_BLEED_BUTTON)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_APU_GEN_ON)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_APU_FLAP_PERCENT)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_IRS1_STATE)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_IRS2_STATE)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_IRS3_STATE)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_IRS_ON_BATTERY)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_CREW_SUPPLY)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_STROBE_LIGHT_SWITCH)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_APU_FIRE_TEST)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_ENG1_FIRE_TEST)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_ENG2_FIRE_TEST)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:A320_APU_FIRE_LIT)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_APU_FIRE_SOUND)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:A320_ENG1_FIRE_LIT)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_ENG1_FIRE_SOUND)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:A320_ENG2_FIRE_LIT)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_ENG2_FIRE_SOUND)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_SEATBELTS_SWITCH)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_SEATBELTS_ON)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_NO_SMOKING_SWITCH)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_NO_SMOKING_ON)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_EMER_EXIT_SWITCH)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_TCAS_ATC_STATE)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_TCAS_MODE_PEDESTAL)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_TCAS_STBY_STATE)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_SPOILERS_ARMED)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_AUTOBRAKE_LEVEL)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_TCAS_ALT_STATE)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_GEAR_HANDLE_STATUS_ANIMATION)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_WX_SYS_SWITCH)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_TAXI_LIGHT_SWITCH)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:A320_LANDING_LIGHT_SWITCH_LEFT)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:A320_LANDING_LIGHT_SWITCH_RIGHT)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_BAT_1_PB_IS_AUTO)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_BAT_2_PB_IS_AUTO)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_ELEC_BAT_1_POTENTIAL)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_ELEC_BAT_2_POTENTIAL)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_BAT_1_PB_IS_AUTO, Bool)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_BAT_2_PB_IS_AUTO, Bool)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_EXT_PWR_AVAIL:1)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_EXT_PWR_PB_IS_ON)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_EXT_PWR_AVAIL:1, Bool)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_EXT_PWR_PB_IS_ON, Bool)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_ADIRS_IR_1_MODE_SELECTOR_KNOB)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_ADIRS_IR_2_MODE_SELECTOR_KNOB)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_ADIRS_IR_3_MODE_SELECTOR_KNOB)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_ADIRS_IR_1_MODE_SELECTOR_KNOB, Enum)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_ADIRS_IR_2_MODE_SELECTOR_KNOB, Enum)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_ADIRS_IR_3_MODE_SELECTOR_KNOB, Enum)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_ADIRS_ON_BAT_IS_ILLUMINATED, Bool)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:PUSH_OVHD_OXYGEN_CREW)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:PUSH_OVHD_OXYGEN_CREW, Bool)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_LIGHTS_NAV_LOGO)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_LIGHTS_NAV_LOGO, Enum)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:STROBE_0_AUTO)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:LIGHTING_STROBE_0)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:XMLVAR_SWITCH_OVHD_INTLT_SEATBELT_Position)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:XMLVAR_SWITCH_OVHD_INTLT_NOSMOKING_Position)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:XMLVAR_SWITCH_OVHD_INTLT_EMEREXIT_Position)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_APU_MASTER_SW_PB_IS_ON)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_APU_START_PB_IS_ON)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_APU_START_PB_IS_AVAILABLE)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_PNEU_APU_BLEED_PB_IS_ON)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_TRANSPONDER_MODE)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_PARK_BRAKE_LEVER_POS)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_ENGINE_STATE:1)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_ENGINE_STATE:2)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_ENGINE_N1:1)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_ENGINE_N1:2)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_PNEU_ENG_1_STARTER_VALVE_OPEN)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_PNEU_ENG_2_STARTER_VALVE_OPEN)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_SPOILERS_ARMED)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_FLAPS_HANDLE_INDEX)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_AUTOBRAKES_ARMED_MODE)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_SWITCH_RADAR_PWS_POSITION)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_SWITCH_ATC_ALT)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_SWITCH_TCAS_POSITION)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_EXT_PWR_AVAIL:1, Bool)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_EXT_PWR_1_PB_IS_ON, Bool)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_EXT_PWR_AVAIL:2, Bool)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_EXT_PWR_2_PB_IS_ON, Bool)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_EXT_PWR_AVAIL:3, Bool)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_EXT_PWR_3_PB_IS_ON, Bool)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_EXT_PWR_AVAIL:4, Bool)");
-        SendMobiFlightRuntimeCommand(
-            "MF.SimVars.Add.(L:A32NX_OVHD_ELEC_EXT_PWR_4_PB_IS_ON, Bool)");
-        SendMobiFlightRuntimeCommand("MF.SimVars.Add.(L:INI_IGNITION_KNOB)");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A320RunwayTurnoffProfile.ReadbackLVar})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.Battery1State})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.Battery2State})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.Battery3State})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.HydraulicEngine1State})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.HydraulicEngine1AState})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.HydraulicEngine2State})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.HydraulicEngine2BState})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.HydraulicElectricState})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.CaptainWiperState})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.FirstOfficerWiperState})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.WeatherRadarSystemState})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.Irs1State})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.Irs2State})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.Irs3State})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.OxygenLowPressureSupplyState})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.ApuFireTestState})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.ApuLoopTestSwitchState})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.AnnunciatorLightTestState})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.NavLogoLightState})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.BeaconLightState})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.TaxiLightState})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.LeftLandingLightState})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.RightLandingLightState})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.WingLightState})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.LeftRunwayTurnoffLightState})");
-        SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{A310ControlProfile.RightRunwayTurnoffLightState})");
-        foreach (var stateName in new[]
-        {
-            A310ControlProfile.SeatbeltsState,
-            A310ControlProfile.NoSmokingState,
-            A310ControlProfile.AtsMaster1State,
-            A310ControlProfile.AtsMaster2State,
-            A310ControlProfile.PitchTrim1State,
-            A310ControlProfile.PitchTrim2State,
-            A310ControlProfile.YawDamper1State,
-            A310ControlProfile.YawDamper2State,
-            A310ControlProfile.WindowHeat1State,
-            A310ControlProfile.WindowHeat2State,
-            A310ControlProfile.WindowHeat3State,
-            A310ControlProfile.WindowHeat4State,
-            A310ControlProfile.ProbeHeatCaptainState,
-            A310ControlProfile.ProbeHeatFirstOfficerState,
-            A310ControlProfile.ProbeHeatStandbyState,
-            A310ControlProfile.EmergencyExitState,
-            A310ControlProfile.CargoSmokeTestState,
-            A310ControlProfile.EgpwsTestState,
-            A310ControlProfile.AutobrakeState,
-            A310ControlProfile.RudderTrimState,
-            A310ControlProfile.TcasPedestalModeState,
-            A310ControlProfile.CargoSmokeForwardIndicationState,
-            A310ControlProfile.CargoSmokeAftIndicationState,
-            A310ControlProfile.CargoSmokeBulkIndicationState
-        })
-        {
-            SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{stateName})");
-        }
-        foreach (var stateName in A310ControlProfile.OperationalRuntimeStates)
-        {
-            SendMobiFlightRuntimeCommand($"MF.SimVars.Add.(L:{stateName})");
-        }
-        SendMobiFlightRuntimeCommand("MF.DummyCmd");
         AppLog.Write("FBW runtime offsets registered: ADIRS 1/2/3=56/57/58, typed=59/60/61, crew oxygen=63/64, NAV/LOGO=65/66, strobe=67/68.");
         AppendDashboardLog("iniBuilds native state monitoring connected.");
     }
-
-
     private void ApplyNativeAircraftState()
     {
         if (_replayActive)
@@ -3923,17 +3707,15 @@ internal sealed class CopilotService : Form
             || _oneShotCommand.StartsWith("tcas-mode ", StringComparison.OrdinalIgnoreCase)
             || _oneShotCommand.StartsWith("a310 ", StringComparison.OrdinalIgnoreCase)
             || _oneShotCommand.StartsWith("asobo737max ", StringComparison.OrdinalIgnoreCase);
-        if (requiresAircraftAdapter && !_mobiFlightReady)
+        if (requiresAircraftAdapter && !_mobiFlightSession.AdapterReady)
         {
             return;
         }
         var nativeStateReady = _oneShotCommand.ToLowerInvariant() switch
         {
-            "status" => _mobiFlightRuntimeInitializedUtc.HasValue
-                        && DateTime.UtcNow - _mobiFlightRuntimeInitializedUtc.Value
-                        >= TimeSpan.FromSeconds(2),
-            var command when command.StartsWith("battery-1 ") => _mobiFlightRuntimeReady,
-            var command when command.StartsWith("battery-2 ") => _mobiFlightRuntimeReady,
+            "status" => _mobiFlightSession.HasRuntimeSettled(DateTime.UtcNow),
+            var command when command.StartsWith("battery-1 ") => _mobiFlightSession.RuntimeReady,
+            var command when command.StartsWith("battery-2 ") => _mobiFlightSession.RuntimeReady,
             "a310 batteries auto" =>
                 _nativeRuntime.A310.Battery1Auto.HasValue
                 && _nativeRuntime.A310.Battery2Auto.HasValue
@@ -4012,10 +3794,10 @@ internal sealed class CopilotService : Form
             "a310 emergency-exit disarm" => _nativeRuntime.A310.Flow2States[15].HasValue,
             "a310 batteries off" =>
                 _nativeRuntime.A310.Battery1Auto.HasValue && _nativeRuntime.A310.Battery2Auto.HasValue && _nativeRuntime.A310.Battery3Auto.HasValue,
-            var command when command.StartsWith("nav-logo ") => _mobiFlightRuntimeReady,
+            var command when command.StartsWith("nav-logo ") => _mobiFlightSession.RuntimeReady,
             var command when command.StartsWith("apu-") =>
                 _state?.IsFlyByWireAirbus == true
-                    ? _mobiFlightRuntimeReady
+                    ? _mobiFlightSession.RuntimeReady
                     : _nativeRuntime.NativeAirbus.ApuAvailable.HasValue
                       && _nativeRuntime.NativeAirbus.ApuMasterSwitch.HasValue
                       && _nativeRuntime.NativeAirbus.ApuStartButton.HasValue
@@ -4036,7 +3818,7 @@ internal sealed class CopilotService : Form
             var command when command.StartsWith("crew-oxygen ") => true,
             var command when command.StartsWith("strobe ") =>
                 _state?.IsFlyByWireAirbus == true
-                    ? _mobiFlightRuntimeReady
+                    ? _mobiFlightSession.RuntimeReady
                     : _nativeRuntime.NativeAirbus.StrobeSelector.HasValue,
             var command when command == "fire-test apu" =>
                 _state?.IsFlyByWireAirbus == true || _nativeRuntime.NativeAirbus.ApuFireTest.HasValue,
@@ -4048,32 +3830,32 @@ internal sealed class CopilotService : Form
                 _state?.IsAsobo737Max8 == true,
             var command when command.StartsWith("seatbelts ") =>
                 _state?.IsFlyByWireAirbus == true
-                    ? _mobiFlightRuntimeReady
+                    ? _mobiFlightSession.RuntimeReady
                     : _nativeRuntime.NativeAirbus.SeatbeltSelector.HasValue,
             var command when command.StartsWith("no-smoking ") =>
                 _state?.IsFlyByWireAirbus == true
-                    ? _mobiFlightRuntimeReady
+                    ? _mobiFlightSession.RuntimeReady
                     : _nativeRuntime.NativeAirbus.NoSmokingSelector.HasValue,
             var command when command.StartsWith("emergency-exit ") =>
                 _state?.IsFlyByWireAirbus == true
-                    ? _mobiFlightRuntimeReady
+                    ? _mobiFlightSession.RuntimeReady
                     : _nativeRuntime.NativeAirbus.EmergencyExitSelector.HasValue,
             var command when command.StartsWith("transponder ") =>
                 _state?.IsFlyByWireAirbus == true
-                    ? _mobiFlightRuntimeReady
+                    ? _mobiFlightSession.RuntimeReady
                     : _nativeRuntime.NativeAirbus.TransponderStandby.HasValue,
             var command when command.StartsWith("atc-system ") => _nativeRuntime.NativeAirbus.TransponderAtcState.HasValue,
             var command when command.StartsWith("tcas altitude-reporting ") =>
                 _state?.IsFlyByWireAirbus == true
-                    ? _mobiFlightRuntimeReady
+                    ? _mobiFlightSession.RuntimeReady
                     : _nativeRuntime.NativeAirbus.TcasAltitudeReporting.HasValue,
             var command when command.StartsWith("tcas traffic ") =>
                 _state?.IsFlyByWireAirbus == true
-                    ? _mobiFlightRuntimeReady
+                    ? _mobiFlightSession.RuntimeReady
                     : _nativeRuntime.NativeAirbus.TcasMode.HasValue,
             var command when command.StartsWith("wxr-pws ") =>
                 _state?.IsFlyByWireAirbus == true
-                    ? _mobiFlightRuntimeReady
+                    ? _mobiFlightSession.RuntimeReady
                     : _nativeRuntime.NativeAirbus.WeatherRadarPwsSelector.HasValue,
             var command when command.StartsWith("nose-light ") =>
                 _state?.IsFlyByWireAirbus == true
@@ -7807,7 +7589,7 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        if (!_state.IsIniBuildsAirbusFamily || !_mobiFlightReady)
+        if (!_state.IsIniBuildsAirbusFamily || !_mobiFlightSession.AdapterReady)
         {
             Console.Error.WriteLine("NAV & LOGO procedure blocked: iniBuilds adapter is unavailable.");
             FinishOneShot(4);
@@ -7873,7 +7655,7 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        if (!_mobiFlightRuntimeReady)
+        if (!_mobiFlightSession.RuntimeReady)
         {
             Console.Error.WriteLine("NAV & LOGO procedure blocked: FBW runtime adapter is unavailable.");
             FinishOneShot(4);
@@ -7945,7 +7727,7 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        if (!_mobiFlightReady)
+        if (!_mobiFlightSession.AdapterReady)
         {
             Console.Error.WriteLine(
                 "Battery procedure blocked: MobiFlight aircraft adapter is not connected.");
@@ -8081,7 +7863,7 @@ internal sealed class CopilotService : Form
         string? alternateLVarName = null,
         IEnumerable<string>? additionalAlternateLVarNames = null)
     {
-        if (_state == null || !_mobiFlightRuntimeReady)
+        if (_state == null || !_mobiFlightSession.RuntimeReady)
         {
             AppendDashboardLog($"{name} blocked: FBW runtime adapter is unavailable.");
             FinishOneShot(4);
@@ -9663,7 +9445,7 @@ internal sealed class CopilotService : Form
             return;
         }
 
-        if (!_mobiFlightRuntimeReady)
+        if (!_mobiFlightSession.RuntimeReady)
         {
             AppendDashboardLog("Strobe selector blocked: FBW runtime adapter is unavailable.");
             FinishOneShot(4);
@@ -10279,7 +10061,7 @@ internal sealed class CopilotService : Form
 
     private void SetFlyByWireTransponderModeSelector(int desiredPosition)
     {
-        if (_state == null || !_mobiFlightRuntimeReady)
+        if (_state == null || !_mobiFlightSession.RuntimeReady)
         {
             AppendDashboardLog("Transponder mode selector blocked: FBW runtime adapter is unavailable.");
             FinishOneShot(4);
@@ -10347,7 +10129,7 @@ internal sealed class CopilotService : Form
     {
         if (_state?.IsFlyByWireAirbus == true)
         {
-            if (_state == null || !_mobiFlightRuntimeReady)
+            if (_state == null || !_mobiFlightSession.RuntimeReady)
             {
                 AppendDashboardLog("TCAS traffic mode blocked: FBW runtime adapter is unavailable.");
                 FinishOneShot(4);
@@ -10446,7 +10228,7 @@ internal sealed class CopilotService : Form
     {
         if (_state?.IsFlyByWireAirbus == true)
         {
-            if (_state == null || !_mobiFlightRuntimeReady)
+            if (_state == null || !_mobiFlightSession.RuntimeReady)
             {
                 AppendDashboardLog("TCAS altitude reporting blocked: FBW runtime adapter is unavailable.");
                 FinishOneShot(4);
@@ -10701,8 +10483,8 @@ internal sealed class CopilotService : Form
         if (_state?.IsFlyByWireAirbus == true)
         {
             if (Connection == null
-                || !_mobiFlightReady
-                || !_mobiFlightRuntimeReady
+                || !_mobiFlightSession.AdapterReady
+                || !_mobiFlightSession.RuntimeReady
                 || !_state.WeatherRadarPwsSelectorPosition.HasValue)
             {
                 AppendDashboardLog("WXR/PWS selector blocked: FBW runtime readback is unavailable.");
@@ -10802,7 +10584,7 @@ internal sealed class CopilotService : Form
     {
         if (_state?.IsFlyByWireAirbus == true)
         {
-            if (Connection == null || !_mobiFlightReady)
+            if (Connection == null || !_mobiFlightSession.AdapterReady)
             {
                 AppendDashboardLog("Nose light selector blocked: simulator state is unavailable.");
                 FinishOneShot(3);
@@ -10911,7 +10693,7 @@ internal sealed class CopilotService : Form
     {
         if (_state?.IsFlyByWireAirbus == true)
         {
-            if (Connection == null || !_mobiFlightReady)
+            if (Connection == null || !_mobiFlightSession.AdapterReady)
             {
                 AppendDashboardLog("Landing lights blocked: simulator state is unavailable.");
                 FinishOneShot(3);
@@ -11223,8 +11005,8 @@ internal sealed class CopilotService : Form
             || _state == null
             || !_state.IsSupportedA320
             || !_state.OnGround
-            || !_mobiFlightReady
-            || !_mobiFlightRuntimeReady)
+            || !_mobiFlightSession.AdapterReady
+            || !_mobiFlightSession.RuntimeReady)
         {
             AppendDashboardLog($"{name} blocked: aircraft or native readback is unavailable.");
             FinishOneShot(4);
@@ -11237,7 +11019,7 @@ internal sealed class CopilotService : Form
     {
         if (_state?.IsFlyByWireAirbus == true)
         {
-            if (Connection == null || !_mobiFlightRuntimeReady)
+            if (Connection == null || !_mobiFlightSession.RuntimeReady)
             {
                 AppendDashboardLog("Ground spoilers blocked: FBW runtime adapter is unavailable.");
                 FinishOneShot(4);
@@ -11506,8 +11288,8 @@ internal sealed class CopilotService : Form
         if (Connection == null
             || _state == null
             || !_state.IsSupportedA320
-            || !_mobiFlightReady
-            || !_mobiFlightRuntimeReady
+            || !_mobiFlightSession.AdapterReady
+            || !_mobiFlightSession.RuntimeReady
             || !_state.AutobrakeLevel.HasValue)
         {
             AppendDashboardLog(
@@ -11586,8 +11368,8 @@ internal sealed class CopilotService : Form
     {
         if (Connection == null
             || _state == null
-            || !_mobiFlightReady
-            || !_mobiFlightRuntimeReady
+            || !_mobiFlightSession.AdapterReady
+            || !_mobiFlightSession.RuntimeReady
             || (requireCompleteNativeState && !_nativeRuntime.AirbusNativeStateReady))
         {
             AppendDashboardLog($"{name} blocked: native aircraft readback is unavailable.");
@@ -11689,7 +11471,7 @@ internal sealed class CopilotService : Form
 
         if (_state.IsIniBuildsA310)
         {
-            if (!_mobiFlightRuntimeReady)
+            if (!_mobiFlightSession.RuntimeReady)
             {
                 AppendDashboardLog(
                     "A310 external-power command blocked: the MobiFlight WASM bridge is not ready.");
@@ -13987,7 +13769,7 @@ internal sealed class CopilotService : Form
             FinishOneShot(3);
             return;
         }
-        if (!_state.OnGround || !_state.EnginesOff || !_mobiFlightReady)
+        if (!_state.OnGround || !_state.EnginesOff || !_mobiFlightSession.AdapterReady)
         {
             AppendDashboardLog("A310 battery command blocked: requires the A310 on the ground, engines off, with its adapter connected.");
             FinishOneShot(4);
@@ -14023,7 +13805,7 @@ internal sealed class CopilotService : Form
 
     private void SetA310WipersAndWeatherRadarOff()
     {
-        if (Connection == null || _state?.IsIniBuildsA310 != true || !_mobiFlightReady)
+        if (Connection == null || _state?.IsIniBuildsA310 != true || !_mobiFlightSession.AdapterReady)
         {
             AppendDashboardLog("A310 wiper/radar command blocked: A310 adapter is unavailable.");
             FinishOneShot(3);
@@ -14559,7 +14341,7 @@ internal sealed class CopilotService : Form
 
     private void SetA310ApuPowerAndBleed()
     {
-        if (_state?.IsIniBuildsA310 != true || !_mobiFlightRuntimeReady)
+        if (_state?.IsIniBuildsA310 != true || !_mobiFlightSession.RuntimeReady)
         {
             AppendDashboardLog("A310 APU power/bleed blocked: native runtime state is unavailable.");
             FinishOneShot(4);
@@ -17390,7 +17172,7 @@ internal sealed class CopilotService : Form
                     : "PMDG SDK WAITING"
                 : _state.IsAsobo737Max8
                     ? "MSFS/ASOBO OK"
-                : _mobiFlightReady ? "MOBIFLIGHT OK" : "ADAPTER OFFLINE",
+                : _mobiFlightSession.AdapterReady ? "MOBIFLIGHT OK" : "ADAPTER OFFLINE",
             _state.IsPmdg777300Er
                 ? _pmdg777Runtime.DataReady
                     ? System.Drawing.Color.FromArgb(39, 130, 87)
@@ -17401,7 +17183,7 @@ internal sealed class CopilotService : Form
                     : System.Drawing.Color.FromArgb(172, 113, 37)
                 : _state.IsAsobo737Max8
                     ? System.Drawing.Color.FromArgb(39, 130, 87)
-                : _mobiFlightReady
+                : _mobiFlightSession.AdapterReady
                 ? System.Drawing.Color.FromArgb(39, 130, 87)
                 : System.Drawing.Color.FromArgb(150, 48, 48));
         _electricalLabel!.Text =
@@ -17423,7 +17205,7 @@ internal sealed class CopilotService : Form
                 ? "EXPERIMENTAL Asobo 737 MAX profile; incomplete live validation and no unattended Flow 7 use."
             : _state.IsIniBuildsA310
                 ? "A310-300 gate-to-gate profile active."
-            : _mobiFlightReady
+            : _mobiFlightSession.AdapterReady
                 ? "MobiFlight connected"
                 : "MobiFlight not connected - aircraft controls unavailable";
         _adapterLabel.ForeColor = _state.IsPmdg777300Er
@@ -17436,7 +17218,7 @@ internal sealed class CopilotService : Form
                 : System.Drawing.Color.DarkOrange
             : _state.IsAsobo737Max8
                 ? System.Drawing.Color.DarkGreen
-            : _mobiFlightReady
+            : _mobiFlightSession.AdapterReady
             ? System.Drawing.Color.DarkGreen
             : System.Drawing.Color.DarkRed;
         _telemetryLabel!.Text = FormatCurrentStepTelemetry(_state);
@@ -19077,7 +18859,7 @@ internal sealed class CopilotService : Form
         _gsx.OnSimConnectDisconnected();
         CloseGsxChoiceDialog();
         UpdateGsxStatus();
-        _mobiFlightReady = false;
+        _mobiFlightSession.ResetConnectionState();
         _pmdg777SdkInitialized = false;
         _pmdg777Runtime.ResetConnectionState();
         _pmdg777AdiruOnTimer?.Stop();
@@ -19099,8 +18881,7 @@ internal sealed class CopilotService : Form
         // runtime client and ordered SimVar table to be recreated after every
         // reconnect instead of accepting values left from the previous
         // session as current aircraft readback.
-        _mobiFlightRuntimeReady = false;
-        _mobiFlightRuntimeInitializedUtc = null;
+        _mobiFlightSession.ResetRuntimeState();
 
         if (aircraftChanged)
         {

@@ -284,7 +284,7 @@ internal sealed class SimConnectWindow : Form
     private readonly Dictionary<string, string> _lastPolledAsobo737MaxValues =
         new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase);
     private readonly List<string> _lVarNames = new List<string>();
-    private bool _mobiFlightReady;
+    private bool _mobiFlightAdapterReady;
     private bool _lVarListStarted;
     private bool _lVarListComplete;
 
@@ -1268,7 +1268,7 @@ internal sealed class SimConnectWindow : Form
         var response = ((MobiFlightMessage)data.dwData[0]).ToString();
         if (request == Request.MobiFlightResponse && string.Equals(response, "MF.Pong", StringComparison.OrdinalIgnoreCase))
         {
-            _mobiFlightReady = true;
+            _mobiFlightAdapterReady = true;
             SendMobiFlightCommand(sender, "MF.DummyCmd");
             SendMobiFlightCommand(sender, "MF.LVars.List");
             return;
@@ -1416,7 +1416,7 @@ internal sealed class SimConnectWindow : Form
         {
             return;
         }
-        if (_listLVarsRequested && (!_mobiFlightReady || !_lVarListComplete))
+        if (_listLVarsRequested && (!_mobiFlightAdapterReady || !_lVarListComplete))
         {
             return;
         }

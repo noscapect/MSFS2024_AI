@@ -68,8 +68,8 @@ public sealed class Pmdg777RuntimeStateTests
     {
         var runtime = new Pmdg777RuntimeState();
 
-        runtime.RecordFireAndOxygenObservations(1, 1);
-        runtime.RecordFireAndOxygenObservations(0, 0);
+        runtime.RecordFireAndOxygenObservations(1.0, 1.0);
+        runtime.RecordFireAndOxygenObservations(0.0, 0.0);
 
         Assert.IsTrue(runtime.FireOverheatTestObserved);
         Assert.IsTrue(runtime.FirstOfficerOxygenTestObserved);

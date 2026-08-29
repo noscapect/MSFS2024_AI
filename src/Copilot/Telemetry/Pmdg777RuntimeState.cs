@@ -53,7 +53,7 @@ internal sealed class Pmdg777RuntimeState
         return becameReady;
     }
 
-    public void RecordFireAndOxygenObservations(float fireOverheatTestSwitch, float oxygenTestSwitch)
+    public void RecordFireAndOxygenObservations(double fireOverheatTestSwitch, double oxygenTestSwitch)
     {
         FireOverheatTestObserved |= fireOverheatTestSwitch > 0.5;
         FirstOfficerOxygenTestObserved |= oxygenTestSwitch > 0.5;

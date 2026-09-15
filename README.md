@@ -5,9 +5,9 @@ Flight Simulator 2024. It guides a complete gate-to-gate flight, performs
 supported First Officer duties, monitors Captain actions, verifies cockpit
 changes, and provides spoken operational callouts.
 
-> Supported aircraft profiles are release-candidate work for a future v1.0.0
-> release. Keep flying the aircraft and be prepared to take over whenever an
-> action cannot be completed or verified.
+> Version 1.0.0 is the first stable release of the supported-aircraft set.
+> Keep flying the aircraft and be prepared to take over whenever an action
+> cannot be completed or verified.
 
 ## Supported aircraft
 
@@ -18,9 +18,9 @@ changes, and provides spoken operational callouts.
 - FlyByWire A32NX for MSFS 2024
 - PMDG 737-800
 
-The supported-aircraft set above is being prepared for a future v1.0.0
-release. PMDG 777-300ER is a **development integration**, not operationally
-supported, and Asobo 737 MAX 8 is **experimental**; see their warnings below.
+The supported-aircraft set above is stable in v1.0.0. PMDG 777-300ER remains a
+**development integration**, not operationally supported, and Asobo 737 MAX 8
+remains **experimental**; see their warnings below.
 
 Unsupported aircraft are detected but not controlled. The app does not send
 guessed generic commands to an unknown cockpit.
@@ -78,7 +78,7 @@ procedure catalog. The implementation includes automated startup, departure,
 cruise, arrival, taxi-in, parking, shutdown, and turnaround handling with
 aircraft-specific readbacks.
 
-Version 0.9.8 includes this development integration, which remains subject to
+Version 1.0.0 includes this development integration, which remains subject to
 ordered live validation in the simulator. It does not reuse
 the PMDG 737 SDK namespace or procedures. Pilots testing a build from `main`
 must supervise every action and stop the flow if the reported state differs
@@ -90,7 +90,7 @@ from the cockpit. See the
 The repository contains a dedicated Asobo 737 MAX profile using native
 SimConnect Input Events and aircraft-specific procedures. Flows 1–6 have
 received iterative live testing, but the MAX profile is not yet gate-to-gate
-validated. It remains explicitly **experimental** in v0.9.8, and
+validated. It remains explicitly **experimental** in v1.0.0, and
 further MAX development is paused while work focuses on
 the desktop UX redesign and MSFS 2024 EFB companion.
 
@@ -118,7 +118,7 @@ repository before allowing it to run.
 
 ### In-simulator EFB companion
 
-The v0.9.8 release includes an optional native MSFS 2024 EFB app. It displays
+The v1.0.0 release includes an optional native MSFS 2024 EFB app. It displays
 the current flow and step, allows the pilot to start, confirm, pause, resume, or
 cancel a flow, and surfaces aircraft telemetry and GSX boarding progress
 without Alt-Tabbing.

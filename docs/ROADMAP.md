@@ -6,14 +6,12 @@ profiles remain protected by their aircraft-specific regression tests.
 
 ## Current stabilization
 
-The latest public release is v0.9.8. It includes the dashboard redesign, the
-optional EFB companion, expanded optional GSX coordination, the PMDG 777-300ER
-development integration, and the Asobo 737 MAX profile under an explicit
+Version 1.0.0 is the stable supported-aircraft baseline. It includes the
+dashboard redesign, optional EFB companion, expanded optional GSX coordination,
+and the implementation-complete stable aircraft profiles. PMDG 777-300ER
+remains a development integration, and Asobo 737 MAX remains under an explicit
 experimental warning. Active MAX development is paused while UX, EFB, and
 integration reliability are stabilized on `main`.
-
-Current work is preparing the supported-aircraft set for a future v1.0.0
-release; v1.0.0 has not shipped.
 
 Priorities are:
 

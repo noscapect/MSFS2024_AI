@@ -1,19 +1,19 @@
-# Version 0.9.8
+# Version 1.0.0
 
-Version 0.9.8 adds the PMDG 777-300ER development integration and improves
-runtime-state ownership across the supported aircraft adapters.
+Version 1.0.0 is the first stable release of MSFS 2024 Virtual First Officer
+for the supported-aircraft set.
 
 ## Highlights
 
-- Added the dedicated PMDG 777-300ER twelve-flow procedure and checklist
-  catalog, its isolated 777X SDK adapter, and PMDG-specific command/readback
-  paths. The profile remains a development integration pending ordered live
-  validation and is not operationally supported.
-- Extracted native, PMDG NG3, PMDG 777, and Asobo 737 MAX runtime/readback
-  state into focused components, preserving aircraft-specific control paths.
-- Hardened reconnection/runtime-generation handling and FlyByWire approach
-  configuration gates.
-- Expanded regression coverage to 497 automated desktop tests.
+- Twelve-flow, gate-to-gate First Officer workflow with resumable flight and
+  procedure progress.
+- Stable support for the supported iniBuilds Airbus profiles and PMDG 737-800.
+- Aircraft-specific commands with independent cockpit-state verification.
+- SimConnect reconnect and runtime-generation hardening.
+- Optional MSFS 2024 EFB companion, SimBrief integration, SayIntentions
+  integration, and GSX coordination.
+- Diagnostics, bounded flight recordings, and extensive automated regression
+  coverage.
 
 ## Compatibility
 
@@ -21,8 +21,10 @@ The desktop app works without the EFB companion, GSX Pro, SayIntentions, or
 SimBrief. Every integration remains optional and normal flows continue with
 any combination of them enabled or unavailable.
 
-The iniBuilds A310-300 implementation is complete for its current scope. The
-Asobo 737 MAX 8 profile remains experimental. This is beta assistance
-software: the pilot remains responsible for aircraft
+PMDG 777-300ER remains a development integration and is not operationally
+supported. Asobo 737 MAX 8 remains experimental, and Flow 7 is not cleared for
+unattended use.
+
+This is assistance software: the pilot remains responsible for aircraft
 configuration, flight-path control, and deciding whether it is safe to
 continue each phase.

@@ -1,13 +1,12 @@
 # MSFS 2024 Virtual First Officer - Project Status and Handoff
 
 This file is the primary technical handoff for continuing development. The
-current public release is **v0.9.8** from August 29, 2026. It contains the
-dashboard and optional MSFS 2024 EFB companion, expanded optional GSX
-coordination, the implementation-complete iniBuilds A310-300 profile, the
-PMDG 777-300ER twelve-flow development integration, and the Asobo 737 MAX
-profile under an explicit experimental warning. The 777 remains a development
-integration pending ordered live validation. The flows implemented in the
-application are authoritative;
+v1.0.0 is the stable supported-aircraft baseline. It contains the dashboard
+and optional MSFS 2024 EFB companion, expanded optional GSX coordination, and
+the implementation-complete iniBuilds A310-300 profile. PMDG 777-300ER remains
+a development integration pending ordered live validation, and the Asobo 737
+MAX profile remains under an explicit experimental warning. The flows
+implemented in the application are authoritative;
 supporting documents must follow the application when they differ.
 
 The iniBuilds A310-300 procedure and checklist framework is included in v0.9.7.
@@ -37,16 +36,15 @@ commands with independent readbacks; FO checks advance from readbacks without
 pilot confirmation. A flow is not ready for testing until every such step has
 been implemented or explicitly removed from the claimed scope.
 
-The supported-aircraft set is in release-candidate work for a future v1.0.0
-release. This is assistance software, not an autopilot, and the pilot must
-always be able to take over.
+Version 1.0.0 is the stable supported-aircraft baseline. This is assistance
+software, not an autopilot, and the pilot must always be able to take over.
 
 ## Current release and main branch
 
-- Public version: **0.9.8**
-- Current `main`: v0.9.8 release baseline, including PMDG 777-300ER automation
+- Public version: **1.0.0**
+- Current `main`: v1.0.0 stable supported-aircraft baseline
 - Repository: <https://github.com/noscapect/MSFS2024_AI>
-- Latest release: <https://github.com/noscapect/MSFS2024_AI/releases/tag/v0.9.8>
+- Latest published release before v1.0.0: <https://github.com/noscapect/MSFS2024_AI/releases/tag/v0.9.8>
 - Main project: `src/Copilot/Copilot.csproj`
 - UI/runtime: WinForms, .NET Framework 4.7.2, x64
 - Release executable: `src/Copilot/bin/Release/net472/Copilot.exe`
@@ -68,11 +66,11 @@ dotnet build .\src\Copilot\Copilot.csproj -c Release --no-restore
 dotnet test .\tests\Copilot.Tests\Copilot.Tests.csproj -c Release --no-restore
 ```
 
-The v0.9.8 release passes 497 automated tests. The suite on `main` has expanded
-with PMDG 777 control, procedure, aircraft-isolation, and terminal-flow
-coverage. The Asobo 737 MAX profile is packaged only as experimental support
-and must complete its remaining safety instrumentation and gate-to-gate live
-validation before that warning can be removed.
+The v1.0.0 baseline retains extensive automated regression coverage, including
+PMDG 777 control, procedure, aircraft-isolation, and terminal-flow coverage.
+The Asobo 737 MAX profile is packaged only as experimental support and must
+complete its remaining safety instrumentation and gate-to-gate live validation
+before that warning can be removed.
 
 ## MSFS 2024 EFB companion
 

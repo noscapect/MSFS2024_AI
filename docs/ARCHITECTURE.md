@@ -153,11 +153,11 @@ compatibility with future simulator or aircraft updates.
 PMDG 777-300ER integration is a separate, pre-operational boundary. Exact
 aircraft detection and the official `PMDG_777X_Data` / `PMDG_777X_Control`
 identifiers live in `Pmdg777ControlProfile`. A detected 777 does not route to
-the 737 procedure library, parse `PMDG_NG3_Data`, or send NG3 controls. It
-remains excluded from `IsSupportedAircraft` until its own telemetry parser,
-commands, readbacks, and live validation exist. Its dedicated twelve-flow
-catalog and matching checklist set define the full integration surface without
-borrowing 737 procedure objects. Flows 1 and 2 use a read-only subset of the exact
+the 737 procedure library, parse `PMDG_NG3_Data`, or send NG3 controls. Its
+dedicated 777X telemetry parser, commands, readbacks, twelve-flow catalog, and
+matching checklist set are implemented, but it remains excluded from
+`IsSupportedAircraft` until ordered live validation is complete. Flows 1 and 2
+use a read-only subset of the exact
 777X data structure. A data block is accepted only when its aircraft-model byte
 identifies the 777-300ER; the zero-filled client area that exists when PMDG data
 broadcast is disabled is never treated as ready. Flow 1 uses the PMDG battery,

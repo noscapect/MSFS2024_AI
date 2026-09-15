@@ -12,6 +12,9 @@ development integration, and the Asobo 737 MAX profile under an explicit
 experimental warning. Active MAX development is paused while UX, EFB, and
 integration reliability are stabilized on `main`.
 
+Current work is preparing the supported-aircraft set for a future v1.0.0
+release; v1.0.0 has not shipped.
+
 Priorities are:
 
 1. Live-validate the PMDG 777-300ER integration, starting with the read-only

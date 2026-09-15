@@ -3,7 +3,7 @@
 ## Status
 
 The optional EFB companion ships with desktop release 0.9.8 as EFB build
-0.2.10. Its TypeScript build, Community package layout, desktop bridge, and
+0.2.11. Its TypeScript build, Community package layout, desktop bridge, and
 protocol tests are complete; continued in-simulator field validation remains
 part of normal beta testing.
 
@@ -72,7 +72,7 @@ simulator EFB app list and select **Virtual First Officer**. Start
 `Copilot.exe` before using its controls.
 
 The current app uses the versioned internal identity `VfoEfbV11`
-and displays EFB build `0.2.10`. MSFS applies the internal name to the host
+and displays EFB build `0.2.11`. MSFS applies the internal name to the host
 `.efb-view` element, and the generated stylesheet is deliberately scoped to
 `.efb-view.VfoEfbV11`. Increment this identity when a simulator-level asset
 cache must be invalidated.

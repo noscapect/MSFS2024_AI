@@ -5,8 +5,9 @@ Flight Simulator 2024. It guides a complete gate-to-gate flight, performs
 supported First Officer duties, monitors Captain actions, verifies cockpit
 changes, and provides spoken operational callouts.
 
-> This project is in beta. Keep flying the aircraft and be prepared to take
-> over whenever an action cannot be completed or verified.
+> Supported aircraft profiles are release-candidate work for a future v1.0.0
+> release. Keep flying the aircraft and be prepared to take over whenever an
+> action cannot be completed or verified.
 
 ## Supported aircraft
 
@@ -16,9 +17,10 @@ changes, and provides spoken operational callouts.
 - iniBuilds A310-300
 - FlyByWire A32NX for MSFS 2024
 - PMDG 737-800
-- PMDG 777-300ER (**development integration in v0.9.8; not operationally
-  supported**)
-- Asobo 737 MAX 8 (**development beta; see the warning below**)
+
+The supported-aircraft set above is being prepared for a future v1.0.0
+release. PMDG 777-300ER is a **development integration**, not operationally
+supported, and Asobo 737 MAX 8 is **experimental**; see their warnings below.
 
 Unsupported aircraft are detected but not controlled. The app does not send
 guessed generic commands to an unknown cockpit.

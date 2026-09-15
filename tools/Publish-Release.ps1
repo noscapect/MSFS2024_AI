@@ -1,7 +1,8 @@
 param(
     [string]$Repository = "noscapect/MSFS2024_AI",
     [switch]$Draft,
-    [switch]$Prerelease
+    [switch]$Prerelease,
+    [switch]$PackageOnly
 )
 
 $ErrorActionPreference = "Stop"
@@ -61,8 +62,9 @@ if ($status) {
     throw "The Git working tree must be clean before publishing a release."
 }
 
-if (git tag --list $tag) {
-    throw "Git tag $tag already exists."
+dotnet restore .\tests\Copilot.Tests\Copilot.Tests.csproj
+if ($LASTEXITCODE -ne 0) {
+    throw "Restore failed."
 }
 
 dotnet build .\src\Copilot\Copilot.csproj -c Release --no-restore
@@ -140,6 +142,34 @@ Set-Content -LiteralPath (Join-Path $stageRoot "INSTALL.txt") -Value $installTex
 Compress-Archive -LiteralPath $stageRoot -DestinationPath $zipPath -Force
 $hash = (Get-FileHash -LiteralPath $zipPath -Algorithm SHA256).Hash.ToLowerInvariant()
 Set-Content -LiteralPath $checksumPath -Value "$hash  $([System.IO.Path]::GetFileName($zipPath))" -Encoding ASCII
+
+if ($PackageOnly) {
+    Write-Host "Package: $zipPath"
+    Write-Host "Checksum: $checksumPath"
+    Write-Host "SHA-256: $hash"
+    exit 0
+}
+
+git fetch origin main --tags
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not fetch origin/main and tags."
+}
+
+$localHead = git rev-parse HEAD
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not resolve local HEAD."
+}
+$originMain = git rev-parse origin/main
+if ($LASTEXITCODE -ne 0) {
+    throw "Could not resolve origin/main."
+}
+if ($localHead -ne $originMain) {
+    throw "Local HEAD must match origin/main before publishing a release."
+}
+
+if (git tag --list $tag) {
+    throw "Git tag $tag already exists."
+}
 
 $credentialInput = "protocol=https`nhost=github.com`n`n"
 $credential = $credentialInput | git credential fill

@@ -37,8 +37,9 @@ commands with independent readbacks; FO checks advance from readbacks without
 pilot confirmation. A flow is not ready for testing until every such step has
 been implemented or explicitly removed from the claimed scope.
 
-The project is multi-aircraft and remains beta software. It is assistance
-software, not an autopilot, and the pilot must always be able to take over.
+The supported-aircraft set is in release-candidate work for a future v1.0.0
+release. This is assistance software, not an autopilot, and the pilot must
+always be able to take over.
 
 ## Current release and main branch
 
@@ -98,10 +99,10 @@ Build and installation details are in `docs/EFB_COMPANION.md`.
 | iniBuilds A321LR | Gate-to-gate live validated | SimConnect and MobiFlight WASM |
 | FlyByWire A32NX for MSFS 2024 | Gate-to-gate live validated | SimConnect and MobiFlight WASM |
 | PMDG 737-800 | Gate-to-gate live validated | SimConnect and PMDG SDK data broadcast |
-| PMDG 777-300ER | Twelve-flow automation implemented on `main`; ordered live validation remains | SimConnect and isolated PMDG 777X SDK data broadcast |
+| PMDG 777-300ER | Development integration; twelve-flow automation implemented on `main`, with ordered live validation remaining | SimConnect and isolated PMDG 777X SDK data broadcast |
 | iniBuilds A330-300 (GE) | Gate-to-gate implemented and live tested; continue field validation | SimConnect and MobiFlight WASM |
 | iniBuilds A310-300 | Current twelve-flow gate-to-gate scope implemented; field validation and maintenance continue | SimConnect plus A310-native command/readback telemetry |
-| Asobo 737 MAX 8 | Development beta; Flows 1–6 iteratively live tested, Flow 7 not cleared | SimConnect Input Events, SimVars, and MobiFlight WASM |
+| Asobo 737 MAX 8 | Experimental; Flows 1–6 iteratively live tested, Flow 7 not cleared for unattended use | SimConnect Input Events, SimVars, and MobiFlight WASM |
 
 Unsupported aircraft are identified but never controlled with guessed generic
 commands. FlyByWire A380X research code is deliberately dormant and hidden

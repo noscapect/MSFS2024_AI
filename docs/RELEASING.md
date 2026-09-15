@@ -34,8 +34,9 @@ The script:
 4. Restores dependencies, then builds the Release application.
 5. Runs the automated tests, including released-aircraft isolation contracts.
 6. Builds and type-checks the MSFS 2024 EFB companion.
-7. Packages the desktop application, aircraft fallback assets, optional EFB
-   Community package, and installation instructions.
+7. Packages the desktop application, aircraft fallback assets and their
+   `AIRCRAFT_FALLBACK_IMAGE_ATTRIBUTION.md` attribution/license information,
+   optional EFB Community package, and installation instructions.
 8. Generates a SHA-256 checksum.
 9. Fetches `origin/main` and tags, and requires local `HEAD` to match
    `origin/main`.

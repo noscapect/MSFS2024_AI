@@ -27,6 +27,30 @@ CopilotService command and snapshot bridge
 Existing procedure, aircraft, GSX, and SayIntentions subsystems
 ```
 
+### Runtime and session ownership
+
+`CopilotService` orchestrates application runtime, UI, and integration
+coordination. Dedicated components own connection, session, and runtime
+bookkeeping where that state has been extracted:
+
+- `SimConnectSessionManager` owns SimConnect connection and session lifecycle.
+- `SimConnectRegistrationService` and `SimConnectContracts` own SimConnect
+  registration contracts and registration ownership.
+- `CockpitAutomationScheduler` owns queued cockpit automation scheduling;
+  `AutomationRuntimeGeneration`, `GenerationBoundCockpitAction`, and
+  `AutomationInvalidationPolicy` bind queued work to the active
+  aircraft/session generation and invalidate stale work safely.
+- `PendingAircraftVerificationState` owns pending command/readback verification
+  state.
+- `MobiFlightAdapterSession` owns adapter readiness, runtime session state, and
+  the ordered v27 runtime registration catalog.
+- `EfbCompanionTransport` owns CommBus chunk, session, and throttle transport
+  state.
+- `SayIntentionsRuntimeState` owns passive SayIntentions runtime/session state.
+
+`CopilotService` remains the main orchestration/UI class; not every
+responsibility has been extracted from it.
+
 ### Procedure engine
 
 Owns the gate-to-gate state machine. Each procedure contains ordered and
@@ -61,9 +85,8 @@ Maps normalized state and commands to:
 Every capability is marked as supported, unsupported, read-only, or requiring
 manual confirmation.
 
-The application is now structured around aircraft-family adapters rather than a
-single A320-specific flow. The public release supports multiple Airbus and
-Boeing aircraft profiles:
+The application is structured around aircraft-family adapters rather than a
+single A320-specific flow. Stable v1 supported profiles are:
 
 - iniBuilds A320neo V2
 - iniBuilds A321LR
@@ -71,7 +94,9 @@ Boeing aircraft profiles:
 - iniBuilds A310-300 (dedicated gate-to-gate native adapter)
 - FlyByWire A32NX for MSFS 2024
 - PMDG 737-800
-- Asobo 737 MAX 8 (development beta)
+
+Development and experimental profiles present in the codebase are PMDG
+777-300ER (development integration) and Asobo 737 MAX 8 (experimental).
 
 iniBuilds command/state pairs and the mandatory momentary-command workflow are
 defined in `docs/NATIVE_CONTROL_STRATEGY.md`. Each supported aircraft has its

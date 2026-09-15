@@ -1,5 +1,15 @@
 # Live test evidence
 
+## 2026-09-15 - FBW A320neo post-refactor gate-to-gate smoke flight
+
+- Aircraft: FlyByWire A320neo / A32NX
+- Route: EBBR -> EHAM
+- Result: gate-to-gate test flight completed successfully.
+- Purpose: post-refactor smoke validation after the recent runtime/session
+  ownership extractions.
+
+Historical entries below preserve their original evidence and scope.
+
 ## 2026-08-14 - PMDG 777 SayIntentions push/start request routing
 
 The completed Flow 3 review showed that its `pushback-clearance` step did not
@@ -1080,6 +1090,10 @@ Flow 10 now starts Flow 11 automatically after the landing callouts complete.
 
 ## Flow 11 after landing and taxi — pending live verification
 
+This heading is a historical validation snapshot. Later validation superseded
+its pending status; consult later entries and current support documents for
+the current support status.
+
 Flow 11 no longer asks the flying Captain to confirm actions in the app.
 It monitors that reverse thrust is stowed at or below 70 knots, then uses
 30 knots groundspeed as the automatic runway-exit/taxi-speed gate.
@@ -1099,6 +1113,10 @@ anti-ice is not yet included because no aircraft-specific command and
 independent readback have been captured.
 
 ## Flow 12 parking and shutdown — pending live verification
+
+This heading is a historical validation snapshot. Later validation superseded
+its pending status; consult later entries and current support documents for
+the current support status.
 
 Flow 12 monitors the Captain parking, setting the parking brake and shutting
 down both engines. No app confirmation is required for those cockpit actions.

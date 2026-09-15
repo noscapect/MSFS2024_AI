@@ -15,9 +15,9 @@ integration reliability are stabilized on `main`.
 
 Priorities are:
 
-1. Live-validate the PMDG 777-300ER integration, starting with the read-only
-   Flow 1 offsets and then progressing through its dedicated twelve-flow
-   procedure/checklist catalog one flow at a time.
+1. Live-validate the PMDG 777-300ER development integration, starting with
+   Flow 2 after the completed Flow 1 validation, then progressing through
+   Flows 3–12 in order.
 2. Continue live validation of the MSFS 2024 EFB companion,
    including start, confirm, pause, resume, cancel, reconnect, and stale-state
    behavior.
@@ -59,7 +59,7 @@ by SayIntentions.
    the universal default, then add aircraft- and airline-specific options for
    single-engine taxi-in and taxi-out with the appropriate engine selection,
    APU coordination, operating restrictions, and engine warm-up/cool-down
-   timing. Do not introduce this feature before the public 1.0 release.
+   timing. This feature is post-1.0 and is not part of the v1.0.0 baseline.
 
 ## Final planned major feature
 

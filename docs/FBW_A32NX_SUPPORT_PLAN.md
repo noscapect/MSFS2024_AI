@@ -1,6 +1,7 @@
 # FBW A32NX support notes
 
-Status: released; original development completed for version 0.6.0.
+Status: stable supported v1 profile; original development completed for version
+0.6.0.
 
 Goal: add FlyByWire A32NX support without destabilizing the iniBuilds A320neo
 V2 app.
@@ -76,16 +77,14 @@ Some generic SimVars may already work for aircraft state, engines, basic
 lights, landing gear, flaps, speed, altitude, and parking brake. Those should
 be reused where reliable.
 
-## Adapter target
+## Current aircraft boundary
 
-Create aircraft-specific adapters:
-
-- `IniBuildsA320NeoV2Adapter`
-- `FbwA32NxAdapter`
-
-The procedure engine should request normalized actions like `SetApuBleedOn`
-or `SetNoseLightTakeoff`. The active adapter decides whether the loaded
-aircraft supports that action and how to command/verify it.
+FBW A32NX owns dedicated procedure and checklist behavior plus FBW-specific
+command/readback paths. The procedure engine requests normalized actions such
+as `SetApuBleedOn` or `SetNoseLightTakeoff`, and the active aircraft path
+decides whether and how the loaded aircraft can command and verify the action.
+FBW must not inherit iniBuilds-only native mappings merely because both are
+A320-family aircraft.
 
 ## Release rule
 

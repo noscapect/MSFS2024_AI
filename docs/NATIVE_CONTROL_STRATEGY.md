@@ -193,6 +193,6 @@ warm-up cycle. A fixed 60-second AVAIL deadline produced a false failure and
 must not be used.
 
 MobiFlight runtime LVar layouts persist for the simulator session. The client
-name includes a schema suffix (`MSFS2024_AI_Copilot_v2`); increment that suffix
+name includes a schema suffix (`MSFS2024_AI_Copilot_v27`); increment that suffix
 whenever the ordered LVar list changes. Otherwise a new build can read old
 offsets until MSFS is restarted.

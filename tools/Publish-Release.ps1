@@ -100,6 +100,7 @@ Copy-Item -LiteralPath (Join-Path $outputRoot "SimConnect.dll") -Destination $st
 Copy-Item -LiteralPath (Join-Path $outputRoot "Assets") -Destination $stageRoot -Recurse
 Copy-Item -LiteralPath (Join-Path $workspace "README.md") -Destination $stageRoot
 Copy-Item -LiteralPath (Join-Path $workspace "docs\RELEASE_NOTES.md") -Destination $stageRoot
+Copy-Item -LiteralPath (Join-Path $workspace "docs\AIRCRAFT_FALLBACK_IMAGE_ATTRIBUTION.md") -Destination $stageRoot
 
 $efbPackagesRoot = Join-Path $stageRoot "EFB Community Package"
 New-Item -ItemType Directory -Force `

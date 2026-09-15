@@ -4,10 +4,10 @@ MSFS 2024 Virtual First Officer is an external application that performs the
 duties of a first officer in supported Microsoft Flight Simulator 2024 aircraft
 throughout a complete gate-to-gate operation.
 
-The app supports the iniBuilds A320neo V2, iniBuilds A321LR, iniBuilds
-A330-300 (GE), FlyByWire A32NX for MSFS 2024, and PMDG 737-800. Each supported
-aircraft routes through a dedicated procedure profile and guarded command
-implementation.
+The stable supported-aircraft set is iniBuilds A320neo V2, iniBuilds A321LR,
+iniBuilds A330-300 (GE), iniBuilds A310-300, FlyByWire A32NX for MSFS 2024,
+and PMDG 737-800. Each supported aircraft routes through a dedicated procedure
+profile and guarded command implementation.
 
 The application begins with a cold-and-dark aircraft at the departure gate and
 continues through shutdown and passenger offboarding at the destination.
@@ -24,8 +24,9 @@ continues through shutdown and passenger offboarding at the destination.
 - The pilot can pause automation, skip or retry steps, take control, and
   configure the division of duties.
 - Hermes Agent is not a runtime dependency. It may be used during development.
-- An in-game panel or optional AI integration may be added later without
-  changing the procedure and aircraft-control core.
+- The optional in-simulator EFB is a presentation and control companion over
+  the versioned CommBus protocol; procedure and aircraft-control logic remain
+  desktop-owned.
 
 ## Operational scope
 

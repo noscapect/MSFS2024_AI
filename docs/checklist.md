@@ -1,9 +1,12 @@
 # Application Flow Checklist
 
-This document describes the detailed Airbus gate-to-gate flow implemented by
-the application. Airbus procedures live in
-`src/Copilot/Procedures/A320ProcedureLibrary.cs`; Boeing 737 procedures live in
-`src/Copilot/Procedures/B737ProcedureLibrary.cs`. The application code is
+This document describes the detailed gate-to-gate flow implemented by the
+application. Modern aircraft own separate procedure catalogs:
+`A320ProcedureLibrary`, `A321ProcedureLibrary`, `A330ProcedureLibrary`,
+`A310ProcedureLibrary`, `FbwA320ProcedureLibrary`, and
+`B737ProcedureLibrary`. `Pmdg777ProcedureLibrary` is dedicated to the
+development-only PMDG 777 integration, while `Asobo737MaxProcedureLibrary` is
+dedicated to the experimental Asobo MAX profile. The application code is
 authoritative. Update this file whenever a flow changes.
 
 The PMDG 737-800 also has twelve gate-to-gate flows, but uses its own Boeing

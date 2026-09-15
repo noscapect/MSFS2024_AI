@@ -1,9 +1,17 @@
 # FBW A32NX control verification protocol
 
-This document is the source-of-truth workflow for maintaining FBW A32NX
-support. Do not add controls by guessing LVars from behavior screenshots or
-generic MSFS SimVars first. Use the FBW source package and verify each control
-through the app bridge.
+## Current status
+
+FBW A32NX is stable-supported in v1.0.0. This is a historical and maintenance
+verification record for FBW control discovery; the original discovery table
+below records how controls were investigated. Entries marked **Pending**
+describe the state at the time of that discovery snapshot and are not the
+authoritative current support matrix. For current behavior, consult the
+implementation, `docs/LIVE_TESTS.md`, and `docs/FBW_A32NX_SUPPORT_PLAN.md`.
+
+Do not add controls by guessing LVars from behavior screenshots or generic MSFS
+SimVars first. Use the FBW source package and verify each control through the
+app bridge.
 
 ## Source priority
 
@@ -61,4 +69,6 @@ Only after this three-point check should code be changed.
 - BAT 1/2 remain captain actions.
 - EXT PWR remains a captain action.
 - If passive readback works, the app proceeds automatically.
-- If passive readback fails, the user may press Confirm during discovery builds, but the mapping must stay marked as incomplete until source-backed readback is verified.
+- Historical discovery builds allowed Confirm when passive readback failed.
+  Current supported behavior is defined by the implementation and current
+  support documents rather than that discovery fallback.

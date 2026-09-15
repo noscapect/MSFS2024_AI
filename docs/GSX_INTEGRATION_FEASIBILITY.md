@@ -2,10 +2,12 @@
 
 ## Conclusion
 
-GSX Pro integration is feasible and has an official implementation path. It
-should be developed after the SayIntentions integration is complete, as an
-optional ground-services adapter that is independent of every aircraft
-adapter.
+GSX Pro integration is implemented as an optional ground-services adapter that
+is independent of every aircraft adapter. The current baseline uses the
+official interface for optional boarding coordination, pushback/departure
+preparation, dynamic secondary-menu responses, pushback/start sequencing,
+exact destination-stand handoff when SayIntentions supplies one, and deboarding
+requests after parking.
 
 FSDreamTeam publishes a GSX Remote Control SDK. The locally installed SDK is
 available at:
@@ -19,8 +21,8 @@ clicks or guessing undocumented aircraft variables.
 
 ## Development status
 
-The initial departure coordinator is released as optional beta functionality
-in v0.9.5. Its scope is intentionally smaller than complete GSX automation:
+The optional coordinator is part of the current v1.0.0 baseline. Its scope is
+intentionally smaller than complete GSX automation:
 
 - GSX keeps all service-depth and timing configuration.
 - The app requests boarding during preflight when enabled.
@@ -30,7 +32,11 @@ in v0.9.5. Its scope is intentionally smaller than complete GSX automation:
   clearance checkpoint.
 - The app displays later GSX questions on both the desktop and EFB and returns
   the user's selected answer; captain choices remain under pilot control.
-- Arrival services and deeper automation remain deferred until after v1.0.
+- When SayIntentions supplies a destination stand, the app can select only an
+  exact matching GSX stand through paged position-selection menus.
+- After parking, the app can request deboarding when its configured safe state
+  conditions are met.
+- Deeper/generalized arrival-service automation remains post-1.0.
 
 The protocol proof, settings UI, Couatl status, dynamic menu parser, ownership
 guard, and the two initial request hooks are implemented. Parking-brake and

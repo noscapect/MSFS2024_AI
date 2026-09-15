@@ -5,7 +5,7 @@
 The optional EFB companion ships with desktop release 1.0.0 as EFB build
 0.2.11. Its TypeScript build, Community package layout, desktop bridge, and
 protocol tests are complete; continued in-simulator field validation remains
-part of normal beta testing.
+part of normal compatibility and regression testing.
 
 ## What it does
 

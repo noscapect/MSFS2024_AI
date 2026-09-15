@@ -334,8 +334,25 @@ aircraft state, but does not share aircraft-specific cockpit assumptions.
 
 Important layers and files:
 
-- `src/Copilot/CopilotService.cs` - runtime orchestration, SimConnect,
-  integration coordination, command dispatch, and normalized telemetry
+- `src/Copilot/CopilotService.cs` - application/runtime orchestration and
+  UI/integration coordination; it remains the main orchestration/UI class
+- `src/Copilot/Automation/CockpitAutomationScheduler.cs` - queued cockpit
+  automation scheduling
+- `src/Copilot/Automation/AutomationRuntimeGeneration.cs`,
+  `GenerationBoundCockpitAction.cs`, and `AutomationInvalidationPolicy.cs` -
+  generation-bound automation invalidation and safety
+- `src/Copilot/Automation/PendingAircraftVerificationState.cs` - pending
+  aircraft command/readback verification state
+- `src/Copilot/SimConnect/SimConnectSessionManager.cs` - SimConnect
+  connection and session lifecycle
+- `src/Copilot/SimConnect/SimConnectRegistrationService.cs` and
+  `SimConnectContracts.cs` - SimConnect contracts and registration ownership
+- `src/Copilot/Simulation/MobiFlightAdapterSession.cs` - MobiFlight adapter
+  readiness, runtime session state, and ordered v27 runtime registration catalog
+- `src/Copilot/Efb/EfbCompanionTransport.cs` - EFB CommBus chunk, session, and
+  throttle transport state
+- `src/Copilot/SayIntentions/SayIntentionsRuntimeState.cs` - passive
+  SayIntentions runtime and session state
 - `src/Copilot/AircraftState.cs` - normalized simulator state
 - `src/Copilot/Procedures/ProcedureRunner.cs` - ordered flow execution,
   waiting, retry, verification, pause/resume, and cancellation

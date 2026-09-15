@@ -17270,9 +17270,30 @@ internal sealed class CopilotService : Form
                 identity?.DisplayVariation
             }.Where(value => !string.IsNullOrWhiteSpace(value))).ToUpperInvariant();
 
-        if (probe.Contains("737") || probe.Contains("B738"))
+        if (probe.Contains("777-300ER")
+            || probe.Contains("PMDG 777")
+            || probe.Contains("77W"))
+        {
+            return "boeing-777-300er.jpg";
+        }
+
+        if (probe.Contains("737 MAX")
+            || probe.Contains("MAX 8")
+            || probe.Contains("B38M"))
+        {
+            return "boeing-737-max-8.jpg";
+        }
+
+        if (probe.Contains("737-800")
+            || probe.Contains("B738")
+            || probe.Contains("PMDG 737"))
         {
             return "boeing-737-800.jpg";
+        }
+
+        if (probe.Contains("A310"))
+        {
+            return "airbus-a310-300.jpg";
         }
 
         if (probe.Contains("A321"))
@@ -17285,7 +17306,11 @@ internal sealed class CopilotService : Form
             return "airbus-a330.jpg";
         }
 
-        if (probe.Contains("A320") || probe.Contains("A32N") || probe.Contains("A20N"))
+        if (probe.Contains("A320")
+            || probe.Contains("A32NX")
+            || probe.Contains("A32N")
+            || probe.Contains("A20N")
+            || probe.Contains("FLYBYWIRE"))
         {
             return "airbus-a320neo.jpg";
         }

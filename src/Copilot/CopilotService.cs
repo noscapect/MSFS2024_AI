@@ -12281,6 +12281,7 @@ internal sealed class CopilotService : Form
             BackColor = System.Drawing.Color.White
         };
         _flowList.DrawItem += DrawFlowItem;
+        _flowList.SelectedIndexChanged += (_, _) => UpdateProcedureActionButtons();
         foreach (var procedure in ProcedureCatalog.ForAircraft(_state))
         {
             _flowList.Items.Add(new ProcedureListItem(procedure));
@@ -14693,7 +14694,7 @@ internal sealed class CopilotService : Form
                 ? gsx.RemoteControlActive && !gsx.OwnsRemoteControl
                     ? System.Drawing.Color.DarkOrange
                     : System.Drawing.Color.SeaGreen
-                : System.Drawing.Color.DarkGoldenrod;
+                : System.Drawing.Color.DimGray;
         SetStatusBadge(_gsxBadgeLabel, badgeText, badgeColor);
     }
 
@@ -17472,93 +17473,87 @@ internal sealed class CopilotService : Form
         };
     }
 
+    private bool CanStartDashboardProcedure(ProcedureDefinition? definition)
+    {
+        if (definition == null
+            || _state == null
+            || Connection == null
+            || IsProcedureActive(_procedureRunner.Status)
+            || _pendingGsxEngineStartProcedure != null)
+        {
+            return false;
+        }
+
+        var recommendation = FlowRecommendationEngine.Recommend(
+            _state,
+            _completedProcedureIds).Procedure;
+        return recommendation != null
+               && string.Equals(
+                   definition.Id,
+                   recommendation.Id,
+                   StringComparison.OrdinalIgnoreCase)
+               && CanStartProcedureNow(definition, _state, out _);
+    }
+
+    private bool CanConfirmCurrentProcedureStep()
+    {
+        var step = _procedureRunner.CurrentStep;
+        return _procedureRunner.Status == ProcedureStatus.WaitingForManualAction
+               && step != null
+               && _pendingGsxEngineStartProcedure == null
+               && !IsTaxiToHoldingPointTransition(_state)
+               && !IsPushbackClearanceBlockedByGsx(step)
+               && !_sayIntentionsHandoffInProgress
+               && _pendingSayIntentionsAtcStepId == null;
+    }
+
     private void UpdateProcedureActionButtons()
     {
-        var status = _procedureRunner.Status;
-        var active = IsProcedureActive(status);
-        var waitingForGsx = _pendingGsxEngineStartProcedure != null;
-        var waitingForBoarding = IsPushbackClearanceBlockedByGsx(
-            _procedureRunner.CurrentStep);
-        var taxiToHoldingPoint = IsTaxiToHoldingPointTransition(_state);
-
         if (_startFirstFlowButton != null)
         {
-            _startFirstFlowButton.Text = taxiToHoldingPoint
-                ? "Taxi to holding point"
-                : "Start first flow";
-            _startFirstFlowButton.Enabled = !waitingForGsx && !taxiToHoldingPoint;
-            _startFirstFlowButton.BackColor = waitingForGsx
-                ? System.Drawing.Color.FromArgb(107, 114, 128)
-                : taxiToHoldingPoint
-                    ? System.Drawing.Color.FromArgb(30, 64, 175)
-                : System.Drawing.Color.FromArgb(39, 130, 87);
+            var firstFlow = ProcedureCatalog.ForAircraft(_state)
+                .FirstOrDefault(
+                    definition => string.Equals(
+                        definition.Id,
+                        "power-up-initial-setup",
+                        StringComparison.OrdinalIgnoreCase));
+            var canStartFirstFlow = CanStartDashboardProcedure(firstFlow);
+            _startFirstFlowButton.Enabled = canStartFirstFlow;
+            _startFirstFlowButton.BackColor = canStartFirstFlow
+                ? System.Drawing.Color.FromArgb(39, 130, 87)
+                : System.Drawing.Color.FromArgb(107, 114, 128);
         }
 
         if (_startSelectedFlowButton != null)
         {
-            _startSelectedFlowButton.Text = waitingForGsx
-                ? "Waiting for GSX"
-                : status == ProcedureStatus.Paused
-                ? "Flow paused"
-                : active
-                    ? "Flow running"
-                    : "Start selected flow";
-            _startSelectedFlowButton.BackColor = waitingForGsx
-                ? System.Drawing.Color.FromArgb(190, 126, 37)
-                : status switch
-            {
-                ProcedureStatus.Paused => System.Drawing.Color.FromArgb(151, 110, 35),
-                ProcedureStatus.Running => System.Drawing.Color.FromArgb(30, 64, 175),
-                ProcedureStatus.WaitingForVerification => System.Drawing.Color.FromArgb(29, 78, 216),
-                ProcedureStatus.WaitingForManualAction => System.Drawing.Color.FromArgb(190, 126, 37),
-                _ => System.Drawing.Color.FromArgb(39, 130, 87)
-            };
+            var selectedDefinition = (_flowList?.SelectedItem as ProcedureListItem)
+                ?.Definition;
+            var canStartSelectedFlow = CanStartDashboardProcedure(selectedDefinition);
+            _startSelectedFlowButton.BackColor = canStartSelectedFlow
+                ? System.Drawing.Color.FromArgb(39, 130, 87)
+                : System.Drawing.Color.FromArgb(107, 114, 128);
             _startSelectedFlowButton.ForeColor = System.Drawing.Color.White;
-            _startSelectedFlowButton.Enabled = !waitingForGsx;
-            _startSelectedFlowButton.FlatAppearance.BorderSize = active || waitingForGsx ? 2 : 0;
+            _startSelectedFlowButton.Enabled = canStartSelectedFlow;
+            _startSelectedFlowButton.FlatAppearance.BorderSize = canStartSelectedFlow ? 0 : 2;
             _startSelectedFlowButton.FlatAppearance.BorderColor =
-                active || waitingForGsx
-                    ? System.Drawing.Color.FromArgb(15, 23, 42)
-                    : _startSelectedFlowButton.BackColor;
+                canStartSelectedFlow
+                    ? _startSelectedFlowButton.BackColor
+                    : System.Drawing.Color.FromArgb(75, 85, 99);
         }
 
         if (_confirmCompletedButton != null)
         {
-            var waitingForPilot = status == ProcedureStatus.WaitingForManualAction;
-            var waitingForAtc = _pendingSayIntentionsAtcStepId != null;
-            _confirmCompletedButton.BackColor = waitingForGsx
-                ? System.Drawing.Color.FromArgb(107, 114, 128)
-                : waitingForPilot
-                ? System.Drawing.Color.FromArgb(194, 65, 12)
-                : System.Drawing.Color.FromArgb(39, 130, 87);
-            _confirmCompletedButton.FlatAppearance.MouseDownBackColor = waitingForGsx
-                ? System.Drawing.Color.FromArgb(107, 114, 128)
-                : waitingForPilot
-                ? System.Drawing.Color.FromArgb(146, 64, 14)
-                : System.Drawing.Color.FromArgb(22, 101, 52);
-            _confirmCompletedButton.FlatAppearance.MouseOverBackColor = waitingForGsx
-                ? System.Drawing.Color.FromArgb(107, 114, 128)
-                : waitingForPilot
-                ? System.Drawing.Color.FromArgb(245, 158, 11)
-                : System.Drawing.Color.FromArgb(34, 148, 96);
-            _confirmCompletedButton.Enabled = !waitingForGsx
-                                              && !taxiToHoldingPoint
-                                              && !waitingForBoarding
-                                              && !_sayIntentionsHandoffInProgress
-                                              && !waitingForAtc;
-            _confirmCompletedButton.Text = taxiToHoldingPoint
-                ? "Flow 6 starts at hold"
-                : waitingForGsx
-                ? "Waiting for GSX..."
-                : waitingForBoarding
-                ? "Waiting for boarding..."
-                : _sayIntentionsHandoffInProgress
-                ? "Handing ATC to F/O..."
-                : waitingForAtc
-                    ? "Waiting for ATC..."
-                : waitingForPilot
-                    ? "Confirm now"
-                    : "Confirm completed";
+            var canConfirm = CanConfirmCurrentProcedureStep();
+            _confirmCompletedButton.BackColor = canConfirm
+                ? System.Drawing.Color.FromArgb(39, 130, 87)
+                : System.Drawing.Color.FromArgb(107, 114, 128);
+            _confirmCompletedButton.FlatAppearance.MouseDownBackColor = canConfirm
+                ? System.Drawing.Color.FromArgb(22, 101, 52)
+                : System.Drawing.Color.FromArgb(107, 114, 128);
+            _confirmCompletedButton.FlatAppearance.MouseOverBackColor = canConfirm
+                ? System.Drawing.Color.FromArgb(34, 148, 96)
+                : System.Drawing.Color.FromArgb(107, 114, 128);
+            _confirmCompletedButton.Enabled = canConfirm;
         }
     }
 

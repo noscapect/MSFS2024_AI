@@ -17495,6 +17495,20 @@ internal sealed class CopilotService : Form
                && CanStartProcedureNow(definition, _state, out _);
     }
 
+    private bool CanStartSelectedDashboardProcedure(ProcedureDefinition? definition)
+    {
+        if (definition == null
+            || _state == null
+            || Connection == null
+            || IsProcedureActive(_procedureRunner.Status)
+            || _pendingGsxEngineStartProcedure != null)
+        {
+            return false;
+        }
+
+        return CanStartProcedureNow(definition, _state, out _);
+    }
+
     private bool CanConfirmCurrentProcedureStep()
     {
         var step = _procedureRunner.CurrentStep;
@@ -17540,7 +17554,7 @@ internal sealed class CopilotService : Form
         {
             var selectedDefinition = (_flowList?.SelectedItem as ProcedureListItem)
                 ?.Definition;
-            var canStartSelectedFlow = CanStartDashboardProcedure(selectedDefinition);
+            var canStartSelectedFlow = CanStartSelectedDashboardProcedure(selectedDefinition);
             _startSelectedFlowButton.Text = waitingForGsx
                 ? "Waiting for GSX"
                 : status == ProcedureStatus.Paused

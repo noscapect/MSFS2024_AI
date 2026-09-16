@@ -17509,6 +17509,13 @@ internal sealed class CopilotService : Form
 
     private void UpdateProcedureActionButtons()
     {
+        var status = _procedureRunner.Status;
+        var active = IsProcedureActive(status);
+        var waitingForGsx = _pendingGsxEngineStartProcedure != null;
+        var waitingForBoarding = IsPushbackClearanceBlockedByGsx(
+            _procedureRunner.CurrentStep);
+        var taxiToHoldingPoint = IsTaxiToHoldingPointTransition(_state);
+
         if (_startFirstFlowButton != null)
         {
             var firstFlow = ProcedureCatalog.ForAircraft(_state)
@@ -17518,10 +17525,15 @@ internal sealed class CopilotService : Form
                         "power-up-initial-setup",
                         StringComparison.OrdinalIgnoreCase));
             var canStartFirstFlow = CanStartDashboardProcedure(firstFlow);
+            _startFirstFlowButton.Text = taxiToHoldingPoint
+                ? "Taxi to holding point"
+                : "Start first flow";
             _startFirstFlowButton.Enabled = canStartFirstFlow;
-            _startFirstFlowButton.BackColor = canStartFirstFlow
-                ? System.Drawing.Color.FromArgb(39, 130, 87)
-                : System.Drawing.Color.FromArgb(107, 114, 128);
+            _startFirstFlowButton.BackColor = taxiToHoldingPoint
+                ? System.Drawing.Color.FromArgb(30, 64, 175)
+                : canStartFirstFlow
+                    ? System.Drawing.Color.FromArgb(39, 130, 87)
+                    : System.Drawing.Color.FromArgb(107, 114, 128);
         }
 
         if (_startSelectedFlowButton != null)
@@ -17529,6 +17541,13 @@ internal sealed class CopilotService : Form
             var selectedDefinition = (_flowList?.SelectedItem as ProcedureListItem)
                 ?.Definition;
             var canStartSelectedFlow = CanStartDashboardProcedure(selectedDefinition);
+            _startSelectedFlowButton.Text = waitingForGsx
+                ? "Waiting for GSX"
+                : status == ProcedureStatus.Paused
+                ? "Flow paused"
+                : active
+                    ? "Flow running"
+                    : "Start selected flow";
             _startSelectedFlowButton.BackColor = canStartSelectedFlow
                 ? System.Drawing.Color.FromArgb(39, 130, 87)
                 : System.Drawing.Color.FromArgb(107, 114, 128);
@@ -17554,6 +17573,19 @@ internal sealed class CopilotService : Form
                 ? System.Drawing.Color.FromArgb(34, 148, 96)
                 : System.Drawing.Color.FromArgb(107, 114, 128);
             _confirmCompletedButton.Enabled = canConfirm;
+            _confirmCompletedButton.Text = taxiToHoldingPoint
+                ? "Flow 6 starts at hold"
+                : waitingForGsx
+                ? "Waiting for GSX..."
+                : waitingForBoarding
+                ? "Waiting for boarding..."
+                : _sayIntentionsHandoffInProgress
+                ? "Handing ATC to F/O..."
+                : _pendingSayIntentionsAtcStepId != null
+                    ? "Waiting for ATC..."
+                : status == ProcedureStatus.WaitingForManualAction
+                    ? "Confirm now"
+                    : "Confirm completed";
         }
     }
 
